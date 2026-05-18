@@ -1,12 +1,13 @@
 package integration
 
 import (
-    "testing"
-    "faun.projects/margaret/margaret-ebook-library/pkg/ebook/epub"
+	"testing"
+
+	"faun.projects/margaret/margaret-ebook-library/pkg/ebook"
 )
 
 func TestRead(t *testing.T) {
-    book, err := epub.Read("example.epub")
+    book, err := ebook.ReadMetadata("example.epub")
     if err != nil {
         t.Errorf("Error reading ebook: %v", err)
     }

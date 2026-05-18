@@ -4,31 +4,39 @@ This project is a Go library for handling ebook files. It currently supports rea
 
 ## Folder Structure
 
-- **cmd/**: Contains the main executable files.
-  - `main.go`: The entry point of your application.
+- **bin/**: Built executable artifacts.
 
-- **internal/**: This directory is for internal packages that are not exposed to other modules.
-  - **ebook/**: Contains the core logic for handling ebooks.
-    - **epub/** and **mobi/**: Subdirectories for specific ebook formats.
-      - `reader.go`: The reader implementation for each format.
-    - `metadata.go`: Logic for extracting metadata from ebooks.
+- **cmd/**: Contains the main application entry point.
+  - `main.go`: The entry point of the application.
 
-- **pkg/**: This directory is for packages that are exposed to other modules.
-  - **ebook/**: Contains the public API for handling ebooks.
-    - **epub/** and **mobi/**: Subdirectories for specific ebook formats.
-      - `reader.go`: The reader implementation for each format.
-    - `metadata.go`: Logic for extracting metadata from ebooks.
+- **internal/**: Internal packages that are intended for use only inside this module.
+  - **detector/**: Contains ebook detection logic.
+    - `detecor.go`: Detector implementation.
+    - `detector_test.go`: Tests for the detector.
+  - **reader/**: Core reader abstractions and format-specific implementations.
+    - `reader.go`
+    - **epub/**: EPUB-specific reader implementation.
+      - `reader.go`
+    - **mobi/**: MOBI-specific reader implementation.
+      - `reader.go`
+    - **registry/**: Registry for available reader implementations.
+      - `registry.go`
 
-- **tests/**: This directory contains test files.
-  - **unit/**: Contains unit tests.
-    - `epub_test.go` and `mobi_test.go`: Unit tests for the ebook readers.
-  - **integration/**: Contains integration tests.
-    - `epub_integration_test.go` and `mobi_integration_test.go`: Integration tests for the ebook readers.
+- **pkg/**: Public packages exposed to other modules.
+  - **ebook/**: Public ebook handling API.
+    - `api.go`
+  - **errs/**: Defines internal error types.
+    - `errors.go`
+  - **model/**: Ebook metadata model definitions.
+    - `metadata.go`
+
+- **tests/**: Test files and integration tests.
+  - **integration/**: Integration tests for ebook readers.
+    - `epub_integration_test.go`
 
 ## Getting Started
 
 1. Clone this repository to your local machine.
 2. Run `go mod tidy` to download any dependencies.
-3. Build and run the application using `go run cmd/main.go`.
+3. Build and run the application using `make run`.
 
-This structure should provide a solid foundation for your ebook library project and allow you to easily add more formats in the future.
