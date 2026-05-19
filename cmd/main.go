@@ -2,15 +2,23 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"faun.projects/margaret/margaret-ebook-library/pkg/ebook"
-)                                                                              
-                                                                               
-func main() {                                                                  
-    bookMeta, err := ebook.ReadMetadata("example.epub")                                     
-    if err != nil {                                                            
-        fmt.Println("Error reading ebook:", err)                               
-        return                                                                 
-    }                                                                          
-    fmt.Printf("Book Title: %s\n", bookMeta.Title)                                 
-} 
+)
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Expected a file path after the command, e.g. ./margaret-ebook-library <ebook file>")
+		return
+	}
+
+	path := os.Args[1]
+	bookMeta, err := ebook.ReadMetadata(path)
+	if err != nil {
+		fmt.Println("Error reading ebook:", err)
+		return
+	}
+
+	fmt.Printf("Book Title: %s\n", bookMeta.Title)
+}

@@ -17,7 +17,7 @@ help:
 	@echo "  make all      - library and binary build (default)"
 	@echo "  make lib      - build only the library packages"
 	@echo "  make build    - CLI binary build into bin/ directory"
-	@echo "  make run      - build and run"
+	@echo "  make run      - build and run (use ARGS=\"./path/to/book.epub\")"
 	@echo "  make test     - run tests"
 	@echo "  make clean    - remove bin/ directory and artifacts"
 	@echo "  make help     - display this help"
@@ -40,10 +40,12 @@ build: | bin
 
 # -----------------------------------------------------------------
 # Run – first build, then execute the binary
+# Usage: make run ARGS="./path/to/the/book.epub"
 # -----------------------------------------------------------------
+ARGS ?=
 run: build
 	@echo "🚀 Starting CLI..."
-	$(BINARY)
+	$(BINARY) "$(ARGS)"
 
 # -----------------------------------------------------------------
 # Tests – for the entire module (unit + integration)

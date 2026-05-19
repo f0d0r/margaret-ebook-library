@@ -2,21 +2,37 @@ package mobi
 
 import (
 	"fmt"
+	"os"
 
-	"faun.projects/margaret/margaret-ebook-library/internal/detector"
 	"faun.projects/margaret/margaret-ebook-library/pkg/model"
 )
 
-type MOBIReader struct{}
+type MobiReader struct{}
 
-func (r *MOBIReader) Supports(fileType detector.FileType) bool {
-	return fileType == detector.MOBI
+func (r *MobiReader) Supports(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	// The "BOOKMOBI" identifier starts at byte 60 and ends at byte 67.
+	// Therefore reading exactly 68 bytes is sufficient.
+	buf := make([]byte, 68)
+	n, err := f.ReadAt(buf, 0)
+	if err != nil && n < 68 {
+		return false
+	}
+
+	// Check whether bytes 60-67 contain the "BOOKMOBI" string.
+	return string(buf[60:68]) == "BOOKMOBI"
 }
 
-func (r *MOBIReader) ReadMetadata(path string) (*model.Metadata, error) {
+func (r *MobiReader) ReadMetadata(path string) (*model.Metadata, error) {
 	fmt.Printf("[mobi-reader] reading metadata from: %s\n", path)
 
 	return &model.Metadata{
-		Title: "Dummy MOBI Book",
+		Title:    "Dummy MOBI Book",
+		FileType: model.MOBI,
 	}, nil
 }
