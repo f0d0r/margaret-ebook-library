@@ -9,6 +9,15 @@ import (
 	"faun.projects/margaret/margaret-ebook-library/pkg/model"
 )
 
+// ReadMetadata reads ebook metadata from the specified file path.
+//
+// It trims leading and trailing whitespace from the provided path and rejects
+// empty paths with [errs.ErrUnsupportedFormat]. It selects the appropriate
+// reader implementation from the internal registry based on the file format.
+// The selected reader is then used to extract and return the metadata.
+//
+// If no suitable reader is found for the format, it returns an error wrapping
+// [errs.ErrUnsupportedFormat].
 func ReadMetadata(path string) (*model.Metadata, error) {
 	fmt.Println("[api] ReadMetadata called")
 

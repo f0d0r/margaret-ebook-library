@@ -27,10 +27,6 @@ This project is a Go library for handling ebook files. It currently supports rea
   - **model/**: Ebook metadata model definitions.
     - `metadata.go`
 
-- **tests/**: Test files and integration tests.
-  - **integration/**: Integration tests for ebook readers.
-    - `epub_integration_test.go`
-
 ## Getting Started
 
 1. Clone this repository to your local machine.
