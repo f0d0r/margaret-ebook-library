@@ -10,9 +10,6 @@ This project is a Go library for handling ebook files. It currently supports rea
   - `main.go`: The entry point of the application.
 
 - **internal/**: Internal packages that are intended for use only inside this module.
-  - **detector/**: Contains ebook detection logic.
-    - `detecor.go`: Detector implementation.
-    - `detector_test.go`: Tests for the detector.
   - **reader/**: Core reader abstractions and format-specific implementations.
     - `reader.go`
     - **epub/**: EPUB-specific reader implementation.
