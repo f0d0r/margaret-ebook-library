@@ -3,6 +3,7 @@ package epub
 import (
 	"archive/zip"
 	"encoding/binary"
+	"encoding/xml"
 	"fmt"
 	"os"
 	"strings"
@@ -40,15 +41,8 @@ func (r *EpubReader) Supports(path string) bool {
 		return false
 	}
 
-	hasContainer := false
-	for _, file := range zr.File {
-		if file.Name == "META-INF/container.xml" {
-			hasContainer = true
-			break
-		}
-	}
-
-	return hasContainer
+	_, err = r.getContainerFile(zr)
+	return err == nil
 }
 
 func (r *EpubReader) hasValidEpubHeader(f *os.File) bool {
@@ -101,11 +95,112 @@ func (r *EpubReader) hasValidEpubHeader(f *os.File) bool {
 	return string(buf[mimetypeStart:mimetypeEnd]) == "application/epub+zip"
 }
 
+func (r *EpubReader) getContainerFile(zr *zip.Reader) (*zip.File, error) {
+	containerPath := "META-INF/container.xml"
+	f := r.findFileInZip(zr, containerPath)
+	if f == nil {
+		return nil, fmt.Errorf("container.xml not found")
+	}
+	return f, nil
+}
+
+func (r *EpubReader) findFileInZip(zr *zip.Reader, path string) *zip.File {
+	for _, file := range zr.File {
+		if file.Name == path {
+			return file
+		}
+	}
+	return nil
+}
+
 func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
-	fmt.Printf("[epub-reader] reading metadata from: %s\n", path)
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open the file %s: %w", path, err)
+	}
+	defer f.Close()
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file info: %w", err)
+	}
+
+	zr, err := zip.NewReader(f, info.Size())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create zip reader: %w", err)
+	}
+
+	c, err := r.getContainer(zr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read ocf file %w", err)
+	}
+
+	p, err := r.readOPF(zr, c)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read opf file: %w", err)
+	}
 
 	return &model.Metadata{
-		Title:    "Dummy EPUB Book",
+		Title:    r.getTitle(p),
 		FileType: model.EPUB,
 	}, nil
+}
+
+func (r *EpubReader) getContainer(zr *zip.Reader) (Container, error) {
+	containerFile, err := r.getContainerFile(zr)
+	if err != nil {
+		return Container{}, fmt.Errorf("failed to get container file: %w", err)
+	}
+
+	cfr, err := containerFile.Open()
+	if err != nil {
+		return Container{}, fmt.Errorf("failed to open container.xml: %w", err)
+	}
+	defer cfr.Close()
+
+	var c Container
+	if err := xml.NewDecoder(cfr).Decode(&c); err != nil {
+		return Container{}, fmt.Errorf("failed to decode container.xml: %w", err)
+	}
+	return c, nil
+}
+
+func (r *EpubReader) readOPF(zr *zip.Reader, c Container) (Package, error) {
+	if len(c.Rootfiles.RootfileList) == 0 {
+		return Package{}, fmt.Errorf("no rootfile found in container.xml")
+	}
+
+	for _, rootfile := range c.Rootfiles.RootfileList {
+		if rootfile.MediaType == "application/oebps-package+xml" {
+			return r.getPackage(zr, rootfile)
+		}
+	}
+
+	return Package{}, fmt.Errorf("no opf file found")
+}
+
+func (r *EpubReader) getPackage(zr *zip.Reader, rootfile Rootfile) (Package, error) {
+	opf := r.findFileInZip(zr, rootfile.FullPath)
+	if opf == nil {
+		return Package{}, fmt.Errorf("opf file not found")
+	}
+
+	opfr, err := opf.Open()
+	if err != nil {
+		return Package{}, fmt.Errorf("failed to open opf file: %w", err)
+	}
+	defer opfr.Close()
+
+	var p Package
+	if err := xml.NewDecoder(opfr).Decode(&p); err != nil {
+		return Package{}, fmt.Errorf("failed to decode opf file: %w", err)
+	}
+	return p, nil
+}
+
+func (r *EpubReader) getTitle(p Package) (string) {
+	if len(p.Metadata.Title) == 0 {
+		return ""
+	}
+	return p.Metadata.Title[0].Value
 }
