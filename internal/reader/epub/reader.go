@@ -142,6 +142,7 @@ func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
 
 	return &model.Metadata{
 		Title:    r.getTitle(p),
+		Authors:  r.getAuthors(p),
 		FileType: model.EPUB,
 	}, nil
 }
@@ -198,9 +199,29 @@ func (r *EpubReader) getPackage(zr *zip.Reader, rootfile Rootfile) (Package, err
 	return p, nil
 }
 
-func (r *EpubReader) getTitle(p Package) (string) {
+func (r *EpubReader) getTitle(p Package) string {
 	if len(p.Metadata.Title) == 0 {
 		return ""
 	}
-	return p.Metadata.Title[0].Value
+	return strings.TrimSpace(p.Metadata.Title[0].Value)
+}
+
+func (r *EpubReader) getAuthors(p Package) []string {
+	authors := make([]string, 0, len(p.Metadata.Creators))
+	for _, creator := range p.Metadata.Creators {
+		role := strings.ToLower(strings.TrimSpace(creator.Role))
+		// Include creators with "aut" role or empty role (which defaults to author)
+		if role != "aut" && role != "" {
+			continue
+		}
+		name := strings.TrimSpace(creator.Value)
+		fileAs := strings.TrimSpace(creator.FileAs)
+		if name == "" && fileAs != "" {
+			name = fileAs
+		}
+		if name != "" {
+			authors = append(authors, name)
+		}
+	}
+	return authors
 }

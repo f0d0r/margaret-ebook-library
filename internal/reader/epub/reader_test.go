@@ -143,6 +143,123 @@ func TestReadMetadataTitle(t *testing.T) {
 	}
 }
 
+func TestReadMetadataAuthors(t *testing.T) {
+	tmpDir := t.TempDir()
+	reader := &EpubReader{}
+
+	tests := []struct {
+		name             string
+		opfContent       string
+		expectedAuthors  []string
+		shouldError      bool
+	}{
+		{
+			name:             "Single author",
+			opfContent:       createOPFWithSingleAuthor("Jane Austen"),
+			expectedAuthors:  []string{"Jane Austen"},
+			shouldError:      false,
+		},
+		{
+			name:             "Multiple authors",
+			opfContent:       createOPFWithMultipleAuthors([]string{"Stephen King", "Peter Straub"}),
+			expectedAuthors:  []string{"Stephen King", "Peter Straub"},
+			shouldError:      false,
+		},
+		{
+			name:             "No authors",
+			opfContent:       createOPFWithoutAuthors(),
+			expectedAuthors:  []string{},
+			shouldError:      false,
+		},
+		{
+			name:             "Author with whitespace",
+			opfContent:       createOPFWithSingleAuthor("   J.K. Rowling   "),
+			expectedAuthors:  []string{"J.K. Rowling"},
+			shouldError:      false,
+		},
+		{
+			name:             "Empty author element",
+			opfContent:       createOPFWithEmptyAuthor(),
+			expectedAuthors:  []string{},
+			shouldError:      false,
+		},
+		{
+			name:             "Mixed empty and non-empty authors",
+			opfContent:       createOPFWithMixedAuthors([]string{"Author One", "", "Author Two"}),
+			expectedAuthors:  []string{"Author One", "Author Two"},
+			shouldError:      false,
+		},
+		{
+			name:             "Author with aut role",
+			opfContent:       createOPFWithAuthorRole("George Orwell", "aut"),
+			expectedAuthors:  []string{"George Orwell"},
+			shouldError:      false,
+		},
+		{
+			name:             "Author with file-as attribute",
+			opfContent:       createOPFWithAuthorFileAs("George Orwell", "Orwell, George"),
+			expectedAuthors:  []string{"George Orwell"},
+			shouldError:      false,
+		},
+		{
+			name:             "Multiple creators - only authors included",
+			opfContent:       createOPFWithCreatorsMultipleRoles([]creatorInfo{
+				{name: "Isaac Asimov", role: "aut"},
+				{name: "Ralph Macchio", role: "ill"},
+				{name: "Penthouse Press", role: "pbl"},
+			}),
+			expectedAuthors:  []string{"Isaac Asimov"},
+			shouldError:      false,
+		},
+		{
+			name:             "Author with dc prefix",
+			opfContent:       createOPFWithAuthorDcPrefix("Haruki Murakami"),
+			expectedAuthors:  []string{"Haruki Murakami"},
+			shouldError:      false,
+		},
+		{
+			name:             "Creator with no role (defaults to author)",
+			opfContent:       createOPFWithCreatorsMultipleRoles([]creatorInfo{
+				{name: "Main Author", role: ""},
+				{name: "Illustrator", role: "ill"},
+			}),
+			expectedAuthors:  []string{"Main Author"},
+			shouldError:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			epubPath := filepath.Join(tmpDir, tt.name+".epub")
+			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
+
+			metadata, err := reader.ReadMetadata(epubPath)
+
+			if tt.shouldError && err == nil {
+				t.Errorf("expected error but got none")
+				return
+			}
+			if !tt.shouldError && err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if len(metadata.Authors) != len(tt.expectedAuthors) {
+				t.Errorf("got %d authors, want %d. Got: %v, Want: %v",
+					len(metadata.Authors), len(tt.expectedAuthors), metadata.Authors, tt.expectedAuthors)
+				return
+			}
+
+			for i, author := range metadata.Authors {
+				if author != tt.expectedAuthors[i] {
+					t.Errorf("author %d: got %q, want %q", i, author, tt.expectedAuthors[i])
+				}
+			}
+		})
+	}
+}
+
+
 func rangeTest(path string, want bool) func(t *testing.T) {
 	return func(t *testing.T) {
 		reader := &EpubReader{}
@@ -210,6 +327,114 @@ func createOPFWithTitleAttributes(title, id, lang string) string {
 </package>`
 }
 
+// Author helper functions for tests
+
+func createOPFWithSingleAuthor(author string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:creator>` + author + `</dc:creator>
+  </metadata>
+</package>`
+}
+
+func createOPFWithMultipleAuthors(authors []string) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>`
+	for _, author := range authors {
+		metadataContent += "\n    <dc:creator>" + author + "</dc:creator>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithoutAuthors() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithEmptyAuthor() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:creator></dc:creator>
+  </metadata>
+</package>`
+}
+
+func createOPFWithMixedAuthors(authors []string) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>`
+	for _, author := range authors {
+		metadataContent += "\n    <dc:creator>" + author + "</dc:creator>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithAuthorRole(author, role string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:creator role="` + role + `">` + author + `</dc:creator>
+  </metadata>
+</package>`
+}
+
+func createOPFWithAuthorFileAs(author, fileAs string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:creator file-as="` + fileAs + `">` + author + `</dc:creator>
+  </metadata>
+</package>`
+}
+
+type creatorInfo struct {
+	name string
+	role string
+}
+
+func createOPFWithCreatorsMultipleRoles(creators []creatorInfo) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>`
+	for _, creator := range creators {
+		metadataContent += "\n    <dc:creator role=\"" + creator.role + "\">" + creator.name + "</dc:creator>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithAuthorDcPrefix(author string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0">
+  <metadata>
+    <dc:title>Test Book</dc:title>
+    <dc:creator>` + author + `</dc:creator>
+  </metadata>
+</package>`
+}
+
 func createContainerXML(opfPath string) string {
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
@@ -218,6 +443,7 @@ func createContainerXML(opfPath string) string {
   </rootfiles>
 </container>`
 }
+
 
 // createValidTestEPUB creates a minimal but valid EPUB structure with proper container and OPF files
 func createValidTestEPUB(t *testing.T, path string, title string) {

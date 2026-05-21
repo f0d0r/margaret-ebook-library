@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"faun.projects/margaret/margaret-ebook-library/pkg/ebook"
 )
@@ -21,4 +22,6 @@ func main() {
 	}
 
 	fmt.Printf("Book Title: %s\n", bookMeta.Title)
+	fmt.Printf("Authors: %v\n", strings.Join(bookMeta.Authors, ", "))
+	
 }
