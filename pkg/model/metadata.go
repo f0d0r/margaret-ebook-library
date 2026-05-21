@@ -9,6 +9,9 @@ type Metadata struct {
 	// Authors are the creators or writers of the book. 
 	Authors []string
 
+	// Description is a brief summary or description of the book.
+	Description string
+
 	// FileType indicates the original format from which this metadata was parsed.
 	FileType FileType
 }

@@ -259,6 +259,107 @@ func TestReadMetadataAuthors(t *testing.T) {
 	}
 }
 
+func TestReadMetadataDescription(t *testing.T) {
+	tmpDir := t.TempDir()
+	reader := &EpubReader{}
+
+	tests := []struct {
+		name                string
+		opfContent          string
+		expectedDescription string
+		shouldError         bool
+	}{
+		{
+			name:                "Simple description",
+			opfContent:          createOPFWithDescription("A great adventure story"),
+			expectedDescription: "A great adventure story",
+			shouldError:         false,
+		},
+		{
+			name:                "No description",
+			opfContent:          createOPFWithoutDescription(),
+			expectedDescription: "",
+			shouldError:         false,
+		},
+		{
+			name:                "Description with whitespace",
+			opfContent:          createOPFWithDescription("   A book with spaces   "),
+			expectedDescription: "A book with spaces",
+			shouldError:         false,
+		},
+		{
+			name:                "Empty description element",
+			opfContent:          createOPFWithEmptyDescription(),
+			expectedDescription: "",
+			shouldError:         false,
+		},
+		{
+			name:                "Multiple descriptions - first non-empty wins",
+			opfContent:          createOPFWithMultipleDescriptions([]string{"", "First Description", "Second Description"}),
+			expectedDescription: "First Description",
+			shouldError:         false,
+		},
+		{
+			name:                "Description with HTML tags",
+			opfContent:          createOPFWithDescription("This is <b>bold</b> text"),
+			expectedDescription: "This is  text",
+			shouldError:         false,
+		},
+		{
+			name:                "Description with HTML entities",
+			opfContent:          createOPFWithDescription("Pride &amp; Prejudice"),
+			expectedDescription: "Pride & Prejudice",
+			shouldError:         false,
+		},
+		{
+			name:                "Description with newlines",
+			opfContent:          createOPFWithDescription("Line one\nLine two\nLine three"),
+			expectedDescription: "Line one\nLine two\nLine three",
+			shouldError:         false,
+		},
+		{
+			name:                "Description with dc prefix",
+			opfContent:          createOPFWithDescriptionDcPrefix("A sci-fi novel"),
+			expectedDescription: "A sci-fi novel",
+			shouldError:         false,
+		},
+		{
+			name:                "Long description",
+			opfContent:          createOPFWithDescription("This is a long description that spans multiple sentences. It describes the plot, characters, and themes of the book in detail. The reader should get a good understanding of what the book is about from reading this description."),
+			expectedDescription: "This is a long description that spans multiple sentences. It describes the plot, characters, and themes of the book in detail. The reader should get a good understanding of what the book is about from reading this description.",
+			shouldError:         false,
+		},
+		{
+			name:                "Description with multiple spaces",
+			opfContent:          createOPFWithDescription("A    tale  of   great    adventure"),
+			expectedDescription: "A    tale  of   great    adventure",
+			shouldError:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			epubPath := filepath.Join(tmpDir, tt.name+".epub")
+			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
+
+			metadata, err := reader.ReadMetadata(epubPath)
+
+			if tt.shouldError && err == nil {
+				t.Errorf("expected error but got none")
+				return
+			}
+			if !tt.shouldError && err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if metadata.Description != tt.expectedDescription {
+				t.Errorf("got description %q, want %q", metadata.Description, tt.expectedDescription)
+			}
+		})
+	}
+}
+
 
 func rangeTest(path string, want bool) func(t *testing.T) {
 	return func(t *testing.T) {
@@ -431,6 +532,61 @@ func createOPFWithAuthorDcPrefix(author string) string {
   <metadata>
     <dc:title>Test Book</dc:title>
     <dc:creator>` + author + `</dc:creator>
+  </metadata>
+</package>`
+}
+
+// Description helper functions for tests
+
+func createOPFWithDescription(description string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:description>` + description + `</dc:description>
+  </metadata>
+</package>`
+}
+
+func createOPFWithoutDescription() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithEmptyDescription() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:description></dc:description>
+  </metadata>
+</package>`
+}
+
+func createOPFWithMultipleDescriptions(descriptions []string) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>`
+	for _, desc := range descriptions {
+		metadataContent += "\n    <dc:description>" + desc + "</dc:description>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithDescriptionDcPrefix(description string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0">
+  <metadata>
+    <dc:title>Test Book</dc:title>
+    <dc:description>` + description + `</dc:description>
   </metadata>
 </package>`
 }
