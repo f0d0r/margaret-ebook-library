@@ -9,8 +9,9 @@ type Package struct {
 }
 
 type Metadata struct {
-	Title    []Title   `xml:"title"`
-	Creators []Creator `xml:"creator"`
+	Title        []Title   `xml:"title"`
+	Creators     []Creator `xml:"creator"`
+	Descriptions []string  `xml:"description"`
 }
 
 type Title struct {
@@ -20,7 +21,7 @@ type Title struct {
 }
 
 type Creator struct {
-	Value  string `xml:",chardata"`   // the name of the creator (Rev. Dr. Martin Luther King Jr.)
+	Value  string `xml:",chardata"`    // the name of the creator (Rev. Dr. Martin Luther King Jr.)
 	Role   string `xml:"role,attr"`    // 3 character long MARC value ("aut", "ill", etc)
 	FileAs string `xml:"file-as,attr"` //  normalized form of the name (King, Martin Luther Jr.)
 }

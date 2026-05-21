@@ -1,7 +1,5 @@
 module faun.projects/margaret/margaret-ebook-library
 
-go 1.25
+go 1.25.0
 
-require (
-    // Add your dependencies here
-)
+require golang.org/x/net v0.54.0

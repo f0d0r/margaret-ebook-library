@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"faun.projects/margaret/margaret-ebook-library/internal/converter"
 	"faun.projects/margaret/margaret-ebook-library/pkg/model"
 )
 
@@ -141,9 +142,10 @@ func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
 	}
 
 	return &model.Metadata{
-		Title:    r.getTitle(p),
-		Authors:  r.getAuthors(p),
-		FileType: model.EPUB,
+		Title:       r.getTitle(p),
+		Authors:     r.getAuthors(p),
+		Description: r.getDescription(p),
+		FileType:    model.EPUB,
 	}, nil
 }
 
@@ -224,4 +226,16 @@ func (r *EpubReader) getAuthors(p Package) []string {
 		}
 	}
 	return authors
+}
+
+func (r *EpubReader) getDescription(p Package) string {
+	if len(p.Metadata.Descriptions) == 0 {
+		return ""
+	}
+	for _, d := range p.Metadata.Descriptions {
+		if d = strings.TrimSpace(d); d != "" {
+			return converter.HtmlToText(d)
+		}
+	}
+	return ""
 }
