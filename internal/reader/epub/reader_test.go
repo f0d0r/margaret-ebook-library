@@ -17,10 +17,7 @@ func TestSupports(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	validEPUBPath := filepath.Join(tmpDir, "valid.epub")
-	createTestZIP(t, validEPUBPath, []testFile{
-		{name: "mimetype", content: "application/epub+zip", method: zip.Store},
-		{name: "OEBPS/content.opf", content: "<package></package>", method: zip.Deflate},
-	})
+	createValidTestEPUB(t, validEPUBPath, "My Test Book")
 
 	regularZIPPath := filepath.Join(tmpDir, "regular.zip")
 	createTestZIP(t, regularZIPPath, []testFile{
@@ -29,7 +26,7 @@ func TestSupports(t *testing.T) {
 
 	wrongOrderPath := filepath.Join(tmpDir, "wrong_order.epub")
 	createTestZIP(t, wrongOrderPath, []testFile{
-		{name: "OEBPS/content.opf", content: "<package></package>", method: zip.Deflate},
+		{name: "OEBPS/content.opf", content: createOPF("Test"), method: zip.Deflate},
 		{name: "mimetype", content: "application/epub+zip", method: zip.Store},
 	})
 
@@ -69,6 +66,83 @@ func TestSupports(t *testing.T) {
 	}
 }
 
+func TestReadMetadataTitle(t *testing.T) {
+	tmpDir := t.TempDir()
+	reader := &EpubReader{}
+
+	tests := []struct {
+		name          string
+		opfContent    string
+		expectedTitle string
+		shouldError   bool
+	}{
+		{
+			name:          "Normal title",
+			opfContent:    createOPF("My Amazing Book"),
+			expectedTitle: "My Amazing Book",
+			shouldError:   false,
+		},
+		{
+			name:          "Title with dc prefix",
+			opfContent:    createOPFWithPrefix("dc", "Book with DC Prefix"),
+			expectedTitle: "Book with DC Prefix",
+			shouldError:   false,
+		},
+		{
+			name:          "Title with custom prefix",
+			opfContent:    createOPFWithPrefix("custom", "Book with Custom Prefix"),
+			expectedTitle: "Book with Custom Prefix",
+			shouldError:   false,
+		},
+		{
+			name:          "No title",
+			opfContent:    createOPFWithoutTitle(),
+			expectedTitle: "",
+			shouldError:   false,
+		},
+		{
+			name:          "Multiple titles - first wins",
+			opfContent:    createOPFWithMultipleTitles([]string{"First Title", "Second Title"}),
+			expectedTitle: "First Title",
+			shouldError:   false,
+		},
+		{
+			name:          "Empty title element",
+			opfContent:    createOPFWithEmptyTitle(),
+			expectedTitle: "",
+			shouldError:   false,
+		},
+		{
+			name:          "Title with attributes",
+			opfContent:    createOPFWithTitleAttributes("Title with ID", "ch1", "en"),
+			expectedTitle: "Title with ID",
+			shouldError:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			epubPath := filepath.Join(tmpDir, tt.name+".epub")
+			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
+
+			metadata, err := reader.ReadMetadata(epubPath)
+
+			if tt.shouldError && err == nil {
+				t.Errorf("expected error but got none")
+				return
+			}
+			if !tt.shouldError && err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if metadata.Title != tt.expectedTitle {
+				t.Errorf("got title %q, want %q", metadata.Title, tt.expectedTitle)
+			}
+		})
+	}
+}
+
 func rangeTest(path string, want bool) func(t *testing.T) {
 	return func(t *testing.T) {
 		reader := &EpubReader{}
@@ -76,6 +150,98 @@ func rangeTest(path string, want bool) func(t *testing.T) {
 			t.Errorf("EPUBReader.Supports() = %v, want %v (file: %s)", got, want, path)
 		}
 	}
+}
+
+func createOPF(title string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>` + title + `</dc:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithPrefix(prefix, title string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:` + prefix + `="http://purl.org/dc/elements/1.1/">
+    <` + prefix + `:title>` + title + `</` + prefix + `:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithoutTitle() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:creator>Some Author</dc:creator>
+  </metadata>
+</package>`
+}
+
+func createOPFWithMultipleTitles(titles []string) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">`
+	for _, title := range titles {
+		metadataContent += "\n    <dc:title>" + title + "</dc:title>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithEmptyTitle() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title></dc:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithTitleAttributes(title, id, lang string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title id="` + id + `" lang="` + lang + `">` + title + `</dc:title>
+  </metadata>
+</package>`
+}
+
+func createContainerXML(opfPath string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+  <rootfiles>
+    <rootfile full-path="` + opfPath + `" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`
+}
+
+// createValidTestEPUB creates a minimal but valid EPUB structure with proper container and OPF files
+func createValidTestEPUB(t *testing.T, path string, title string) {
+	opfPath := "OEBPS/content.opf"
+	opfContent := createOPF(title)
+	containerContent := createContainerXML(opfPath)
+
+	createTestZIP(t, path, []testFile{
+		{name: "mimetype", content: "application/epub+zip", method: zip.Store},
+		{name: "META-INF/container.xml", content: containerContent, method: zip.Deflate},
+		{name: opfPath, content: opfContent, method: zip.Deflate},
+	})
+}
+
+// createValidTestEPUBWithContent creates a valid EPUB with custom OPF content
+func createValidTestEPUBWithContent(t *testing.T, path string, opfContent string) {
+	opfPath := "OEBPS/content.opf"
+	containerContent := createContainerXML(opfPath)
+
+	createTestZIP(t, path, []testFile{
+		{name: "mimetype", content: "application/epub+zip", method: zip.Store},
+		{name: "META-INF/container.xml", content: containerContent, method: zip.Deflate},
+		{name: opfPath, content: opfContent, method: zip.Deflate},
+	})
 }
 
 func createTestZIP(t *testing.T, path string, files []testFile) {
