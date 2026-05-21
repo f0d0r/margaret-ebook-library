@@ -6,9 +6,8 @@ type Metadata struct {
 	// Title is the main title of the e-book.
 	Title string
 
-	// Author is the creator or writer of the book. 
-	// If multiple authors exist, they are typically joined by commas.
-	Author string
+	// Authors are the creators or writers of the book. 
+	Authors []string
 
 	// FileType indicates the original format from which this metadata was parsed.
 	FileType FileType

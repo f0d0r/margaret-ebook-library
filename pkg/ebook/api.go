@@ -18,18 +18,22 @@ import (
 //
 // If no suitable reader is found for the format, it returns an error wrapping
 // [errs.ErrUnsupportedFormat].
-func ReadMetadata(path string) (*model.Metadata, error) {
+func ReadMetadata(path string) (model.Metadata, error) {
 	fmt.Println("[api] ReadMetadata called")
 
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return nil, errs.ErrUnsupportedFormat
+		return model.Metadata{}, errs.ErrUnsupportedFormat
 	}
 
 	registry := registry.New()
 	reader, err := registry.Get(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get reader for %s: %w", path, err)
+		return model.Metadata{}, fmt.Errorf("failed to get reader for %s: %w", path, err)
 	}
-	return reader.ReadMetadata(path)
+	metadata, err := reader.ReadMetadata(path)
+	if err != nil {
+		return model.Metadata{}, fmt.Errorf("failed to read metadata for %s: %w", path, err)
+	}
+	return *metadata, nil
 }
