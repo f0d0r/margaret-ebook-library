@@ -1,4 +1,4 @@
-package reader
+package registry
 
 import (
 	"faun.projects/margaret/margaret-ebook-library/pkg/model"

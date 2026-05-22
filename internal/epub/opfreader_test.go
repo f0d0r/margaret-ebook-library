@@ -1,74 +1,13 @@
 package epub
 
 import (
-	"archive/zip"
-	"os"
 	"path/filepath"
 	"testing"
 )
 
-type testFile struct {
-	name    string
-	content string
-	method  uint16
-}
-
-func TestSupports(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	validEPUBPath := filepath.Join(tmpDir, "valid.epub")
-	createValidTestEPUB(t, validEPUBPath, "My Test Book")
-
-	regularZIPPath := filepath.Join(tmpDir, "regular.zip")
-	createTestZIP(t, regularZIPPath, []testFile{
-		{name: "hello.txt", content: "hello world", method: zip.Deflate},
-	})
-
-	wrongOrderPath := filepath.Join(tmpDir, "wrong_order.epub")
-	createTestZIP(t, wrongOrderPath, []testFile{
-		{name: "OEBPS/content.opf", content: createOPF("Test"), method: zip.Deflate},
-		{name: "mimetype", content: "application/epub+zip", method: zip.Store},
-	})
-
-	wrongContentPath := filepath.Join(tmpDir, "wrong_content.epub")
-	createTestZIP(t, wrongContentPath, []testFile{
-		{name: "mimetype", content: "text/plain", method: zip.Store},
-	})
-
-	plainTextPath := filepath.Join(tmpDir, "text.txt")
-	err := os.WriteFile(plainTextPath, []byte("This is a plain text file, not a ZIP."), 0644)
-	if err != nil {
-		t.Fatalf("failed to create plain text file: %v", err)
-	}
-
-	shortFilePath := filepath.Join(tmpDir, "short.dat")
-	err = os.WriteFile(shortFilePath, []byte("PK\x03\x04short"), 0644)
-	if err != nil {
-		t.Fatalf("failed to create short file: %v", err)
-	}
-
-	tests := []struct {
-		name     string
-		filePath string
-		want     bool
-	}{
-		{"Valid EPUB file", validEPUBPath, true},
-		{"Regular ZIP without mimetype", regularZIPPath, false},
-		{"Wrong order with mimetype second", wrongOrderPath, false},
-		{"Wrong mimetype content", wrongContentPath, false},
-		{"Plain text file", plainTextPath, false},
-		{"Too short file", shortFilePath, false},
-		{"Non-existent file", filepath.Join(tmpDir, "does_not_exist.epub"), false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, rangeTest(tt.filePath, tt.want))
-	}
-}
-
 func TestReadMetadataTitle(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := &EpubReader{}
+	reader := NewEpubReader()
 
 	tests := []struct {
 		name          string
@@ -145,7 +84,7 @@ func TestReadMetadataTitle(t *testing.T) {
 
 func TestReadMetadataAuthors(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := &EpubReader{}
+	reader := NewEpubReader()
 
 	tests := []struct {
 		name             string
@@ -261,7 +200,7 @@ func TestReadMetadataAuthors(t *testing.T) {
 
 func TestReadMetadataDescription(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := &EpubReader{}
+	reader := NewEpubReader()
 
 	tests := []struct {
 		name                string
@@ -360,240 +299,9 @@ func TestReadMetadataDescription(t *testing.T) {
 	}
 }
 
-
-func rangeTest(path string, want bool) func(t *testing.T) {
-	return func(t *testing.T) {
-		reader := &EpubReader{}
-		if got := reader.Supports(path); got != want {
-			t.Errorf("EPUBReader.Supports() = %v, want %v (file: %s)", got, want, path)
-		}
-	}
-}
-
-func createOPF(title string) string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>` + title + `</dc:title>
-  </metadata>
-</package>`
-}
-
-func createOPFWithPrefix(prefix, title string) string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:` + prefix + `="http://purl.org/dc/elements/1.1/">
-    <` + prefix + `:title>` + title + `</` + prefix + `:title>
-  </metadata>
-</package>`
-}
-
-func createOPFWithoutTitle() string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:creator>Some Author</dc:creator>
-  </metadata>
-</package>`
-}
-
-func createOPFWithMultipleTitles(titles []string) string {
-	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">`
-	for _, title := range titles {
-		metadataContent += "\n    <dc:title>" + title + "</dc:title>"
-	}
-	metadataContent += "\n  </metadata>"
-
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-` + metadataContent + `
-</package>`
-}
-
-func createOPFWithEmptyTitle() string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title></dc:title>
-  </metadata>
-</package>`
-}
-
-func createOPFWithTitleAttributes(title, id, lang string) string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title id="` + id + `" lang="` + lang + `">` + title + `</dc:title>
-  </metadata>
-</package>`
-}
-
-// Author helper functions for tests
-
-func createOPFWithSingleAuthor(author string) string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>
-    <dc:creator>` + author + `</dc:creator>
-  </metadata>
-</package>`
-}
-
-func createOPFWithMultipleAuthors(authors []string) string {
-	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>`
-	for _, author := range authors {
-		metadataContent += "\n    <dc:creator>" + author + "</dc:creator>"
-	}
-	metadataContent += "\n  </metadata>"
-
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-` + metadataContent + `
-</package>`
-}
-
-func createOPFWithoutAuthors() string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>
-  </metadata>
-</package>`
-}
-
-func createOPFWithEmptyAuthor() string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>
-    <dc:creator></dc:creator>
-  </metadata>
-</package>`
-}
-
-func createOPFWithMixedAuthors(authors []string) string {
-	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>`
-	for _, author := range authors {
-		metadataContent += "\n    <dc:creator>" + author + "</dc:creator>"
-	}
-	metadataContent += "\n  </metadata>"
-
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-` + metadataContent + `
-</package>`
-}
-
-func createOPFWithAuthorRole(author, role string) string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>
-    <dc:creator role="` + role + `">` + author + `</dc:creator>
-  </metadata>
-</package>`
-}
-
-func createOPFWithAuthorFileAs(author, fileAs string) string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>
-    <dc:creator file-as="` + fileAs + `">` + author + `</dc:creator>
-  </metadata>
-</package>`
-}
-
-type creatorInfo struct {
-	name string
-	role string
-}
-
-func createOPFWithCreatorsMultipleRoles(creators []creatorInfo) string {
-	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>`
-	for _, creator := range creators {
-		metadataContent += "\n    <dc:creator role=\"" + creator.role + "\">" + creator.name + "</dc:creator>"
-	}
-	metadataContent += "\n  </metadata>"
-
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-` + metadataContent + `
-</package>`
-}
-
-func createOPFWithAuthorDcPrefix(author string) string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0">
-  <metadata>
-    <dc:title>Test Book</dc:title>
-    <dc:creator>` + author + `</dc:creator>
-  </metadata>
-</package>`
-}
-
-// Description helper functions for tests
-
-func createOPFWithDescription(description string) string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>
-    <dc:description>` + description + `</dc:description>
-  </metadata>
-</package>`
-}
-
-func createOPFWithoutDescription() string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>
-  </metadata>
-</package>`
-}
-
-func createOPFWithEmptyDescription() string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>
-    <dc:description></dc:description>
-  </metadata>
-</package>`
-}
-
-func createOPFWithMultipleDescriptions(descriptions []string) string {
-	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:title>Test Book</dc:title>`
-	for _, desc := range descriptions {
-		metadataContent += "\n    <dc:description>" + desc + "</dc:description>"
-	}
-	metadataContent += "\n  </metadata>"
-
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
-` + metadataContent + `
-</package>`
-}
-
-func createOPFWithDescriptionDcPrefix(description string) string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0">
-  <metadata>
-    <dc:title>Test Book</dc:title>
-    <dc:description>` + description + `</dc:description>
-  </metadata>
-</package>`
-}
-
 func TestReadMetadataLanguages(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := &EpubReader{}
+	reader := NewEpubReader()
 
 	tests := []struct {
 		name              string
@@ -712,7 +420,224 @@ func TestReadMetadataLanguages(t *testing.T) {
 	}
 }
 
-// Language helper functions for tests
+// OPF helper functions for tests
+
+func createOPF(title string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>` + title + `</dc:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithPrefix(prefix, title string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:` + prefix + `="http://purl.org/dc/elements/1.1/">
+    <` + prefix + `:title>` + title + `</` + prefix + `:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithoutTitle() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:creator>Some Author</dc:creator>
+  </metadata>
+</package>`
+}
+
+func createOPFWithMultipleTitles(titles []string) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">`
+	for _, title := range titles {
+		metadataContent += "\n    <dc:title>" + title + "</dc:title>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithEmptyTitle() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title></dc:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithTitleAttributes(title, id, lang string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title id="` + id + `" lang="` + lang + `">` + title + `</dc:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithSingleAuthor(author string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:creator>` + author + `</dc:creator>
+  </metadata>
+</package>`
+}
+
+func createOPFWithMultipleAuthors(authors []string) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>`
+	for _, author := range authors {
+		metadataContent += "\n    <dc:creator>" + author + "</dc:creator>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithoutAuthors() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithEmptyAuthor() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:creator></dc:creator>
+  </metadata>
+</package>`
+}
+
+func createOPFWithMixedAuthors(authors []string) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>`
+	for _, author := range authors {
+		metadataContent += "\n    <dc:creator>" + author + "</dc:creator>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithAuthorRole(author, role string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:creator role="` + role + `">` + author + `</dc:creator>
+  </metadata>
+</package>`
+}
+
+func createOPFWithAuthorFileAs(author, fileAs string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:creator file-as="` + fileAs + `">` + author + `</dc:creator>
+  </metadata>
+</package>`
+}
+
+type creatorInfo struct {
+	name string
+	role string
+}
+
+func createOPFWithCreatorsMultipleRoles(creators []creatorInfo) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>`
+	for _, creator := range creators {
+		metadataContent += "\n    <dc:creator role=\"" + creator.role + "\">" + creator.name + "</dc:creator>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithAuthorDcPrefix(author string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0">
+  <metadata>
+    <dc:title>Test Book</dc:title>
+    <dc:creator>` + author + `</dc:creator>
+  </metadata>
+</package>`
+}
+
+func createOPFWithDescription(description string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:description>` + description + `</dc:description>
+  </metadata>
+</package>`
+}
+
+func createOPFWithoutDescription() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithEmptyDescription() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:description></dc:description>
+  </metadata>
+</package>`
+}
+
+func createOPFWithMultipleDescriptions(descriptions []string) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>`
+	for _, desc := range descriptions {
+		metadataContent += "\n    <dc:description>" + desc + "</dc:description>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithDescriptionDcPrefix(description string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0">
+  <metadata>
+    <dc:title>Test Book</dc:title>
+    <dc:description>` + description + `</dc:description>
+  </metadata>
+</package>`
+}
 
 func createOPFWithLanguages(languages []string) string {
 	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -759,74 +684,4 @@ func createOPFWithLanguageDcPrefix(language string) string {
     <dc:language>` + language + `</dc:language>
   </metadata>
 </package>`
-}
-
-func createContainerXML(opfPath string) string {
-	return `<?xml version="1.0" encoding="UTF-8"?>
-<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
-  <rootfiles>
-    <rootfile full-path="` + opfPath + `" media-type="application/oebps-package+xml"/>
-  </rootfiles>
-</container>`
-}
-
-
-// createValidTestEPUB creates a minimal but valid EPUB structure with proper container and OPF files
-func createValidTestEPUB(t *testing.T, path string, title string) {
-	opfPath := "OEBPS/content.opf"
-	opfContent := createOPF(title)
-	containerContent := createContainerXML(opfPath)
-
-	createTestZIP(t, path, []testFile{
-		{name: "mimetype", content: "application/epub+zip", method: zip.Store},
-		{name: "META-INF/container.xml", content: containerContent, method: zip.Deflate},
-		{name: opfPath, content: opfContent, method: zip.Deflate},
-	})
-}
-
-// createValidTestEPUBWithContent creates a valid EPUB with custom OPF content
-func createValidTestEPUBWithContent(t *testing.T, path string, opfContent string) {
-	opfPath := "OEBPS/content.opf"
-	containerContent := createContainerXML(opfPath)
-
-	createTestZIP(t, path, []testFile{
-		{name: "mimetype", content: "application/epub+zip", method: zip.Store},
-		{name: "META-INF/container.xml", content: containerContent, method: zip.Deflate},
-		{name: opfPath, content: opfContent, method: zip.Deflate},
-	})
-}
-
-func createTestZIP(t *testing.T, path string, files []testFile) {
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatalf("failed to create zip file: %v", err)
-	}
-	defer func () {
-		closeErr := f.Close()
-		if closeErr != nil {
-			t.Fatalf("failed to close zip file: %v", closeErr)
-		}
-	}()
-
-	w := zip.NewWriter(f)
-	defer func() {
-		if err := w.Close(); err != nil {
-			t.Fatalf("failed to close zip writer: %v", err)
-		}
-	}()
-
-	for _, file := range files {
-		header := &zip.FileHeader{
-			Name:   file.name,
-			Method: file.method,
-		}
-		fw, err := w.CreateHeader(header)
-		if err != nil {
-			t.Fatalf("failed to create zip entry header: %v", err)
-		}
-		_, err = fw.Write([]byte(file.content))
-		if err != nil {
-			t.Fatalf("failed to write zip entry content: %v", err)
-		}
-	}
 }

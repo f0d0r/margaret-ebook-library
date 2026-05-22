@@ -10,14 +10,6 @@ This project is a Go library for handling ebook files. It currently supports rea
   - `main.go`: The entry point of the application.
 
 - **internal/**: Internal packages that are intended for use only inside this module.
-  - **reader/**: Core reader abstractions and format-specific implementations.
-    - `reader.go`
-    - **epub/**: EPUB-specific reader implementation.
-      - `reader.go`
-    - **mobi/**: MOBI-specific reader implementation.
-      - `reader.go`
-    - **registry/**: Registry for available reader implementations.
-      - `registry.go`
 
 - **pkg/**: Public packages exposed to other modules.
   - **ebook/**: Public ebook handling API.

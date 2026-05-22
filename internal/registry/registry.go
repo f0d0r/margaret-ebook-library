@@ -1,26 +1,25 @@
 package registry
 
 import (
-	"faun.projects/margaret/margaret-ebook-library/internal/reader"
-	"faun.projects/margaret/margaret-ebook-library/internal/reader/epub"
-	"faun.projects/margaret/margaret-ebook-library/internal/reader/mobi"
+	"faun.projects/margaret/margaret-ebook-library/internal/epub"
+	"faun.projects/margaret/margaret-ebook-library/internal/mobi"
 	"faun.projects/margaret/margaret-ebook-library/pkg/errs"
 )
 
 type Registry struct {
-	readers []reader.Reader
+	readers []Reader
 }
 
 func New() *Registry {
 	return &Registry{
-		readers: []reader.Reader{
+		readers: []Reader{
 			&epub.EpubReader{},
 			&mobi.MobiReader{},
 		},
 	}
 }
 
-func (r *Registry) Get(path string) (reader.Reader, error) {
+func (r *Registry) GetReader(path string) (Reader, error) {
 	for _, reader := range r.readers {
 		if reader.Supports(path) {
 			return reader, nil

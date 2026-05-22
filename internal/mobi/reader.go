@@ -14,7 +14,7 @@ func (r *MobiReader) Supports(path string) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// The "BOOKMOBI" identifier starts at byte 60 and ends at byte 67.
 	// Therefore reading exactly 68 bytes is sufficient.

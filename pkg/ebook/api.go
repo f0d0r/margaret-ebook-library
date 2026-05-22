@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"faun.projects/margaret/margaret-ebook-library/internal/reader/registry"
+	"faun.projects/margaret/margaret-ebook-library/internal/registry"
 	"faun.projects/margaret/margaret-ebook-library/pkg/errs"
 	"faun.projects/margaret/margaret-ebook-library/pkg/model"
 )
@@ -27,7 +27,7 @@ func ReadMetadata(path string) (model.Metadata, error) {
 	}
 
 	registry := registry.New()
-	reader, err := registry.Get(path)
+	reader, err := registry.GetReader(path)
 	if err != nil {
 		return model.Metadata{}, fmt.Errorf("failed to get reader for %s: %w", path, err)
 	}

@@ -1,6 +1,8 @@
 package epub
 
-import "encoding/xml"
+import (
+	"encoding/xml"
+)
 
 type Package struct {
 	XMLName  xml.Name `xml:"package"`
