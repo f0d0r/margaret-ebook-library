@@ -591,6 +591,176 @@ func createOPFWithDescriptionDcPrefix(description string) string {
 </package>`
 }
 
+func TestReadMetadataLanguages(t *testing.T) {
+	tmpDir := t.TempDir()
+	reader := &EpubReader{}
+
+	tests := []struct {
+		name              string
+		opfContent        string
+		expectedLanguages []string
+		shouldError       bool
+	}{
+		{
+			name:              "Single language - en",
+			opfContent:        createOPFWithLanguages([]string{"en"}),
+			expectedLanguages: []string{"en"},
+			shouldError:       false,
+		},
+		{
+			name:              "Single language - hu",
+			opfContent:        createOPFWithLanguages([]string{"hu"}),
+			expectedLanguages: []string{"hu"},
+			shouldError:       false,
+		},
+		{
+			name:              "Language with region - en-US",
+			opfContent:        createOPFWithLanguages([]string{"en-US"}),
+			expectedLanguages: []string{"en-US"},
+			shouldError:       false,
+		},
+		{
+			name:              "Complex BCP 47 - zh-Hans-CN",
+			opfContent:        createOPFWithLanguages([]string{"zh-Hans-CN"}),
+			expectedLanguages: []string{"zh-Hans-CN"},
+			shouldError:       false,
+		},
+		{
+			name:              "Multiple languages",
+			opfContent:        createOPFWithLanguages([]string{"en", "hu", "de"}),
+			expectedLanguages: []string{"en", "hu", "de"},
+			shouldError:       false,
+		},
+		{
+			name:              "No languages",
+			opfContent:        createOPFWithoutLanguages(),
+			expectedLanguages: nil,
+			shouldError:       false,
+		},
+		{
+			name:              "Invalid language - und",
+			opfContent:        createOPFWithLanguages([]string{"und"}),
+			expectedLanguages: nil,
+			shouldError:       false,
+		},
+		{
+			name:              "Invalid language - english",
+			opfContent:        createOPFWithLanguages([]string{"english"}),
+			expectedLanguages: nil,
+			shouldError:       false,
+		},
+		{
+			name:              "Invalid language - magyar",
+			opfContent:        createOPFWithLanguages([]string{"magyar"}),
+			expectedLanguages: nil,
+			shouldError:       false,
+		},
+		{
+			name:              "Mixed valid and invalid languages",
+			opfContent:        createOPFWithLanguages([]string{"en", "und", "hu", "english"}),
+			expectedLanguages: []string{"en", "hu"},
+			shouldError:       false,
+		},
+		{
+			name:              "Empty language element",
+			opfContent:        createOPFWithLanguages([]string{""}),
+			expectedLanguages: nil,
+			shouldError:       false,
+		},
+		{
+			name:              "Languages with whitespace",
+			opfContent:        createOPFWithLanguagesWhitespace([]string{"  en  ", "  hu  "}),
+			expectedLanguages: []string{"en", "hu"},
+			shouldError:       false,
+		},
+		{
+			name:              "Language with dc prefix",
+			opfContent:        createOPFWithLanguageDcPrefix("fr"),
+			expectedLanguages: []string{"fr"},
+			shouldError:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			epubPath := filepath.Join(tmpDir, tt.name+".epub")
+			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
+
+			metadata, err := reader.ReadMetadata(epubPath)
+
+			if tt.shouldError && err == nil {
+				t.Errorf("expected error but got none")
+				return
+			}
+			if !tt.shouldError && err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if len(metadata.Languages) != len(tt.expectedLanguages) {
+				t.Errorf("got %d languages, want %d. Got: %v, Want: %v",
+					len(metadata.Languages), len(tt.expectedLanguages), metadata.Languages, tt.expectedLanguages)
+				return
+			}
+
+			for i, lang := range metadata.Languages {
+				if lang != tt.expectedLanguages[i] {
+					t.Errorf("language %d: got %q, want %q", i, lang, tt.expectedLanguages[i])
+				}
+			}
+		})
+	}
+}
+
+// Language helper functions for tests
+
+func createOPFWithLanguages(languages []string) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>`
+	for _, lang := range languages {
+		metadataContent += "\n    <dc:language>" + lang + "</dc:language>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithLanguagesWhitespace(languages []string) string {
+	metadataContent := `  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>`
+	for _, lang := range languages {
+		metadataContent += "\n    <dc:language>" + lang + "</dc:language>"
+	}
+	metadataContent += "\n  </metadata>"
+
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+` + metadataContent + `
+</package>`
+}
+
+func createOPFWithoutLanguages() string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+  </metadata>
+</package>`
+}
+
+func createOPFWithLanguageDcPrefix(language string) string {
+	return `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" xmlns:dc="http://purl.org/dc/elements/1.1/" version="3.0">
+  <metadata>
+    <dc:title>Test Book</dc:title>
+    <dc:language>` + language + `</dc:language>
+  </metadata>
+</package>`
+}
+
 func createContainerXML(opfPath string) string {
 	return `<?xml version="1.0" encoding="UTF-8"?>
 <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
@@ -631,7 +801,12 @@ func createTestZIP(t *testing.T, path string, files []testFile) {
 	if err != nil {
 		t.Fatalf("failed to create zip file: %v", err)
 	}
-	defer f.Close()
+	defer func () {
+		closeErr := f.Close()
+		if closeErr != nil {
+			t.Fatalf("failed to close zip file: %v", closeErr)
+		}
+	}()
 
 	w := zip.NewWriter(f)
 	defer func() {

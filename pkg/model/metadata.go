@@ -12,6 +12,9 @@ type Metadata struct {
 	// Description is a brief summary or description of the book.
 	Description string
 
+	// Languages is the language(s) of the book.
+	Languages []string
+
 	// FileType indicates the original format from which this metadata was parsed.
 	FileType FileType
 }

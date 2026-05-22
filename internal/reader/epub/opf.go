@@ -12,6 +12,7 @@ type Metadata struct {
 	Title        []Title   `xml:"title"`
 	Creators     []Creator `xml:"creator"`
 	Descriptions []string  `xml:"description"`
+	Languages    []string  `xml:"language"`
 }
 
 type Title struct {

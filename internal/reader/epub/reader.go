@@ -10,6 +10,7 @@ import (
 
 	"faun.projects/margaret/margaret-ebook-library/internal/converter"
 	"faun.projects/margaret/margaret-ebook-library/pkg/model"
+	"golang.org/x/text/language"
 )
 
 type EpubReader struct{}
@@ -19,7 +20,7 @@ func (r *EpubReader) Supports(path string) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil || info.Size() < 22 {
@@ -119,7 +120,7 @@ func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open the file %s: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil {
@@ -145,6 +146,7 @@ func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
 		Title:       r.getTitle(p),
 		Authors:     r.getAuthors(p),
 		Description: r.getDescription(p),
+		Languages:   r.getLanguages(p),
 		FileType:    model.EPUB,
 	}, nil
 }
@@ -159,7 +161,7 @@ func (r *EpubReader) getContainer(zr *zip.Reader) (Container, error) {
 	if err != nil {
 		return Container{}, fmt.Errorf("failed to open container.xml: %w", err)
 	}
-	defer cfr.Close()
+	defer func() { _ = cfr.Close() }()
 
 	var c Container
 	if err := xml.NewDecoder(cfr).Decode(&c); err != nil {
@@ -192,7 +194,7 @@ func (r *EpubReader) getPackage(zr *zip.Reader, rootfile Rootfile) (Package, err
 	if err != nil {
 		return Package{}, fmt.Errorf("failed to open opf file: %w", err)
 	}
-	defer opfr.Close()
+	defer func() { _ = opfr.Close() }()
 
 	var p Package
 	if err := xml.NewDecoder(opfr).Decode(&p); err != nil {
@@ -238,4 +240,31 @@ func (r *EpubReader) getDescription(p Package) string {
 		}
 	}
 	return ""
+}
+
+func (r *EpubReader) getLanguages(p Package) []string {
+	if len(p.Metadata.Languages) == 0 {
+		return nil
+	}
+	languages := make([]string, 0, len(p.Metadata.Languages))
+	for _, lang := range p.Metadata.Languages {
+		lang = strings.TrimSpace(lang)
+		if lang == "" {
+			continue
+		}
+		tag, err := language.Parse(lang)
+		if err != nil {
+			continue
+		}
+
+		if tag.String() == "und" {
+			continue
+		}
+		_, confidence := tag.Base()
+		if confidence == language.No {
+			continue
+		}
+		languages = append(languages, lang)
+	}
+	return languages
 }
