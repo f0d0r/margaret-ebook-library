@@ -24,4 +24,5 @@ func main() {
 	fmt.Printf("Book Title: %s\n", bookMeta.Title)
 	fmt.Printf("Authors: %v\n", strings.Join(bookMeta.Authors, ", "))
 	fmt.Printf("Description: %s\n", bookMeta.Description)
+	fmt.Printf("Languages: %v\n", strings.Join(bookMeta.Languages, ", "))	
 }
