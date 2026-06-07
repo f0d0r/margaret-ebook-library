@@ -24,5 +24,21 @@ func main() {
 	fmt.Printf("Book Title: %s\n", bookMeta.Title)
 	fmt.Printf("Authors: %v\n", strings.Join(bookMeta.Authors, ", "))
 	fmt.Printf("Description: %s\n", bookMeta.Description)
-	fmt.Printf("Languages: %v\n", strings.Join(bookMeta.Languages, ", "))	
+	fmt.Printf("Languages: %v\n", strings.Join(bookMeta.Languages, ", "))
+
+	if bookMeta.Cover != nil {
+		fmt.Printf("Cover: %s (%d bytes) media type: %s\n", bookMeta.Cover.Name, bookMeta.Cover.Size, bookMeta.Cover.MediaType)
+
+		/*
+			coverBytes, err := bookMeta.Cover.GetData()
+			if err != nil {
+				log.Fatalf("Hiba a borítókép adatainak beolvasásakor: %v", err)
+			}
+			outputPath := bookMeta.Cover.Name
+			err = os.WriteFile(outputPath, coverBytes, 0644)
+			if err != nil {
+				log.Fatalf("Hiba a fájl mentésekor: %v", err)
+			}
+		*/
+	}
 }

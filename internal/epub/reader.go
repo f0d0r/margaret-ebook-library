@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
+	"path"
 	"strings"
 
 	"faun.projects/margaret/margaret-ebook-library/pkg/model"
@@ -105,22 +107,34 @@ func (r *EpubReader) hasValidEpubHeader(f *os.File) bool {
 	return string(buf[mimetypeStart:mimetypeEnd]) == "application/epub+zip"
 }
 
-func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
+func (r *EpubReader) openZipReader(path string) (*zip.Reader, io.Closer, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open the file %s: %w", path, err)
+		return nil, nil, err
 	}
-	defer func() { _ = f.Close() }()
 
 	info, err := f.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get file info: %w", err)
+		_ = f.Close()
+		return nil, nil, err
 	}
 
 	zr, err := zip.NewReader(f, info.Size())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create zip reader: %w", err)
+		_ = f.Close()
+		return nil, nil, err
 	}
+
+	// Visszaadjuk a readert, és magát a fájlt mint Closert, hogy le lehessen zárni
+	return zr, f, nil
+}
+
+func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
+	zr, closer, err := r.openZipReader(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open epub: %w", err)
+	}
+	defer func() { _ = closer.Close() }()
 
 	c, err := r.ocfReader.Read(zr)
 	if err != nil {
@@ -137,6 +151,57 @@ func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
 		Authors:     r.opfReader.GetAuthors(p),
 		Description: r.opfReader.GetDescription(p),
 		Languages:   r.opfReader.GetLanguages(p),
+		Cover:       r.GetCover(path, zr, p),
 		FileType:    model.EPUB,
 	}, nil
+}
+
+func (r *EpubReader) GetCover(epubPath string, zr *zip.Reader, p Package) *model.Resource {
+	coverItems := r.opfReader.GetItemsByProperty(p, "cover-image")
+	var coverItem *Item
+	if len(coverItems) > 0 {
+		coverItem = &coverItems[0]
+	} else {
+		coverMeta := r.opfReader.GetMetaByName(p, "cover")
+		if coverMeta != nil {
+			coverItem = r.opfReader.GetItemById(p, coverMeta.Content)
+		}
+	}
+	if coverItem == nil {
+		return nil
+	}
+	coverPath := p.ResolvePath(coverItem.Href)
+	coverFile := findFileInZip(zr, coverPath)
+	if coverFile == nil {
+		return nil
+	}
+	return &model.Resource{
+		Id:        coverItem.ID,
+		Name:      path.Base(coverFile.Name),
+		MediaType: coverItem.MediaType,
+		Size:      int(coverFile.UncompressedSize64),
+		GetData: func() ([]byte, error) {
+			return r.lazyReadResource(epubPath, coverPath)
+		},
+	}
+}
+
+func (r *EpubReader) lazyReadResource(filePath string, resourcePath string) ([]byte, error) {
+	zr, closer, err := r.openZipReader(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open epub: %w", err)
+	}
+	defer func() { _ = closer.Close() }()
+	targetFile := findFileInZip(zr, resourcePath)
+	if targetFile == nil {
+		return nil, fmt.Errorf("resource not found")
+	}
+
+	rc, err := targetFile.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }()
+
+	return io.ReadAll(rc)
 }

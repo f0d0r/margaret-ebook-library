@@ -1,7 +1,11 @@
 package ebook
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"os"
 	"strings"
 
 	"faun.projects/margaret/margaret-ebook-library/internal/registry"
@@ -36,4 +40,20 @@ func ReadMetadata(path string) (model.Metadata, error) {
 		return model.Metadata{}, fmt.Errorf("failed to read metadata for %s: %w", path, err)
 	}
 	return *metadata, nil
+}
+
+// CalculateFileHash calculates the sha256 hash of the file at the specified path.
+func CalculateFileHash(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("failed to open file: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", fmt.Errorf("failed to calculate hash: %w", err)
+	}
+	hashInBytes := hash.Sum(nil)
+	hashString := hex.EncodeToString(hashInBytes)
+	return hashString, nil
 }
