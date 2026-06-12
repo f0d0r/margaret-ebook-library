@@ -56,9 +56,9 @@ func TestMOBISupportsEdgeCases(t *testing.T) {
 	reader := &MobiReader{}
 
 	tests := []struct {
-		name     string
-		setupFn  func() string
-		want     bool
+		name    string
+		setupFn func() string
+		want    bool
 	}{
 		{
 			name: "Exactly 68 bytes with valid identifier",

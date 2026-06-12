@@ -169,8 +169,8 @@ func TestParseRecordAttributes(t *testing.T) {
 			wantBusy: true,
 		},
 		{
-			name:     "Dirty attribute",
-			raw:      RecordAttrDirty,
+			name:      "Dirty attribute",
+			raw:       RecordAttrDirty,
 			wantDirty: true,
 		},
 		{
@@ -289,7 +289,7 @@ func TestReadPdbDbValidFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() error: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	pdb, err := ReadPdbDb(f)
 	if err != nil {
@@ -324,7 +324,7 @@ func TestReadPdbDbNonExistentFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() error: %v", err)
 	}
-	f.Close() // Close immediately to cause read error
+	_ = f.Close() // Close immediately to cause read error
 
 	_, err = ReadPdbDb(f)
 	if err == nil {
@@ -346,7 +346,7 @@ func TestReadPdbDbTruncatedHeader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() error: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	_, err = ReadPdbDb(f)
 	if err == nil {
@@ -374,7 +374,7 @@ func TestReadPdbDbAttributes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() error: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	pdb, err := ReadPdbDb(f)
 	if err != nil {
@@ -411,7 +411,7 @@ func TestReadPdbDbDates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() error: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	pdb, err := ReadPdbDb(f)
 	if err != nil {
@@ -443,7 +443,7 @@ func TestLazyReadRecord(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() error: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	got, err := readRecordData(f, offset, uint32(len(recordData)))
 	if err != nil {
@@ -475,7 +475,7 @@ func TestReadRecordData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() error: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	got, err := readRecordData(f, offset, uint32(len(recordData)))
 	if err != nil {
@@ -500,7 +500,7 @@ func TestPdbRecordGetData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() error: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	pdb, err := ReadPdbDb(f)
 	if err != nil {
@@ -543,7 +543,7 @@ func TestReadPdbDbFileVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() error: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	pdb, err := ReadPdbDb(f)
 	if err != nil {
@@ -570,7 +570,7 @@ func TestReadPdbDbMultipleRecords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open() error: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	pdb, err := ReadPdbDb(f)
 	if err != nil {

@@ -145,11 +145,11 @@ func TestMobiHasDRM(t *testing.T) {
 
 func TestMobiTitle(t *testing.T) {
 	tests := []struct {
-		name        string
-		mobiTitle   string
-		exth        *Exth
-		exthTitle   string
-		want        string
+		name      string
+		mobiTitle string
+		exth      *Exth
+		exthTitle string
+		want      string
 	}{
 		{
 			name:      "Only MOBI header title",
@@ -260,14 +260,14 @@ func TestReadMobiExtendedHeader(t *testing.T) {
 	copy(data[16:20], "MOBI")
 	binary.BigEndian.PutUint32(data[20:24], 232) // HeaderLength
 	binary.BigEndian.PutUint16(data[0:2], uint16(CompressionNone))
-	binary.BigEndian.PutUint32(data[4:8], 1000)  // TextLength
-	binary.BigEndian.PutUint16(data[8:10], 1)    // TextRecordCount
+	binary.BigEndian.PutUint32(data[4:8], 1000) // TextLength
+	binary.BigEndian.PutUint16(data[8:10], 1)   // TextRecordCount
 	binary.BigEndian.PutUint16(data[10:12], 4096)
 	binary.BigEndian.PutUint32(data[28:32], uint32(UTF8))
 	binary.BigEndian.PutUint32(data[24:28], uint32(MobiTypeBook))
 
 	// Extended header fields
-	binary.BigEndian.PutUint32(data[96:100], 1033)    // InputLanguage (US English)
+	binary.BigEndian.PutUint32(data[96:100], 1033) // InputLanguage (US English)
 	// Don't set EXTHFlags (0x40) to avoid EXTH parsing with insufficient data
 
 	pdbDb := &PdbDb{
@@ -290,18 +290,18 @@ func TestReadMobiFullHeader(t *testing.T) {
 	// Create full MOBI header (>= 248 bytes)
 	data := make([]byte, 250)
 	copy(data[16:20], "MOBI")
-	binary.BigEndian.PutUint32(data[20:24], 248)  // HeaderLength
+	binary.BigEndian.PutUint32(data[20:24], 248) // HeaderLength
 	binary.BigEndian.PutUint16(data[0:2], uint16(CompressionNone))
-	binary.BigEndian.PutUint32(data[4:8], 5000)  // TextLength
+	binary.BigEndian.PutUint32(data[4:8], 5000) // TextLength
 	binary.BigEndian.PutUint16(data[8:10], 1)
 	binary.BigEndian.PutUint16(data[10:12], 4096)
 	binary.BigEndian.PutUint32(data[28:32], uint32(UTF8))
 	binary.BigEndian.PutUint32(data[24:28], uint32(MobiTypeKF8))
 
 	// Extended header fields
-	binary.BigEndian.PutUint32(data[192:196], 5000)     // FirstTextRecord
-	binary.BigEndian.PutUint32(data[200:204], 10)       // FCISRecordOffset
-	binary.BigEndian.PutUint32(data[244:248], 5000)     // IndxRecordOffset
+	binary.BigEndian.PutUint32(data[192:196], 5000) // FirstTextRecord
+	binary.BigEndian.PutUint32(data[200:204], 10)   // FCISRecordOffset
+	binary.BigEndian.PutUint32(data[244:248], 5000) // IndxRecordOffset
 
 	pdbDb := &PdbDb{
 		PdbRecords: []PdbRecord{
@@ -399,19 +399,19 @@ func buildValidMobiData() []byte {
 
 	// Required fields (bytes 0-95)
 	binary.BigEndian.PutUint16(data[0:2], uint16(CompressionNone))
-	binary.BigEndian.PutUint32(data[4:8], 1000)  // TextLength
-	binary.BigEndian.PutUint16(data[8:10], 1)    // TextRecordCount
+	binary.BigEndian.PutUint32(data[4:8], 1000)   // TextLength
+	binary.BigEndian.PutUint16(data[8:10], 1)     // TextRecordCount
 	binary.BigEndian.PutUint16(data[10:12], 4096) // MaxTextRecordSize
 	binary.BigEndian.PutUint16(data[12:14], uint16(EncryptionNone))
-	copy(data[16:20], "MOBI")                     // Identifier
+	copy(data[16:20], "MOBI")                    // Identifier
 	binary.BigEndian.PutUint32(data[20:24], 232) // HeaderLength
 	binary.BigEndian.PutUint32(data[24:28], uint32(MobiTypeBook))
 	binary.BigEndian.PutUint32(data[28:32], uint32(UTF8)) // TextEncoding
-	binary.BigEndian.PutUint32(data[36:40], 6)   // MobiVersion
-	binary.BigEndian.PutUint32(data[80:84], 100) // FirstNonTextRecord
-	binary.BigEndian.PutUint32(data[84:88], 0)   // FullNameOffset
-	binary.BigEndian.PutUint32(data[88:92], 0)   // FullNameLength
-	binary.BigEndian.PutUint32(data[92:96], 1033) // Locale (US English)
+	binary.BigEndian.PutUint32(data[36:40], 6)            // MobiVersion
+	binary.BigEndian.PutUint32(data[80:84], 100)          // FirstNonTextRecord
+	binary.BigEndian.PutUint32(data[84:88], 0)            // FullNameOffset
+	binary.BigEndian.PutUint32(data[88:92], 0)            // FullNameLength
+	binary.BigEndian.PutUint32(data[92:96], 1033)         // Locale (US English)
 
 	return data
 }

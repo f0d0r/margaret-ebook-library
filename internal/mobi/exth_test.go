@@ -19,10 +19,10 @@ func TestReadExth(t *testing.T) {
 		wantRecCount  uint32
 	}{
 		{
-			name:     "Invalid offset",
-			offset:   1000,
-			data:     make([]byte, 50),
-			wantErr:  errs.ErrInvalidOffset,
+			name:    "Invalid offset",
+			offset:  1000,
+			data:    make([]byte, 50),
+			wantErr: errs.ErrInvalidOffset,
 		},
 		{
 			name:          "Valid EXTH header with no records",
@@ -43,12 +43,12 @@ func TestReadExth(t *testing.T) {
 			wantRecCount:  1,
 		},
 		{
-			name:          "Valid EXTH with multiple records",
-			offset:        0,
-			data:          buildExthDataWithRecords(map[uint32]string{100: "title", 101: "author", 103: "desc"}),
-			textEncoding:  UTF8,
-			wantIdent:     "EXTH",
-			wantRecCount:  3,
+			name:         "Valid EXTH with multiple records",
+			offset:       0,
+			data:         buildExthDataWithRecords(map[uint32]string{100: "title", 101: "author", 103: "desc"}),
+			textEncoding: UTF8,
+			wantIdent:    "EXTH",
+			wantRecCount: 3,
 		},
 		{
 			name:         "Offset at valid position",
