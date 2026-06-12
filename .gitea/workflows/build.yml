@@ -11,20 +11,39 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Első lépés: A runner letölti a kódodat a saját virtuális környezetébe
       - name: Project Checkout
         uses: actions/checkout@v6
 
-      # 2. Go környezet beállítása (beépített verzió a Gitea/GitHub-tól)
+      # Go környezet beállítása (beépített verzió a Gitea/GitHub-tól)
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          # Megadhatsz fix verziót is (pl. '1.22'), a 'stable' mindig a legfrissebbet rakja fel
-          go-version: '1.25'
+          # A go verziót a go.mod fájlból olvassa be
+          go-version-file: 'go.mod'
+          check-latest: true
           # Automatikusan gyorsítótárazza (cache-eli) a Go függőségeket, hogy villámgyors legyen a build
           cache: true
 
-      # Harmadik lépés: Itt hajtódik végre a te build parancsod
+      # Telepíti a govulncheck-et, hogy a build során keresse meg a biztonsági hiányosságokat
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Go Tidy
+        run: go mod tidy && git diff --exit-code
+
+      - name: Go Mod
+        run: go mod download
+
+      - name: Go Mod Verify
+        run: go mod verify
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+
+      - name: Run govulncheck
+        run: govulncheck -test ./...
+
+      # Itt hajtódik végre a te build parancsod
       - name: Project Build
         run: |
           make build
