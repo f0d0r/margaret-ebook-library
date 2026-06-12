@@ -148,7 +148,6 @@ func TestMobiTitle(t *testing.T) {
 		name      string
 		mobiTitle string
 		exth      *Exth
-		exthTitle string
 		want      string
 	}{
 		{
@@ -167,7 +166,7 @@ func TestMobiTitle(t *testing.T) {
 			name:      "Prefer EXTH updated title over header",
 			mobiTitle: "Header Title",
 			exth: &Exth{
-				Records:      map[uint32][]byte{UPDATED_TITLE: []byte("Updated Title")},
+				Records:      map[uint32][][]byte{UPDATED_TITLE: {[]byte("Updated Title")}},
 				textEncoding: UTF8,
 			},
 			want: "Updated Title",
@@ -176,7 +175,7 @@ func TestMobiTitle(t *testing.T) {
 			name:      "Fall back to header when EXTH title empty",
 			mobiTitle: "Fallback Title",
 			exth: &Exth{
-				Records:      map[uint32][]byte{},
+				Records:      map[uint32][][]byte{},
 				textEncoding: UTF8,
 			},
 			want: "Fallback Title",
@@ -185,7 +184,7 @@ func TestMobiTitle(t *testing.T) {
 			name:      "EXTH title takes precedence",
 			mobiTitle: "Original",
 			exth: &Exth{
-				Records:      map[uint32][]byte{UPDATED_TITLE: []byte("New Title")},
+				Records:      map[uint32][][]byte{UPDATED_TITLE: {[]byte("New Title")}},
 				textEncoding: UTF8,
 			},
 			want: "New Title",
@@ -194,7 +193,7 @@ func TestMobiTitle(t *testing.T) {
 			name:      "Empty both titles",
 			mobiTitle: "",
 			exth: &Exth{
-				Records:      map[uint32][]byte{},
+				Records:      map[uint32][][]byte{},
 				textEncoding: UTF8,
 			},
 			want: "",
@@ -210,6 +209,72 @@ func TestMobiTitle(t *testing.T) {
 			got := mobi.Title()
 			if got != tt.want {
 				t.Errorf("Title() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMobiAuthors(t *testing.T) {
+	tests := []struct {
+		name string
+		kf8  *Mobi
+		exth *Exth
+		want []string
+	}{
+		{
+			name: "No EXTH, no KF8",
+			exth: nil,
+			want: nil,
+		},
+		{
+			name: "EXTH with authors",
+			exth: &Exth{
+				Records:      map[uint32][][]byte{AUTHOR: {[]byte("Author One"), []byte("Author Two")}},
+				textEncoding: UTF8,
+			},
+			want: []string{"Author One", "Author Two"},
+		},
+		{
+			name: "Empty EXTH authors",
+			exth: &Exth{
+				Records:      map[uint32][][]byte{},
+				textEncoding: UTF8,
+			},
+			want: nil,
+		},
+		{
+			name: "KF8 authors preferred over EXTH",
+			kf8: &Mobi{
+				EXTH: &Exth{
+					Records:      map[uint32][][]byte{AUTHOR: {[]byte("KF8 Author")}},
+					textEncoding: UTF8,
+				},
+			},
+			exth: &Exth{
+				Records:      map[uint32][][]byte{AUTHOR: {[]byte("EXTH Author")}},
+				textEncoding: UTF8,
+			},
+			want: []string{"KF8 Author"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mobi := &Mobi{
+				EXTH: tt.exth,
+				KF8:  tt.kf8,
+			}
+			got := mobi.Authors()
+			if len(got) == 0 && tt.want == nil {
+				return
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("Authors() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("Authors()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
 			}
 		})
 	}
