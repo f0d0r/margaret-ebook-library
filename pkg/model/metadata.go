@@ -27,5 +27,5 @@ type Resource struct {
 	Name      string
 	MediaType string
 	Size      int
-	GetData   func() ([]byte, error)
+	Data   func() ([]byte, error)
 }

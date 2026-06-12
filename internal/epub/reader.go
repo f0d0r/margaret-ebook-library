@@ -147,24 +147,24 @@ func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
 	}
 
 	return &model.Metadata{
-		Title:       r.opfReader.GetTitle(p),
-		Authors:     r.opfReader.GetAuthors(p),
-		Description: r.opfReader.GetDescription(p),
-		Languages:   r.opfReader.GetLanguages(p),
-		Cover:       r.GetCover(path, zr, p),
+		Title:       r.opfReader.Title(p),
+		Authors:     r.opfReader.Authors(p),
+		Description: r.opfReader.Description(p),
+		Languages:   r.opfReader.Languages(p),
+		Cover:       r.Cover(path, zr, p),
 		FileType:    model.EPUB,
 	}, nil
 }
 
-func (r *EpubReader) GetCover(epubPath string, zr *zip.Reader, p Package) *model.Resource {
-	coverItems := r.opfReader.GetItemsByProperty(p, "cover-image")
+func (r *EpubReader) Cover(epubPath string, zr *zip.Reader, p Package) *model.Resource {
+	coverItems := r.opfReader.ItemsByProperty(p, "cover-image")
 	var coverItem *Item
 	if len(coverItems) > 0 {
 		coverItem = &coverItems[0]
 	} else {
-		coverMeta := r.opfReader.GetMetaByName(p, "cover")
+		coverMeta := r.opfReader.MetaByName(p, "cover")
 		if coverMeta != nil {
-			coverItem = r.opfReader.GetItemById(p, coverMeta.Content)
+			coverItem = r.opfReader.ItemById(p, coverMeta.Content)
 		}
 	}
 	if coverItem == nil {
@@ -180,7 +180,7 @@ func (r *EpubReader) GetCover(epubPath string, zr *zip.Reader, p Package) *model
 		Name:      path.Base(coverFile.Name),
 		MediaType: coverItem.MediaType,
 		Size:      int(coverFile.UncompressedSize64),
-		GetData: func() ([]byte, error) {
+		Data: func() ([]byte, error) {
 			return r.lazyReadResource(epubPath, coverPath)
 		},
 	}

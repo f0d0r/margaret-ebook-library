@@ -19,7 +19,7 @@ func New() *Registry {
 	}
 }
 
-func (r *Registry) GetReader(path string) (Reader, error) {
+func (r *Registry) ReaderFor(path string) (Reader, error) {
 	for _, reader := range r.readers {
 		if reader.Supports(path) {
 			return reader, nil

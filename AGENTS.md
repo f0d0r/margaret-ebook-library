@@ -53,13 +53,10 @@ cmd/main.go          # CLI entry point
 2. Register in `internal/registry/registry.go` via `New()`
 3. Add tests in `internal/<format>/reader_test.go`
 
-## Dependencies
-- `golang.org/x/net` v0.54.0
-- `golang.org/x/text` v0.37.0
-- Standard library only otherwise
-
 ## Code Style
 - Standard Go conventions (`gofmt`, `go vet`)
 - Line length: ~100 chars (soft)
 - Errors: wrap with `fmt.Errorf("context: %w", err)`
 - Public API in `pkg/`, internal in `internal/`
+- Defer: use `defer func() { _ = f.Close() }()` instead of `defer f.Close()`
+- Getters: use `Title()` instead of `GetTitle()` field access

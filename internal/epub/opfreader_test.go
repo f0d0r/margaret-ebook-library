@@ -751,7 +751,7 @@ func TestGetMetaByName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pkg := parseOPFContent(t, tt.opfContent)
-			result := opf.GetMetaByName(pkg, tt.searchName)
+			result := opf.MetaByName(pkg, tt.searchName)
 
 			if tt.shouldFind {
 				if result == nil {
@@ -842,7 +842,7 @@ func TestGetItemById(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pkg := parseOPFContent(t, tt.opfContent)
-			result := opf.GetItemById(pkg, tt.searchID)
+			result := opf.ItemById(pkg, tt.searchID)
 
 			if tt.shouldFind {
 				if result == nil {
@@ -931,7 +931,7 @@ func TestGetItemsByProperty(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			pkg := parseOPFContent(t, tt.opfContent)
-			results := opf.GetItemsByProperty(pkg, tt.searchProperty)
+			results := opf.ItemsByProperty(pkg, tt.searchProperty)
 
 			if len(results) != tt.expectedCount {
 				t.Errorf("got %d items with property %q, want %d", len(results), tt.searchProperty, tt.expectedCount)
