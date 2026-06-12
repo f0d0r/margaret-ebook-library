@@ -280,6 +280,64 @@ func TestMobiAuthors(t *testing.T) {
 	}
 }
 
+func TestMobiDescription(t *testing.T) {
+	tests := []struct {
+		name string
+		kf8  *Mobi
+		exth *Exth
+		want string
+	}{
+		{
+			name: "No EXTH, no KF8",
+			exth: nil,
+			want: "",
+		},
+		{
+			name: "EXTH with description",
+			exth: &Exth{
+				Records:      map[uint32][][]byte{DESCRIPTION: {[]byte("A great book.")}},
+				textEncoding: UTF8,
+			},
+			want: "A great book.",
+		},
+		{
+			name: "Empty EXTH description",
+			exth: &Exth{
+				Records:      map[uint32][][]byte{},
+				textEncoding: UTF8,
+			},
+			want: "",
+		},
+		{
+			name: "KF8 description preferred over EXTH",
+			kf8: &Mobi{
+				EXTH: &Exth{
+					Records:      map[uint32][][]byte{DESCRIPTION: {[]byte("KF8 desc")}},
+					textEncoding: UTF8,
+				},
+			},
+			exth: &Exth{
+				Records:      map[uint32][][]byte{DESCRIPTION: {[]byte("EXTH desc")}},
+				textEncoding: UTF8,
+			},
+			want: "KF8 desc",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mobi := &Mobi{
+				EXTH: tt.exth,
+				KF8:  tt.kf8,
+			}
+			got := mobi.Description()
+			if got != tt.want {
+				t.Errorf("Description() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestReadMobiValidHeader(t *testing.T) {
 	// Create a minimal valid MOBI record (96+ bytes)
 	data := buildValidMobiData()

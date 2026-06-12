@@ -8,6 +8,7 @@ import (
 
 const (
 	AUTHOR           = 100
+	DESCRIPTION      = 103
 	KF8_HEADER_INDEX = 121
 	UPDATED_TITLE    = 503
 )
@@ -84,4 +85,15 @@ func (e *Exth) Authors() []string {
 		}
 	}
 	return authors
+}
+
+// Description returns the description from the EXTH record.
+// The description is decoded according to the text encoding specified in the MOBI header.
+// If the description record is not present, an empty string is returned.
+func (e *Exth) Description() string {
+	d := e.Records[DESCRIPTION]
+	if len(d) == 0 {
+		return ""
+	}
+	return decodeString(d[0], e.textEncoding)
 }

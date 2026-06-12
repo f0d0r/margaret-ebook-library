@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"faun.projects/margaret/margaret-ebook-library/internal/converter"
 	"golang.org/x/text/language"
 )
 
@@ -90,7 +89,7 @@ func (opf OpfReader) Description(p Package) string {
 	}
 	for _, d := range p.Metadata.Descriptions {
 		if d = strings.TrimSpace(d); d != "" {
-			return converter.HtmlToText(d)
+			return d
 		}
 	}
 	return ""

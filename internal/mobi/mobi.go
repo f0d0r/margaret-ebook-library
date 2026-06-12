@@ -3,6 +3,7 @@ package mobi
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"golang.org/x/text/encoding/charmap"
@@ -262,21 +263,36 @@ func (m *Mobi) Authors() []string {
 	return authors
 }
 
+// Description returns the description from the book metadata.
+// It first checks the KF8 header (if present in a dual MOBI file),
+// then falls back to the EXTH record.
+// If neither contains a description, an empty string is returned.
+func (m *Mobi) Description() string {
+	var description string
+	if m.KF8 != nil {
+		description = m.KF8.Description()
+	}
+	if description == "" && m.EXTH != nil {
+		description = m.EXTH.Description()
+	}
+	return description
+}
+
 func decodeString(data []byte, textEncoding TextEncodingType) string {
 	if data == nil {
 		return ""
 	}
 
 	if utf8.Valid(data) {
-		return string(data)
+		return strings.TrimSpace(string(data))
 	}
 
 	if textEncoding == CP1252 {
 		decodedData, err := charmap.Windows1252.NewDecoder().Bytes(data)
 		if err != nil {
-			return string(data)
+			return strings.TrimSpace(string(data))
 		}
-		return string(decodedData)
+		return strings.TrimSpace(string(decodedData))
 	}
-	return string(data)
+	return strings.TrimSpace(string(data))
 }
