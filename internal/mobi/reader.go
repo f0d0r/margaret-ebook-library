@@ -47,8 +47,9 @@ func (r *MobiReader) ReadMetadata(path string) (*model.Metadata, error) {
 	}
 
 	return &model.Metadata{
-		Title:    mobi.Title(),
-		Authors:  mobi.Authors(),
-		FileType: model.MOBI,
+		Title:       mobi.Title(),
+		Authors:     mobi.Authors(),
+		Description: mobi.Description(),
+		FileType:    model.MOBI,
 	}, nil
 }
