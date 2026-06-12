@@ -35,7 +35,7 @@ func (r *MobiReader) ReadMetadata(path string) (*model.Metadata, error) {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
-	
+
 	pdbDb, err := ReadPdbDb(f)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read PDB database: %w", err)
@@ -48,6 +48,7 @@ func (r *MobiReader) ReadMetadata(path string) (*model.Metadata, error) {
 
 	return &model.Metadata{
 		Title:    mobi.Title(),
+		Authors:  mobi.Authors(),
 		FileType: model.MOBI,
 	}, nil
 }

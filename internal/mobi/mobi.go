@@ -232,7 +232,7 @@ func (m *Mobi) Title() string {
 	if m.KF8 != nil {
 		title = m.KF8.Title()
 	}
-	
+
 	if title == "" && m.EXTH != nil {
 		title = m.EXTH.UpdatedTitle()
 	}
@@ -240,11 +240,26 @@ func (m *Mobi) Title() string {
 	if title == "" {
 		title = m.title
 	}
-	
+
 	if title == "" {
 		title = m.name
 	}
 	return title
+}
+
+// Authors returns the author names from the book metadata.
+// It first checks the KF8 header (if present in a dual MOBI file),
+// then falls back to the EXTH record.
+// If neither contains an author, an empty slice is returned.
+func (m *Mobi) Authors() []string {
+	var authors []string
+	if m.KF8 != nil {
+		authors = m.KF8.Authors()
+	}
+	if authors == nil && m.EXTH != nil {
+		authors = m.EXTH.Authors()
+	}
+	return authors
 }
 
 func decodeString(data []byte, textEncoding TextEncodingType) string {

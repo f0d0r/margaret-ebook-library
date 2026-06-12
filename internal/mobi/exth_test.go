@@ -129,12 +129,12 @@ func TestExthUpdatedTitle(t *testing.T) {
 				Indentifier:  "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
-				Records:      make(map[uint32][]byte),
+				Records:      make(map[uint32][][]byte),
 				textEncoding: tt.textEncoding,
 			}
 
 			for recType, data := range tt.records {
-				exth.Records[recType] = []byte(data)
+				exth.Records[recType] = [][]byte{[]byte(data)}
 			}
 
 			got := exth.UpdatedTitle()
@@ -152,8 +152,8 @@ func TestExthCP1252Encoding(t *testing.T) {
 		Indentifier:  "EXTH",
 		HeaderLength: 12,
 		RecordCount:  1,
-		Records: map[uint32][]byte{
-			UPDATED_TITLE: {0x54, 0x6f, 0x6d, 0x92, 0x73}, // "Tom's" with CP1252 apostrophe
+		Records: map[uint32][][]byte{
+			UPDATED_TITLE: {{0x54, 0x6f, 0x6d, 0x92, 0x73}}, // "Tom's" with CP1252 apostrophe
 		},
 		textEncoding: CP1252,
 	}
@@ -162,6 +162,62 @@ func TestExthCP1252Encoding(t *testing.T) {
 	// CP1252 0x92 should decode properly
 	if len(got) == 0 {
 		t.Errorf("UpdatedTitle() returned empty string for CP1252 encoded data")
+	}
+}
+
+func TestExthAuthors(t *testing.T) {
+	tests := []struct {
+		name         string
+		records      map[uint32]string
+		textEncoding TextEncodingType
+		want         []string
+	}{
+		{
+			name:         "No author record",
+			records:      map[uint32]string{101: "other"},
+			textEncoding: UTF8,
+			want:         nil,
+		},
+		{
+			name:         "Single author",
+			records:      map[uint32]string{AUTHOR: "J.R.R. Tolkien"},
+			textEncoding: UTF8,
+			want:         []string{"J.R.R. Tolkien"},
+		},
+		{
+			name:         "Author with special characters",
+			records:      map[uint32]string{AUTHOR: "José Saramago"},
+			textEncoding: UTF8,
+			want:         []string{"José Saramago"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exth := &Exth{
+				Indentifier:  "EXTH",
+				HeaderLength: 12,
+				RecordCount:  uint32(len(tt.records)),
+				Records:      make(map[uint32][][]byte),
+				textEncoding: tt.textEncoding,
+			}
+			for recType, data := range tt.records {
+				exth.Records[recType] = [][]byte{[]byte(data)}
+			}
+
+			got := exth.Authors()
+			if len(got) == 0 && tt.want == nil {
+				return
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("Authors() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("Authors()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
 	}
 }
 
@@ -188,7 +244,11 @@ func TestExthRecordMap(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := string(exth.Records[tt.recordType])
+		vals := exth.Records[tt.recordType]
+		var got string
+		if len(vals) > 0 {
+			got = string(vals[0])
+		}
 		if got != tt.want {
 			t.Errorf("Records[%d] = %q, want %q", tt.recordType, got, tt.want)
 		}
