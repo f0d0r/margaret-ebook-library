@@ -31,7 +31,7 @@ func ReadMetadata(path string) (model.Metadata, error) {
 	}
 
 	registry := registry.New()
-	reader, err := registry.GetReader(path)
+	reader, err := registry.ReaderFor(path)
 	if err != nil {
 		return model.Metadata{}, fmt.Errorf("failed to get reader for %s: %w", path, err)
 	}

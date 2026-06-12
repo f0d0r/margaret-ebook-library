@@ -180,7 +180,7 @@ func TestGetCover(t *testing.T) {
 			_ = closer.Close()
 
 			// Get the cover
-			cover := reader.GetCover(epubPath, zr, pkg)
+			cover := reader.Cover(epubPath, zr, pkg)
 
 			if tt.shouldFindCover {
 				if cover == nil {
@@ -199,7 +199,7 @@ func TestGetCover(t *testing.T) {
 				if cover.Size != tt.expectedSize {
 					t.Errorf("got cover size %d, want %d", cover.Size, tt.expectedSize)
 				}
-				if cover.GetData == nil {
+				if cover.Data == nil {
 					t.Errorf("expected GetData function to be set")
 				}
 			} else {
