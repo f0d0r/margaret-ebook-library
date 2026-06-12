@@ -11,6 +11,7 @@ const (
 	DESCRIPTION      = 103
 	KF8_HEADER_INDEX = 121
 	UPDATED_TITLE    = 503
+	LANGUAGE         = 524
 )
 
 type Exth struct {
@@ -97,3 +98,14 @@ func (e *Exth) Description() string {
 	}
 	return decodeString(d[0], e.textEncoding)
 }
+
+// Language returns the language code from the EXTH record.
+// If the language record is not present, an empty string is returned.
+func (e *Exth) Language() string {
+	d := e.Records[LANGUAGE]
+	if len(d) == 0 {
+		return ""
+	}
+	return decodeString(d[0], e.textEncoding)
+}
+

@@ -46,10 +46,15 @@ func (r *MobiReader) ReadMetadata(path string) (*model.Metadata, error) {
 		return nil, fmt.Errorf("failed to read MOBI file: %w", err)
 	}
 
+	var languages []string
+	if mobi.Language() != "" {
+		languages = []string{mobi.Language()}
+	}
 	return &model.Metadata{
 		Title:       mobi.Title(),
 		Authors:     mobi.Authors(),
 		Description: mobi.Description(),
+		Languages:   languages,
 		FileType:    model.MOBI,
 	}, nil
 }

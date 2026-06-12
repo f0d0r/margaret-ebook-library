@@ -204,7 +204,7 @@ func TestExthDescription(t *testing.T) {
 		},
 		{
 			name:         "Description with CP1252 encoding",
-			records:      map[uint32]string{DESCRIPTION: "It\u2019s great"}, // right single quote in CP1252
+			records:      map[uint32]string{DESCRIPTION: string([]byte{0x49, 0x74, 0x92, 0x73, 0x20, 0x67, 0x72, 0x65, 0x61, 0x74})}, // "It's great" with CP1252 right single quote (0x92)
 			textEncoding: CP1252,
 			want:         "It\u2019s great",
 		},
@@ -319,6 +319,66 @@ func TestExthRecordMap(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("Records[%d] = %q, want %q", tt.recordType, got, tt.want)
 		}
+	}
+}
+
+func TestExthLanguage(t *testing.T) {
+	tests := []struct {
+		name         string
+		records      map[uint32]string
+		textEncoding TextEncodingType
+		want         string
+	}{
+		{
+			name:         "No LANGUAGE record",
+			records:      map[uint32]string{100: "other"},
+			textEncoding: UTF8,
+			want:         "",
+		},
+		{
+			name:         "LANGUAGE record present",
+			records:      map[uint32]string{LANGUAGE: "en"},
+			textEncoding: UTF8,
+			want:         "en",
+		},
+		{
+			name:         "Language with special characters",
+			records:      map[uint32]string{LANGUAGE: "pt-BR"},
+			textEncoding: UTF8,
+			want:         "pt-BR",
+		},
+		{
+			name:         "Language with CP1252 encoding",
+			records:      map[uint32]string{LANGUAGE: "fr"},
+			textEncoding: CP1252,
+			want:         "fr",
+		},
+		{
+			name:         "Multiple records with LANGUAGE present",
+			records:      map[uint32]string{100: "author", LANGUAGE: "hu", 103: "desc"},
+			textEncoding: UTF8,
+			want:         "hu",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exth := &Exth{
+				Indentifier:  "EXTH",
+				HeaderLength: 12,
+				RecordCount:  uint32(len(tt.records)),
+				Records:      make(map[uint32][][]byte),
+				textEncoding: tt.textEncoding,
+			}
+			for recType, data := range tt.records {
+				exth.Records[recType] = [][]byte{[]byte(data)}
+			}
+
+			got := exth.Language()
+			if got != tt.want {
+				t.Errorf("Language() = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

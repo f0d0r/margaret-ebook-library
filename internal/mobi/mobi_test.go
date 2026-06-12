@@ -502,6 +502,158 @@ func TestReadMobiCompressionTypes(t *testing.T) {
 	}
 }
 
+func TestMobiLocaleCode(t *testing.T) {
+	tests := []struct {
+		name   string
+		locale uint32
+		want   string
+	}{
+		{
+			name:   "Unknown LCID",
+			locale: 0x0000,
+			want:   "",
+		},
+		{
+			name:   "Hungarian",
+			locale: 0x040E,
+			want:   "hu",
+		},
+		{
+			name:   "US English",
+			locale: 0x0409,
+			want:   "en-US",
+		},
+		{
+			name:   "UK English",
+			locale: 0x0809,
+			want:   "en-GB",
+		},
+		{
+			name:   "German Germany",
+			locale: 0x0407,
+			want:   "de-DE",
+		},
+		{
+			name:   "French Canada",
+			locale: 0x0C0C,
+			want:   "fr-CA",
+		},
+		{
+			name:   "Arabic UAE",
+			locale: 0x3801,
+			want:   "ar-AE",
+		},
+		{
+			name:   "Spanish Mexico",
+			locale: 0x080A,
+			want:   "es-MX",
+		},
+		{
+			name:   "Spanish Spain (International Sort)",
+			locale: 0x0C0A,
+			want:   "es-ES",
+		},
+		{
+			name:   "Chinese Simplified",
+			locale: 0x0004,
+			want:   "zh-Hans",
+		},
+		{
+			name:   "Chinese Traditional",
+			locale: 0x7C04,
+			want:   "zh-Hant",
+		},
+		{
+			name:   "Serbian Cyrillic Serbia",
+			locale: 0x0C1A,
+			want:   "sr-Cyrl-RS",
+		},
+		{
+			name:   "Upper bits masked out (0xZZZZ0409)",
+			locale: 0xDEAD0409,
+			want:   "en-US",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mobi := &Mobi{Locale: tt.locale}
+			got := mobi.localeCode()
+			if got != tt.want {
+				t.Errorf("localeCode() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMobiLanguage(t *testing.T) {
+	tests := []struct {
+		name   string
+		kf8    *Mobi
+		exth   *Exth
+		locale uint32
+		want   string
+	}{
+		{
+			name:   "Falls back to localeCode when no KF8 or EXTH",
+			locale: 0x0809, // UK English
+			want:   "en-GB",
+		},
+		{
+			name:   "Unknown locale returns empty",
+			locale: 0x0000,
+			want:   "",
+		},
+		{
+			name: "EXTH language overrides localeCode",
+			exth: &Exth{
+				Records:      map[uint32][][]byte{LANGUAGE: {[]byte("fr")}},
+				textEncoding: UTF8,
+			},
+			locale: 0x0409, // en-US
+			want:   "fr",
+		},
+		{
+			name: "EXTH empty language does not override localeCode",
+			exth: &Exth{
+				Records:      map[uint32][][]byte{},
+				textEncoding: UTF8,
+			},
+			locale: 0x040E, // hu
+			want:   "hu",
+		},
+		{
+			name: "KF8 language overrides EXTH and localeCode",
+			kf8: &Mobi{
+				EXTH: &Exth{
+					Records:      map[uint32][][]byte{LANGUAGE: {[]byte("de")}},
+					textEncoding: UTF8,
+				},
+			},
+			exth: &Exth{
+				Records:      map[uint32][][]byte{LANGUAGE: {[]byte("fr")}},
+				textEncoding: UTF8,
+			},
+			locale: 0x0409, // en-US
+			want:   "de",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mobi := &Mobi{
+				KF8:    tt.kf8,
+				EXTH:   tt.exth,
+				Locale: tt.locale,
+			}
+			got := mobi.Language()
+			if got != tt.want {
+				t.Errorf("Language() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // Helper functions
 
 func createMockPdbRecord(data []byte) PdbRecord {
