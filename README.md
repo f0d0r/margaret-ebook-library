@@ -1,5 +1,7 @@
 # Margaret Ebook Library
 
+[![Build Status](https://git.home/margaret/margaret-ebook-library/actions/workflows/build.yml/badge.svg)](https://git.home/margaret/margaret-ebook-library/actions)
+
 This project is a Go library for handling ebook files. It currently supports reading metadata from EPUB and MOBI formats.
 
 ## Folder Structure

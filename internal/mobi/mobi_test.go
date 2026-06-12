@@ -1,0 +1,417 @@
+package mobi
+
+import (
+	"encoding/binary"
+	"testing"
+)
+
+func TestDecodeString(t *testing.T) {
+	tests := []struct {
+		name         string
+		data         []byte
+		textEncoding TextEncodingType
+		want         string
+	}{
+		{
+			name:         "Nil data",
+			data:         nil,
+			textEncoding: UTF8,
+			want:         "",
+		},
+		{
+			name:         "Empty data",
+			data:         []byte{},
+			textEncoding: UTF8,
+			want:         "",
+		},
+		{
+			name:         "Valid UTF-8",
+			data:         []byte("Hello World"),
+			textEncoding: UTF8,
+			want:         "Hello World",
+		},
+		{
+			name:         "UTF-8 with special chars",
+			data:         []byte("Café & Crème"),
+			textEncoding: UTF8,
+			want:         "Café & Crème",
+		},
+		{
+			name:         "Valid UTF-8 with emoji",
+			data:         []byte("Book 📚"),
+			textEncoding: UTF8,
+			want:         "Book 📚",
+		},
+		{
+			name:         "CP1252 encoding (will attempt decode)",
+			data:         []byte("Hello"),
+			textEncoding: CP1252,
+			want:         "Hello", // ASCII is valid UTF-8, so returns as-is
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := decodeString(tt.data, tt.textEncoding)
+			if got != tt.want {
+				t.Errorf("decodeString() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMobiHasEXTH(t *testing.T) {
+	tests := []struct {
+		name     string
+		exthFlag uint32
+		want     bool
+	}{
+		{
+			name:     "EXTH flag set (0x40)",
+			exthFlag: 0x40,
+			want:     true,
+		},
+		{
+			name:     "EXTH flag set with other bits",
+			exthFlag: 0x40 | 0x80,
+			want:     true,
+		},
+		{
+			name:     "EXTH flag not set",
+			exthFlag: 0x00,
+			want:     false,
+		},
+		{
+			name:     "Different bit set, not EXTH",
+			exthFlag: 0x80,
+			want:     false,
+		},
+		{
+			name:     "All bits set",
+			exthFlag: 0xFFFFFFFF,
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mobi := &Mobi{EXTHFlags: tt.exthFlag}
+			got := mobi.HasEXTH()
+			if got != tt.want {
+				t.Errorf("HasEXTH() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMobiHasDRM(t *testing.T) {
+	tests := []struct {
+		name      string
+		drmOffset uint32
+		want      bool
+	}{
+		{
+			name:      "DRM protected (offset != 0xFFFFFFFF)",
+			drmOffset: 1000,
+			want:      true,
+		},
+		{
+			name:      "DRM protected (offset = 0)",
+			drmOffset: 0,
+			want:      true,
+		},
+		{
+			name:      "No DRM (offset = 0xFFFFFFFF)",
+			drmOffset: 0xFFFFFFFF,
+			want:      false,
+		},
+		{
+			name:      "DRM protected (high offset)",
+			drmOffset: 0xFFFFFFFE,
+			want:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mobi := &Mobi{DRMOffset: tt.drmOffset}
+			got := mobi.HasDRM()
+			if got != tt.want {
+				t.Errorf("HasDRM() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMobiTitle(t *testing.T) {
+	tests := []struct {
+		name        string
+		mobiTitle   string
+		exth        *Exth
+		exthTitle   string
+		want        string
+	}{
+		{
+			name:      "Only MOBI header title",
+			mobiTitle: "Book Title",
+			exth:      nil,
+			want:      "Book Title",
+		},
+		{
+			name:      "MOBI header title with nil EXTH",
+			mobiTitle: "Main Title",
+			exth:      nil,
+			want:      "Main Title",
+		},
+		{
+			name:      "Prefer EXTH updated title over header",
+			mobiTitle: "Header Title",
+			exth: &Exth{
+				Records:      map[uint32][]byte{UPDATED_TITLE: []byte("Updated Title")},
+				textEncoding: UTF8,
+			},
+			want: "Updated Title",
+		},
+		{
+			name:      "Fall back to header when EXTH title empty",
+			mobiTitle: "Fallback Title",
+			exth: &Exth{
+				Records:      map[uint32][]byte{},
+				textEncoding: UTF8,
+			},
+			want: "Fallback Title",
+		},
+		{
+			name:      "EXTH title takes precedence",
+			mobiTitle: "Original",
+			exth: &Exth{
+				Records:      map[uint32][]byte{UPDATED_TITLE: []byte("New Title")},
+				textEncoding: UTF8,
+			},
+			want: "New Title",
+		},
+		{
+			name:      "Empty both titles",
+			mobiTitle: "",
+			exth: &Exth{
+				Records:      map[uint32][]byte{},
+				textEncoding: UTF8,
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mobi := &Mobi{
+				title: tt.mobiTitle,
+				EXTH:  tt.exth,
+			}
+			got := mobi.Title()
+			if got != tt.want {
+				t.Errorf("Title() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReadMobiValidHeader(t *testing.T) {
+	// Create a minimal valid MOBI record (96+ bytes)
+	data := buildValidMobiData()
+
+	pdbDb := &PdbDb{
+		PdbRecords: []PdbRecord{
+			createMockPdbRecord(data),
+		},
+	}
+
+	mobi, err := ReadMobi(pdbDb)
+	if err != nil {
+		t.Fatalf("ReadMobi() error: %v", err)
+	}
+
+	if mobi.Identifier != "MOBI" {
+		t.Errorf("Identifier = %q, want %q", mobi.Identifier, "MOBI")
+	}
+	if mobi.TextEncoding != UTF8 {
+		t.Errorf("TextEncoding = %d, want %d", mobi.TextEncoding, UTF8)
+	}
+	if mobi.Type != MobiTypeBook {
+		t.Errorf("Type = %d, want %d", mobi.Type, MobiTypeBook)
+	}
+}
+
+func TestReadMobiTooShort(t *testing.T) {
+	pdbDb := &PdbDb{
+		PdbRecords: []PdbRecord{
+			createMockPdbRecord(make([]byte, 50)), // Too short
+		},
+	}
+
+	_, err := ReadMobi(pdbDb)
+	if err == nil {
+		t.Errorf("ReadMobi() expected error for short record, got nil")
+	}
+}
+
+func TestReadMobiExtendedHeader(t *testing.T) {
+	// Create extended MOBI header (>= 184 bytes)
+	data := make([]byte, 184)
+	copy(data[16:20], "MOBI")
+	binary.BigEndian.PutUint32(data[20:24], 232) // HeaderLength
+	binary.BigEndian.PutUint16(data[0:2], uint16(CompressionNone))
+	binary.BigEndian.PutUint32(data[4:8], 1000)  // TextLength
+	binary.BigEndian.PutUint16(data[8:10], 1)    // TextRecordCount
+	binary.BigEndian.PutUint16(data[10:12], 4096)
+	binary.BigEndian.PutUint32(data[28:32], uint32(UTF8))
+	binary.BigEndian.PutUint32(data[24:28], uint32(MobiTypeBook))
+
+	// Extended header fields
+	binary.BigEndian.PutUint32(data[96:100], 1033)    // InputLanguage (US English)
+	// Don't set EXTHFlags (0x40) to avoid EXTH parsing with insufficient data
+
+	pdbDb := &PdbDb{
+		PdbRecords: []PdbRecord{
+			createMockPdbRecord(data),
+		},
+	}
+
+	mobi, err := ReadMobi(pdbDb)
+	if err != nil {
+		t.Fatalf("ReadMobi() error: %v", err)
+	}
+
+	if mobi.InputLanguage != 1033 {
+		t.Errorf("InputLanguage = %d, want %d", mobi.InputLanguage, 1033)
+	}
+}
+
+func TestReadMobiFullHeader(t *testing.T) {
+	// Create full MOBI header (>= 248 bytes)
+	data := make([]byte, 250)
+	copy(data[16:20], "MOBI")
+	binary.BigEndian.PutUint32(data[20:24], 248)  // HeaderLength
+	binary.BigEndian.PutUint16(data[0:2], uint16(CompressionNone))
+	binary.BigEndian.PutUint32(data[4:8], 5000)  // TextLength
+	binary.BigEndian.PutUint16(data[8:10], 1)
+	binary.BigEndian.PutUint16(data[10:12], 4096)
+	binary.BigEndian.PutUint32(data[28:32], uint32(UTF8))
+	binary.BigEndian.PutUint32(data[24:28], uint32(MobiTypeKF8))
+
+	// Extended header fields
+	binary.BigEndian.PutUint32(data[192:196], 5000)     // FirstTextRecord
+	binary.BigEndian.PutUint32(data[200:204], 10)       // FCISRecordOffset
+	binary.BigEndian.PutUint32(data[244:248], 5000)     // IndxRecordOffset
+
+	pdbDb := &PdbDb{
+		PdbRecords: []PdbRecord{
+			createMockPdbRecord(data),
+		},
+	}
+
+	mobi, err := ReadMobi(pdbDb)
+	if err != nil {
+		t.Fatalf("ReadMobi() error: %v", err)
+	}
+
+	if mobi.IndxRecordOffset != 5000 {
+		t.Errorf("IndxRecordOffset = %d, want %d", mobi.IndxRecordOffset, 5000)
+	}
+	if mobi.Type != MobiTypeKF8 {
+		t.Errorf("Type = %d, want %d", mobi.Type, MobiTypeKF8)
+	}
+}
+
+func TestReadMobiDRMDefaults(t *testing.T) {
+	// Create minimal MOBI record
+	data := buildValidMobiData()
+
+	pdbDb := &PdbDb{
+		PdbRecords: []PdbRecord{
+			createMockPdbRecord(data),
+		},
+	}
+
+	mobi, err := ReadMobi(pdbDb)
+	if err != nil {
+		t.Fatalf("ReadMobi() error: %v", err)
+	}
+
+	// Check DRM defaults (0xFFFFFFFF means no DRM)
+	if mobi.DRMOffset != 0xFFFFFFFF {
+		t.Errorf("DRMOffset default = 0x%x, want 0x%x", mobi.DRMOffset, 0xFFFFFFFF)
+	}
+	if mobi.HasDRM() {
+		t.Errorf("HasDRM() = true, want false for default")
+	}
+}
+
+func TestReadMobiCompressionTypes(t *testing.T) {
+	tests := []struct {
+		name        string
+		compression CompressionType
+	}{
+		{"CompressionNone", CompressionNone},
+		{"CompressionPalmDOC", CompressionPalmDOC},
+		{"CompressionHUFF", CompressionHUFF},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := buildValidMobiData()
+			binary.BigEndian.PutUint16(data[0:2], uint16(tt.compression))
+
+			pdbDb := &PdbDb{
+				PdbRecords: []PdbRecord{
+					createMockPdbRecord(data),
+				},
+			}
+
+			mobi, err := ReadMobi(pdbDb)
+			if err != nil {
+				t.Fatalf("ReadMobi() error: %v", err)
+			}
+
+			if mobi.Compression != tt.compression {
+				t.Errorf("Compression = %d, want %d", mobi.Compression, tt.compression)
+			}
+		})
+	}
+}
+
+// Helper functions
+
+func createMockPdbRecord(data []byte) PdbRecord {
+	dataCopy := make([]byte, len(data))
+	copy(dataCopy, data)
+
+	return PdbRecord{
+		Offset: 0,
+		Length: uint32(len(data)),
+		Data: func() ([]byte, error) {
+			return dataCopy, nil
+		},
+	}
+}
+
+func buildValidMobiData() []byte {
+	data := make([]byte, 100)
+
+	// Required fields (bytes 0-95)
+	binary.BigEndian.PutUint16(data[0:2], uint16(CompressionNone))
+	binary.BigEndian.PutUint32(data[4:8], 1000)  // TextLength
+	binary.BigEndian.PutUint16(data[8:10], 1)    // TextRecordCount
+	binary.BigEndian.PutUint16(data[10:12], 4096) // MaxTextRecordSize
+	binary.BigEndian.PutUint16(data[12:14], uint16(EncryptionNone))
+	copy(data[16:20], "MOBI")                     // Identifier
+	binary.BigEndian.PutUint32(data[20:24], 232) // HeaderLength
+	binary.BigEndian.PutUint32(data[24:28], uint32(MobiTypeBook))
+	binary.BigEndian.PutUint32(data[28:32], uint32(UTF8)) // TextEncoding
+	binary.BigEndian.PutUint32(data[36:40], 6)   // MobiVersion
+	binary.BigEndian.PutUint32(data[80:84], 100) // FirstNonTextRecord
+	binary.BigEndian.PutUint32(data[84:88], 0)   // FullNameOffset
+	binary.BigEndian.PutUint32(data[88:92], 0)   // FullNameLength
+	binary.BigEndian.PutUint32(data[92:96], 1033) // Locale (US English)
+
+	return data
+}

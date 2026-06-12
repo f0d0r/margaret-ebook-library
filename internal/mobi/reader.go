@@ -2,6 +2,7 @@ package mobi
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"faun.projects/margaret/margaret-ebook-library/pkg/model"
@@ -19,8 +20,8 @@ func (r *MobiReader) Supports(path string) bool {
 	// The "BOOKMOBI" identifier starts at byte 60 and ends at byte 67.
 	// Therefore reading exactly 68 bytes is sufficient.
 	buf := make([]byte, 68)
-	n, err := f.ReadAt(buf, 0)
-	if err != nil && n < 68 {
+	_, err = io.ReadAtLeast(f, buf, 68)
+	if err != nil {
 		return false
 	}
 
@@ -29,10 +30,24 @@ func (r *MobiReader) Supports(path string) bool {
 }
 
 func (r *MobiReader) ReadMetadata(path string) (*model.Metadata, error) {
-	fmt.Printf("[mobi-reader] reading metadata from: %s\n", path)
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	
+	pdbDb, err := ReadPdbDb(f)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read PDB database: %w", err)
+	}
+
+	mobi, err := ReadMobi(pdbDb)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read MOBI file: %w", err)
+	}
 
 	return &model.Metadata{
-		Title:    "Dummy MOBI Book",
+		Title:    mobi.Title(),
 		FileType: model.MOBI,
 	}, nil
 }
