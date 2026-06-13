@@ -11,6 +11,7 @@ import (
 
 const PDB_HEADER_SIZE = 78
 const PALM_EPOCH_OFFSET = 2082844800
+const MAX_RECORD_SIZE = 100 * 1024 * 1024 // 100 MB safety limit for any single record
 
 const (
 	AttrReadOnly     uint16 = 0x0002
@@ -26,7 +27,7 @@ const (
 	RecordAttrBusy    uint8 = 0x20
 	RecordAttrDirty   uint8 = 0x40
 	RecordAttrDelete  uint8 = 0x80
-	RecordAttrCatMask uint8 = 0x0F // Az alsó 4 bit maszkja
+	RecordAttrCatMask uint8 = 0x0F // The lower 4 bits mask for the category
 )
 
 type PdbAttributes struct {
@@ -54,6 +55,7 @@ type PdbRecord struct {
 	Attributes RecordAttributes
 	UniqueId   uint32
 	Data    func() ([]byte, error)
+	DataSlice func(len uint32) ([]byte, error)
 }
 
 type PdbDb struct {
@@ -171,8 +173,7 @@ func parseRecordAttributes(raw uint8) RecordAttributes {
 func parseRecordInfo(raw []byte) (*PdbRecord, error) {
 	offset := binary.BigEndian.Uint32(raw[0:4])
 	attributes := parseRecordAttributes(raw[4])
-	idBuf := []byte{0, raw[5], raw[6], raw[7]}
-	uniqueId := binary.BigEndian.Uint32(idBuf)
+	uniqueId := (uint32(raw[5]) << 16) | (uint32(raw[6]) << 8) | uint32(raw[7])
 
 	return &PdbRecord{
 		Offset:     offset,
@@ -198,6 +199,9 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, f *os.File) ([]Pdb
 		}
 		if i > 0 {
 			prevRecord := &pdbRecords[i-1]
+			if record.Offset < prevRecord.Offset {
+				return nil, fmt.Errorf("record %d offset %d is before record %d offset %d", i, record.Offset, i-1, prevRecord.Offset)
+			}
 			prevRecord.Length = record.Offset - prevRecord.Offset
 			offset := prevRecord.Offset
 			length := prevRecord.Length
@@ -205,21 +209,37 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, f *os.File) ([]Pdb
 			prevRecord.Data = func() ([]byte, error) {
 				return readRecordData(f, offset, length)
 			}
+			prevRecord.DataSlice = func(len uint32) ([]byte, error) {
+				return readRecordData(f, offset, len)
+			}
 		}
 		pdbRecords[i] = *record
 	}
 
 	if numberOfRecords > 0 {
 		lastRecord := &pdbRecords[numberOfRecords-1]
-		lastRecord.Length = uint32(fileSize) - lastRecord.Offset
+		if lastRecord.Offset >= fileSize {
+			lastRecord.Length = 0
+		} else {
+			lastRecord.Length = uint32(fileSize) - lastRecord.Offset
+		}
+		lastOffset := lastRecord.Offset
+		lastLength := lastRecord.Length
 		lastRecord.Data = func() ([]byte, error) {
-			return readRecordData(f, lastRecord.Offset, lastRecord.Length)
+			return readRecordData(f, lastOffset, lastLength)
+		}
+		lastRecord.DataSlice = func(len uint32) ([]byte, error) {
+			return readRecordData(f, lastOffset, len)
 		}
 	}
 	return pdbRecords, nil
 }
 
 func readRecordData(f *os.File, offset uint32, length uint32) ([]byte, error) {
+	if length > MAX_RECORD_SIZE {
+		return nil, fmt.Errorf("record length %d exceeds maximum %d", length, MAX_RECORD_SIZE)
+	}
+
 	currentMetaOffset, err := f.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get current position: %w", err)

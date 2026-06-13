@@ -654,6 +654,126 @@ func TestMobiLanguage(t *testing.T) {
 	}
 }
 
+func TestMobiCoverRecordIdx(t *testing.T) {
+	uint32be := func(v uint32) []byte {
+		b := make([]byte, 4)
+		binary.BigEndian.PutUint32(b, v)
+		return b
+	}
+
+	tests := []struct {
+		name string
+		mobi *Mobi
+		want uint32
+	}{
+		{
+			name: "no EXTH returns 0",
+			mobi: &Mobi{},
+			want: 0,
+		},
+		{
+			name: "EXTH but FirstImageRecord=0 returns 0",
+			mobi: &Mobi{
+				EXTH:             &Exth{Records: map[uint32][][]byte{}},
+				FirstImageRecord: 0,
+				recordCount:      10,
+			},
+			want: 0,
+		},
+		{
+			name: "EXTH but FirstImageRecord=0xFFFF returns 0",
+			mobi: &Mobi{
+				EXTH:             &Exth{Records: map[uint32][][]byte{}},
+				FirstImageRecord: 0xFFFF,
+				recordCount:      10,
+			},
+			want: 0,
+		},
+		{
+			name: "EXTH but FirstImageRecord=0xFFFFFFFF returns 0",
+			mobi: &Mobi{
+				EXTH:             &Exth{Records: map[uint32][][]byte{}},
+				FirstImageRecord: 0xFFFFFFFF,
+				recordCount:      10,
+			},
+			want: 0,
+		},
+		{
+			name: "valid EXTH + FirstImageRecord + CoverOffset",
+			mobi: &Mobi{
+				EXTH: &Exth{
+					Records: map[uint32][][]byte{
+						COVER_OFFSET: {uint32be(3)},
+					},
+				},
+				FirstImageRecord: 2,
+				recordCount:      10,
+			},
+			want: 5,
+		},
+		{
+			name: "absIdx >= recordCount returns 0",
+			mobi: &Mobi{
+				EXTH: &Exth{
+					Records: map[uint32][][]byte{
+						COVER_OFFSET: {uint32be(10)},
+					},
+				},
+				FirstImageRecord: 8,
+				recordCount:      10,
+			},
+			want: 0,
+		},
+		{
+			name: "KF8 path returns combined index",
+			mobi: &Mobi{
+				EXTH: &Exth{
+					Records: map[uint32][][]byte{
+						KF8_HEADER_INDEX: {uint32be(5)},
+					},
+				},
+				KF8: &Mobi{
+					EXTH: &Exth{
+						Records: map[uint32][][]byte{
+							COVER_OFFSET: {uint32be(2)},
+						},
+					},
+					FirstImageRecord: 1,
+					recordCount:      10,
+				},
+				recordCount: 20,
+			},
+			want: 8,
+		},
+		{
+			name: "KF8 path returns 0 falls through to EXTH path",
+			mobi: &Mobi{
+				EXTH: &Exth{
+					Records: map[uint32][][]byte{
+						KF8_HEADER_INDEX: {uint32be(5)},
+						COVER_OFFSET:     {uint32be(3)},
+					},
+				},
+				KF8: &Mobi{
+					recordCount: 0,
+				},
+				FirstImageRecord: 2,
+				recordCount:      20,
+			},
+			want: 5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.mobi.CoverRecordIdx()
+			if got != tt.want {
+				t.Errorf("CoverRecordIdx() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 // Helper functions
 
 func createMockPdbRecord(data []byte) PdbRecord {

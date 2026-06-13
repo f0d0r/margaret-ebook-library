@@ -60,3 +60,4 @@ cmd/main.go          # CLI entry point
 - Public API in `pkg/`, internal in `internal/`
 - Defer: use `defer func() { _ = f.Close() }()` instead of `defer f.Close()`
 - Getters: use `Title()` instead of `GetTitle()` field access
+- Constants: uppercase names, snake_case values

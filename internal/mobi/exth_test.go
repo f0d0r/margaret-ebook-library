@@ -74,8 +74,8 @@ func TestReadExth(t *testing.T) {
 				t.Fatalf("ReadExth() unexpected error: %v", err)
 			}
 
-			if got.Indentifier != tt.wantIdent {
-				t.Errorf("Identifier = %q, want %q", got.Indentifier, tt.wantIdent)
+			if got.Identifier != tt.wantIdent {
+				t.Errorf("Identifier = %q, want %q", got.Identifier, tt.wantIdent)
 			}
 			if got.RecordCount != tt.wantRecCount {
 				t.Errorf("RecordCount = %d, want %d", got.RecordCount, tt.wantRecCount)
@@ -126,7 +126,7 @@ func TestExthUpdatedTitle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Indentifier:  "EXTH",
+				Identifier:  "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -149,7 +149,7 @@ func TestExthCP1252Encoding(t *testing.T) {
 	// Test CP1252 encoding with special character
 	// 0x92 in CP1252 is the right single quotation mark (')
 	exth := &Exth{
-		Indentifier:  "EXTH",
+		Identifier:  "EXTH",
 		HeaderLength: 12,
 		RecordCount:  1,
 		Records: map[uint32][][]byte{
@@ -213,7 +213,7 @@ func TestExthDescription(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Indentifier:  "EXTH",
+				Identifier:  "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -262,7 +262,7 @@ func TestExthAuthors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Indentifier:  "EXTH",
+				Identifier:  "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -364,7 +364,7 @@ func TestExthLanguage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Indentifier:  "EXTH",
+				Identifier:  "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -377,6 +377,116 @@ func TestExthLanguage(t *testing.T) {
 			got := exth.Language()
 			if got != tt.want {
 				t.Errorf("Language() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExthCoverOffset(t *testing.T) {
+	tests := []struct {
+		name    string
+		records map[uint32][][]byte
+		want    uint32
+	}{
+		{
+			name:    "No COVER_OFFSET record",
+			records: map[uint32][][]byte{100: {[]byte("other")}},
+			want:    0,
+		},
+		{
+			name:    "Record with less than 4 bytes",
+			records: map[uint32][][]byte{COVER_OFFSET: {{0x00, 0x01}}},
+			want:    0,
+		},
+		{
+			name:    "Valid COVER_OFFSET",
+			records: map[uint32][][]byte{COVER_OFFSET: {{0x00, 0x00, 0x00, 0x05}}},
+			want:    5,
+		},
+		{
+			name:    "Large offset value",
+			records: map[uint32][][]byte{COVER_OFFSET: {{0x00, 0x01, 0x00, 0x00}}},
+			want:    65536,
+		},
+		{
+			name:    "Multiple bytes beyond 4 are ignored",
+			records: map[uint32][][]byte{COVER_OFFSET: {{0x00, 0x00, 0x00, 0x0A, 0xFF, 0xFF}}},
+			want:    10,
+		},
+		{
+			name:    "Empty data slice",
+			records: map[uint32][][]byte{COVER_OFFSET: {}},
+			want:    0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exth := &Exth{
+				Identifier:  "EXTH",
+				HeaderLength: 12,
+				RecordCount:  uint32(len(tt.records)),
+				Records:      tt.records,
+				textEncoding: UTF8,
+			}
+			got := exth.CoverOffset()
+			if got != tt.want {
+				t.Errorf("CoverOffset() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExthThumbnailOffset(t *testing.T) {
+	tests := []struct {
+		name    string
+		records map[uint32][][]byte
+		want    uint32
+	}{
+		{
+			name:    "No THUMBNAIL_OFFSET record",
+			records: map[uint32][][]byte{100: {[]byte("other")}},
+			want:    0,
+		},
+		{
+			name:    "Record with less than 4 bytes",
+			records: map[uint32][][]byte{THUMBNAIL_OFFSET: {{0x01}}},
+			want:    0,
+		},
+		{
+			name:    "Valid THUMBNAIL_OFFSET",
+			records: map[uint32][][]byte{THUMBNAIL_OFFSET: {{0x00, 0x00, 0x00, 0x03}}},
+			want:    3,
+		},
+		{
+			name:    "Large offset value",
+			records: map[uint32][][]byte{THUMBNAIL_OFFSET: {{0xFF, 0x00, 0x00, 0x00}}},
+			want:    4278190080,
+		},
+		{
+			name:    "Extra bytes beyond 4 are ignored",
+			records: map[uint32][][]byte{THUMBNAIL_OFFSET: {{0x00, 0x00, 0x00, 0x07, 0xBB}}},
+			want:    7,
+		},
+		{
+			name:    "Empty data slice",
+			records: map[uint32][][]byte{THUMBNAIL_OFFSET: {}},
+			want:    0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exth := &Exth{
+				Identifier:  "EXTH",
+				HeaderLength: 12,
+				RecordCount:  uint32(len(tt.records)),
+				Records:      tt.records,
+				textEncoding: UTF8,
+			}
+			got := exth.ThumbnailOffset()
+			if got != tt.want {
+				t.Errorf("ThumbnailOffset() = %d, want %d", got, tt.want)
 			}
 		})
 	}

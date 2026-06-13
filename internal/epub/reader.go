@@ -151,12 +151,12 @@ func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
 		Authors:     r.opfReader.Authors(p),
 		Description: r.opfReader.Description(p),
 		Languages:   r.opfReader.Languages(p),
-		Cover:       r.Cover(path, zr, p),
+		Cover:       r.cover(path, zr, p),
 		FileType:    model.EPUB,
 	}, nil
 }
 
-func (r *EpubReader) Cover(epubPath string, zr *zip.Reader, p Package) *model.Resource {
+func (r *EpubReader) cover(epubPath string, zr *zip.Reader, p Package) *model.Resource {
 	coverItems := r.opfReader.ItemsByProperty(p, "cover-image")
 	var coverItem *Item
 	if len(coverItems) > 0 {
@@ -181,12 +181,12 @@ func (r *EpubReader) Cover(epubPath string, zr *zip.Reader, p Package) *model.Re
 		MediaType: coverItem.MediaType,
 		Size:      int(coverFile.UncompressedSize64),
 		Data: func() ([]byte, error) {
-			return r.lazyReadResource(epubPath, coverPath)
+			return r.loadRecord(epubPath, coverPath)
 		},
 	}
 }
 
-func (r *EpubReader) lazyReadResource(filePath string, resourcePath string) ([]byte, error) {
+func (r *EpubReader) loadRecord(filePath string, resourcePath string) ([]byte, error) {
 	zr, closer, err := r.openZipReader(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open epub: %w", err)

@@ -2,20 +2,25 @@ package mobi
 
 import (
 	"encoding/binary"
+	"fmt"
 
 	"faun.projects/margaret/margaret-ebook-library/pkg/errs"
 )
+
+const MAX_EXTH_RECORDS = 256
 
 const (
 	AUTHOR           = 100
 	DESCRIPTION      = 103
 	KF8_HEADER_INDEX = 121
+	COVER_OFFSET     = 201
+	THUMBNAIL_OFFSET = 202
 	UPDATED_TITLE    = 503
 	LANGUAGE         = 524
 )
 
 type Exth struct {
-	Indentifier  string              // Identifier for the EXTH record: "EXTH"
+	Identifier   string              // Identifier for the EXTH record: "EXTH"
 	HeaderLength uint32              // the length of the EXTH header, including the previous 4 bytes - but not including the final padding.
 	RecordCount  uint32              // the number of records in the EXTH block
 	Records      map[uint32][][]byte // the records in the EXTH block, indexed by their type, the same type can have multiple values
@@ -28,7 +33,7 @@ func ReadExth(offset uint32, data []byte, textEncoding TextEncodingType) (*Exth,
 	}
 
 	exth := &Exth{
-		Indentifier:  string(data[offset : offset+4]),
+		Identifier:   string(data[offset : offset+4]),
 		HeaderLength: binary.BigEndian.Uint32(data[offset+4 : offset+8]),
 		RecordCount:  binary.BigEndian.Uint32(data[offset+8 : offset+12]),
 		textEncoding: textEncoding,
@@ -36,11 +41,21 @@ func ReadExth(offset uint32, data []byte, textEncoding TextEncodingType) (*Exth,
 
 	exth.Records = make(map[uint32][][]byte)
 	offset += 12
-	for i := 0; i < int(exth.RecordCount); i++ {
+	for i := 0; i < int(exth.RecordCount) && i < MAX_EXTH_RECORDS; i++ {
+		if offset+8 > uint32(len(data)) {
+			return nil, fmt.Errorf("EXTH record %d header exceeds data bounds", i)
+		}
 		recordType := binary.BigEndian.Uint32(data[offset : offset+4])
 		recordLength := binary.BigEndian.Uint32(data[offset+4 : offset+8])
-		recordData := data[offset+8 : offset+recordLength]
 
+		if recordLength < 8 {
+			return nil, fmt.Errorf("EXTH record %d length %d is too small", i, recordLength)
+		}
+		if offset+recordLength > uint32(len(data)) {
+			return nil, fmt.Errorf("EXTH record %d length %d exceeds data bounds", i, recordLength)
+		}
+
+		recordData := data[offset+8 : offset+recordLength]
 		exth.Records[recordType] = append(exth.Records[recordType], recordData)
 		offset += recordLength
 	}
@@ -109,3 +124,24 @@ func (e *Exth) Language() string {
 	return decodeString(d[0], e.textEncoding)
 }
 
+// CoverOffset returns the cover image record offset from the EXTH record.
+// The offset is stored in the EXTH record type 201 (COVER_OFFSET).
+// If the record is not present or contains less than 4 bytes, 0 is returned.
+func (e *Exth) CoverOffset() uint32 {
+	d := e.Records[COVER_OFFSET]
+	if len(d) == 0 || len(d[0]) < 4 {
+		return 0
+	}
+	return binary.BigEndian.Uint32(d[0])
+}
+
+// ThumbnailOffset returns the thumbnail image record offset from the EXTH record.
+// The offset is stored in the EXTH record type 202 (THUMBNAIL_OFFSET).
+// If the record is not present or contains less than 4 bytes, 0 is returned.
+func (e *Exth) ThumbnailOffset() uint32 {
+	d := e.Records[THUMBNAIL_OFFSET]
+	if len(d) == 0 || len(d[0]) < 4 {
+		return 0
+	}
+	return binary.BigEndian.Uint32(d[0])
+}
