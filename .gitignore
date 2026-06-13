@@ -28,3 +28,4 @@ go.work.sum
 
 .aider*
 .vscode*
+.zed/
