@@ -2,9 +2,12 @@ package mobi
 
 import (
 	"encoding/binary"
+	"fmt"
 
 	"faun.projects/margaret/margaret-ebook-library/pkg/errs"
 )
+
+const MAX_EXTH_RECORDS = 256
 
 const (
 	AUTHOR           = 100
@@ -17,7 +20,7 @@ const (
 )
 
 type Exth struct {
-	Indentifier  string              // Identifier for the EXTH record: "EXTH"
+	Identifier   string              // Identifier for the EXTH record: "EXTH"
 	HeaderLength uint32              // the length of the EXTH header, including the previous 4 bytes - but not including the final padding.
 	RecordCount  uint32              // the number of records in the EXTH block
 	Records      map[uint32][][]byte // the records in the EXTH block, indexed by their type, the same type can have multiple values
@@ -30,7 +33,7 @@ func ReadExth(offset uint32, data []byte, textEncoding TextEncodingType) (*Exth,
 	}
 
 	exth := &Exth{
-		Indentifier:  string(data[offset : offset+4]),
+		Identifier:   string(data[offset : offset+4]),
 		HeaderLength: binary.BigEndian.Uint32(data[offset+4 : offset+8]),
 		RecordCount:  binary.BigEndian.Uint32(data[offset+8 : offset+12]),
 		textEncoding: textEncoding,
@@ -38,11 +41,21 @@ func ReadExth(offset uint32, data []byte, textEncoding TextEncodingType) (*Exth,
 
 	exth.Records = make(map[uint32][][]byte)
 	offset += 12
-	for i := 0; i < int(exth.RecordCount); i++ {
+	for i := 0; i < int(exth.RecordCount) && i < MAX_EXTH_RECORDS; i++ {
+		if offset+8 > uint32(len(data)) {
+			return nil, fmt.Errorf("EXTH record %d header exceeds data bounds", i)
+		}
 		recordType := binary.BigEndian.Uint32(data[offset : offset+4])
 		recordLength := binary.BigEndian.Uint32(data[offset+4 : offset+8])
-		recordData := data[offset+8 : offset+recordLength]
 
+		if recordLength < 8 {
+			return nil, fmt.Errorf("EXTH record %d length %d is too small", i, recordLength)
+		}
+		if offset+recordLength > uint32(len(data)) {
+			return nil, fmt.Errorf("EXTH record %d length %d exceeds data bounds", i, recordLength)
+		}
+
+		recordData := data[offset+8 : offset+recordLength]
 		exth.Records[recordType] = append(exth.Records[recordType], recordData)
 		offset += recordLength
 	}

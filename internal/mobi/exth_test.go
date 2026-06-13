@@ -74,8 +74,8 @@ func TestReadExth(t *testing.T) {
 				t.Fatalf("ReadExth() unexpected error: %v", err)
 			}
 
-			if got.Indentifier != tt.wantIdent {
-				t.Errorf("Identifier = %q, want %q", got.Indentifier, tt.wantIdent)
+			if got.Identifier != tt.wantIdent {
+				t.Errorf("Identifier = %q, want %q", got.Identifier, tt.wantIdent)
 			}
 			if got.RecordCount != tt.wantRecCount {
 				t.Errorf("RecordCount = %d, want %d", got.RecordCount, tt.wantRecCount)
@@ -126,7 +126,7 @@ func TestExthUpdatedTitle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Indentifier:  "EXTH",
+				Identifier:  "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -149,7 +149,7 @@ func TestExthCP1252Encoding(t *testing.T) {
 	// Test CP1252 encoding with special character
 	// 0x92 in CP1252 is the right single quotation mark (')
 	exth := &Exth{
-		Indentifier:  "EXTH",
+		Identifier:  "EXTH",
 		HeaderLength: 12,
 		RecordCount:  1,
 		Records: map[uint32][][]byte{
@@ -213,7 +213,7 @@ func TestExthDescription(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Indentifier:  "EXTH",
+				Identifier:  "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -262,7 +262,7 @@ func TestExthAuthors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Indentifier:  "EXTH",
+				Identifier:  "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -364,7 +364,7 @@ func TestExthLanguage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Indentifier:  "EXTH",
+				Identifier:  "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -423,7 +423,7 @@ func TestExthCoverOffset(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Indentifier:  "EXTH",
+				Identifier:  "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      tt.records,
@@ -478,7 +478,7 @@ func TestExthThumbnailOffset(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Indentifier:  "EXTH",
+				Identifier:  "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      tt.records,
