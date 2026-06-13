@@ -441,7 +441,7 @@ func TestMobiReaderCover(t *testing.T) {
 				{},
 				{
 					Offset: 0,
-					Length: maxExpectedCoverSize + 1,
+					Length: MAX_EXPECTED_COVER_SIZE + 1,
 				},
 			},
 		}

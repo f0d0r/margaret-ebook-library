@@ -9,7 +9,7 @@ import (
 	"faun.projects/margaret/margaret-ebook-library/pkg/model"
 )
 
-const maxExpectedCoverSize = 50 * 1024 * 1024 // 50 MB safety limit for cover image
+const MAX_EXPECTED_COVER_SIZE = 50 * 1024 * 1024 // 50 MB safety limit for cover image
 
 type MobiReader struct{}
 
@@ -70,7 +70,7 @@ func (r *MobiReader) cover(path string, pdbDb *PdbDb, mobi *Mobi) *model.Resourc
 	}
 	coverRecord := pdbDb.PdbRecords[coverIdx]
 	coverLength := coverRecord.Length
-	if coverLength == 0 || coverLength > maxExpectedCoverSize {
+	if coverLength == 0 || coverLength > MAX_EXPECTED_COVER_SIZE {
 		return nil
 	}
 	magicData, err := coverRecord.DataSlice(8)
