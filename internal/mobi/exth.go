@@ -10,6 +10,8 @@ const (
 	AUTHOR           = 100
 	DESCRIPTION      = 103
 	KF8_HEADER_INDEX = 121
+	COVER_OFFSET     = 201
+	THUMBNAIL_OFFSET = 202
 	UPDATED_TITLE    = 503
 	LANGUAGE         = 524
 )
@@ -109,3 +111,18 @@ func (e *Exth) Language() string {
 	return decodeString(d[0], e.textEncoding)
 }
 
+func (e *Exth) CoverOffset() uint32 {
+	d := e.Records[COVER_OFFSET]
+	if len(d) == 0 || len(d[0]) < 4 {
+		return 0
+	}
+	return binary.BigEndian.Uint32(d[0])
+}
+
+func (e *Exth) ThumbnailOffset() uint32 {
+	d := e.Records[THUMBNAIL_OFFSET]
+	if len(d) == 0 || len(d[0]) < 4 {
+		return 0
+	}
+	return binary.BigEndian.Uint32(d[0])
+}

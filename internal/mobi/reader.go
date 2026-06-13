@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 
+	"faun.projects/margaret/margaret-ebook-library/internal/util"
 	"faun.projects/margaret/margaret-ebook-library/pkg/model"
 )
 
@@ -55,6 +56,46 @@ func (r *MobiReader) ReadMetadata(path string) (*model.Metadata, error) {
 		Authors:     mobi.Authors(),
 		Description: mobi.Description(),
 		Languages:   languages,
+		Cover:       r.cover(path, pdbDb, mobi),
 		FileType:    model.MOBI,
 	}, nil
+}
+
+func (r *MobiReader) cover(path string, pdbDb *PdbDb, mobi *Mobi) *model.Resource {
+	coverIdx := mobi.CoverRecordIdx()
+	if coverIdx == 0 {
+		return nil
+	}
+	coverRecord := pdbDb.PdbRecords[coverIdx]
+	magicData, err := coverRecord.DataSlice(8)
+	if err != nil {
+		return nil
+	}
+	media := util.DetectImageMedia(magicData)
+	if media == nil {
+		return nil
+	}
+	return &model.Resource{
+		Name:      "cover." + media.Extension,
+		MediaType: media.Type,
+		Size:      int(coverRecord.Length),
+		Data: func() ([]byte, error) {
+			return r.loadRecord(path, coverIdx)
+		},
+	}
+}
+
+func (r *MobiReader) loadRecord(path string, coverIdx uint32) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	pdbDb, err := ReadPdbDb(f)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read PDB database: %w", err)
+	}
+	coverRecord := pdbDb.PdbRecords[coverIdx]
+	return coverRecord.Data()
 }

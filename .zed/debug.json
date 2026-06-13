@@ -1,0 +1,16 @@
+// Project-local debug tasks
+//
+// For more documentation on how to configure debug tasks,
+// see: https://zed.dev/docs/debugger
+[
+  {
+      "label": "Debug with book path",
+      "adapter": "Delve",
+      "request": "launch",
+      "mode": "debug",
+      "program": "./cmd",
+      "args": [
+        "/home/attila/books/tudományos/21-lecke-a-21-szazadbol.mobi"
+      ]
+    }
+]

@@ -29,16 +29,16 @@ func main() {
 	if bookMeta.Cover != nil {
 		fmt.Printf("Cover: %s (%d bytes) media type: %s\n", bookMeta.Cover.Name, bookMeta.Cover.Size, bookMeta.Cover.MediaType)
 
-		/*
-			coverBytes, err := bookMeta.Cover.GetData()
-			if err != nil {
-				log.Fatalf("Hiba a borítókép adatainak beolvasásakor: %v", err)
-			}
-			outputPath := bookMeta.Cover.Name
-			err = os.WriteFile(outputPath, coverBytes, 0644)
-			if err != nil {
-				log.Fatalf("Hiba a fájl mentésekor: %v", err)
-			}
+		/*coverBytes, err := bookMeta.Cover.Data()
+		if err != nil {
+			log.Fatalf("Hiba a borítókép adatainak beolvasásakor: %v", err)
+		}
+		outputPath := bookMeta.Cover.Name
+		err = os.WriteFile(outputPath, coverBytes, 0644)
+		if err != nil {
+			log.Fatalf("Hiba a fájl mentésekor: %v", err)
+		}
+		fmt.Printf("Cover saved as: %s\n", outputPath)
 		*/
 	}
 }

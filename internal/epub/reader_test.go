@@ -180,7 +180,7 @@ func TestGetCover(t *testing.T) {
 			_ = closer.Close()
 
 			// Get the cover
-			cover := reader.Cover(epubPath, zr, pkg)
+			cover := reader.cover(epubPath, zr, pkg)
 
 			if tt.shouldFindCover {
 				if cover == nil {

@@ -84,10 +84,11 @@ type Mobi struct {
 	ExtraRecordFlags    uint32 // A set of binary flags, some of which indicate extra data at the end of each text block.
 	IndxRecordOffset    uint32 // Offset to INDX record in the file.
 
-	EXTH  *Exth // EXTH record, if present
-	title string
-	name  string
-	KF8   *Mobi // In case this is a dual MOBI file
+	EXTH        *Exth // EXTH record, if present
+	title       string
+	name        string
+	KF8         *Mobi  // In case this is a dual MOBI file
+	recordCount uint16 // Number of records in the MOBI file
 }
 
 func ReadMobi(pdbDb *PdbDb) (*Mobi, error) {
@@ -105,6 +106,7 @@ func ReadMobi(pdbDb *PdbDb) (*Mobi, error) {
 	}
 
 	mobi.name = pdbDb.Name
+	mobi.recordCount = pdbDb.NumberOfRecords
 
 	if mobi.EXTH != nil {
 		kf8HeaderIdx := mobi.EXTH.KF8HeaderIndex()
@@ -119,6 +121,8 @@ func ReadMobi(pdbDb *PdbDb) (*Mobi, error) {
 				if err != nil {
 					return nil, fmt.Errorf("failed to read KF8 header: %w", err)
 				}
+				
+				kf8.recordCount = uint16(uint32(pdbDb.NumberOfRecords) - kf8HeaderIdx + 1)
 				mobi.KF8 = kf8
 			}
 		}
@@ -293,6 +297,25 @@ func (m *Mobi) Language() string {
 		language = m.localeCode()
 	}
 	return language
+}
+
+func (m *Mobi) CoverRecordIdx() uint32 {
+	if m.KF8 != nil {
+		absIdx := uint32(m.EXTH.KF8HeaderIndex()) + m.KF8.CoverRecordIdx()
+		if absIdx < uint32(m.recordCount) {
+			return absIdx
+		}
+	}
+	if m.EXTH != nil &&
+		m.FirstImageRecord != 0 &&
+		m.FirstImageRecord != 0xFFFF &&
+		m.FirstImageRecord != 0xFFFFFFFF {
+		absIdx := m.FirstImageRecord + m.EXTH.CoverOffset()
+		if absIdx < uint32(m.recordCount) {
+			return absIdx
+		}
+	}
+	return 0
 }
 
 // localeCode returns the BCP 47-style language tag derived from the MOBI header Locale field.

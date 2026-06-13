@@ -54,6 +54,7 @@ type PdbRecord struct {
 	Attributes RecordAttributes
 	UniqueId   uint32
 	Data    func() ([]byte, error)
+	DataSlice func(len uint32) ([]byte, error)
 }
 
 type PdbDb struct {
@@ -205,6 +206,9 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, f *os.File) ([]Pdb
 			prevRecord.Data = func() ([]byte, error) {
 				return readRecordData(f, offset, length)
 			}
+			prevRecord.DataSlice = func(len uint32) ([]byte, error) {
+				return readRecordData(f, offset, len)
+			}
 		}
 		pdbRecords[i] = *record
 	}
@@ -214,6 +218,9 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, f *os.File) ([]Pdb
 		lastRecord.Length = uint32(fileSize) - lastRecord.Offset
 		lastRecord.Data = func() ([]byte, error) {
 			return readRecordData(f, lastRecord.Offset, lastRecord.Length)
+		}
+		lastRecord.DataSlice = func(len uint32) ([]byte, error) {
+			return readRecordData(f, lastRecord.Offset, len)
 		}
 	}
 	return pdbRecords, nil
