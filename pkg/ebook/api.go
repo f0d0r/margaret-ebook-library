@@ -23,15 +23,13 @@ import (
 // If no suitable reader is found for the format, it returns an error wrapping
 // [errs.ErrUnsupportedFormat].
 func ReadMetadata(path string) (model.Metadata, error) {
-	fmt.Println("[api] ReadMetadata called")
-
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return model.Metadata{}, errs.ErrUnsupportedFormat
 	}
 
-	registry := registry.New()
-	reader, err := registry.ReaderFor(path)
+	r := registry.New()
+	reader, err := r.ReaderFor(path)
 	if err != nil {
 		return model.Metadata{}, fmt.Errorf("failed to get reader for %s: %w", path, err)
 	}

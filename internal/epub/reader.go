@@ -61,7 +61,7 @@ func (r *EpubReader) hasValidEpubHeader(f *os.File) bool {
 	// A valid EPUB starts with a ZIP local file header, followed by the uncompressed "mimetype" file and its 20-byte value.
 	buf := make([]byte, 100)
 	n, err := f.ReadAt(buf, 0)
-	if err != nil && n < 58 {
+	if err != nil || n < 58 {
 		return false
 	}
 
@@ -125,7 +125,6 @@ func (r *EpubReader) openZipReader(path string) (*zip.Reader, io.Closer, error) 
 		return nil, nil, err
 	}
 
-	// Visszaadjuk a readert, és magát a fájlt mint Closert, hogy le lehessen zárni
 	return zr, f, nil
 }
 
