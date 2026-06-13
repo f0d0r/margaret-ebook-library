@@ -111,6 +111,9 @@ func (e *Exth) Language() string {
 	return decodeString(d[0], e.textEncoding)
 }
 
+// CoverOffset returns the cover image record offset from the EXTH record.
+// The offset is stored in the EXTH record type 201 (COVER_OFFSET).
+// If the record is not present or contains less than 4 bytes, 0 is returned.
 func (e *Exth) CoverOffset() uint32 {
 	d := e.Records[COVER_OFFSET]
 	if len(d) == 0 || len(d[0]) < 4 {
@@ -119,6 +122,9 @@ func (e *Exth) CoverOffset() uint32 {
 	return binary.BigEndian.Uint32(d[0])
 }
 
+// ThumbnailOffset returns the thumbnail image record offset from the EXTH record.
+// The offset is stored in the EXTH record type 202 (THUMBNAIL_OFFSET).
+// If the record is not present or contains less than 4 bytes, 0 is returned.
 func (e *Exth) ThumbnailOffset() uint32 {
 	d := e.Records[THUMBNAIL_OFFSET]
 	if len(d) == 0 || len(d[0]) < 4 {

@@ -2,6 +2,7 @@ package mobi
 
 import (
 	"encoding/binary"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -250,6 +251,320 @@ func TestMobiReaderReadMetadataReturnsValidModel(t *testing.T) {
 	if metadata.FileType != model.MOBI {
 		t.Errorf("FileType = %v, want %v", metadata.FileType, model.MOBI)
 	}
+}
+
+func TestMobiReaderLoadRecord(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "record.bin")
+	content := []byte("0123456789ABCDEFGHIJ")
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		t.Fatalf("WriteFile error: %v", err)
+	}
+
+	reader := &MobiReader{}
+
+	tests := []struct {
+		name    string
+		offset  uint32
+		length  uint32
+		want    string
+		wantErr bool
+	}{
+		{"valid read from start", 0, 5, "01234", false},
+		{"valid read from middle", 4, 4, "4567", false},
+		{"read entire file", 0, 20, "0123456789ABCDEFGHIJ", false},
+		{"offset past file end", 100, 5, "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := reader.loadRecord(path, tt.offset, tt.length)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("loadRecord() expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("loadRecord() unexpected error: %v", err)
+			}
+			if string(data) != tt.want {
+				t.Errorf("loadRecord() = %q, want %q", string(data), tt.want)
+			}
+		})
+	}
+}
+
+func TestMobiReaderCover(t *testing.T) {
+	tmpDir := t.TempDir()
+	reader := &MobiReader{}
+
+	t.Run("CoverRecordIdx returns 0", func(t *testing.T) {
+		mobi := &Mobi{}
+		result := reader.cover("/fake/path", &PdbDb{}, mobi)
+		if result != nil {
+			t.Errorf("cover() = %v, want nil", result)
+		}
+	})
+
+	t.Run("coverIdx out of bounds", func(t *testing.T) {
+		mobi := &Mobi{
+			EXTH: &Exth{
+				Records: map[uint32][][]byte{
+					COVER_OFFSET: {func() []byte {
+						b := make([]byte, 4)
+						binary.BigEndian.PutUint32(b, 5)
+						return b
+					}()},
+				},
+			},
+			FirstImageRecord: 10,
+			recordCount:      20,
+		}
+		pdbDb := &PdbDb{PdbRecords: make([]PdbRecord, 5)}
+		// coverIdx = 10 + 5 = 15, len(PdbRecords) = 5 → out of bounds
+		result := reader.cover("/fake/path", pdbDb, mobi)
+		if result != nil {
+			t.Errorf("cover() = %v, want nil", result)
+		}
+	})
+
+	t.Run("DataSlice fails returns nil", func(t *testing.T) {
+		mobi := &Mobi{
+			EXTH: &Exth{
+				Records: map[uint32][][]byte{
+					COVER_OFFSET: {func() []byte {
+						b := make([]byte, 4)
+						binary.BigEndian.PutUint32(b, 0)
+						return b
+					}()},
+				},
+			},
+			FirstImageRecord: 1,
+			recordCount:      10,
+		}
+		pdbDb := &PdbDb{
+			PdbRecords: []PdbRecord{
+				{},
+				{
+					Offset: 0,
+					Length: 10,
+					DataSlice: func(uint32) ([]byte, error) {
+						return nil, fmt.Errorf("read error")
+					},
+				},
+			},
+		}
+		result := reader.cover("/fake/path", pdbDb, mobi)
+		if result != nil {
+			t.Errorf("cover() = %v, want nil", result)
+		}
+	})
+
+	t.Run("unrecognized image format returns nil", func(t *testing.T) {
+		mobi := &Mobi{
+			EXTH: &Exth{
+				Records: map[uint32][][]byte{
+					COVER_OFFSET: {func() []byte {
+						b := make([]byte, 4)
+						binary.BigEndian.PutUint32(b, 0)
+						return b
+					}()},
+				},
+			},
+			FirstImageRecord: 1,
+			recordCount:      10,
+		}
+		pdbDb := &PdbDb{
+			PdbRecords: []PdbRecord{
+				{},
+				{
+					Offset: 0,
+					Length: 10,
+					DataSlice: func(uint32) ([]byte, error) {
+						return []byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, nil
+					},
+				},
+			},
+		}
+		result := reader.cover("/fake/path", pdbDb, mobi)
+		if result != nil {
+			t.Errorf("cover() = %v, want nil", result)
+		}
+	})
+
+	t.Run("zero length cover record returns nil", func(t *testing.T) {
+		mobi := &Mobi{
+			EXTH: &Exth{
+				Records: map[uint32][][]byte{
+					COVER_OFFSET: {func() []byte {
+						b := make([]byte, 4)
+						binary.BigEndian.PutUint32(b, 0)
+						return b
+					}()},
+				},
+			},
+			FirstImageRecord: 1,
+			recordCount:      10,
+		}
+		pdbDb := &PdbDb{
+			PdbRecords: []PdbRecord{
+				{},
+				{
+					Offset: 0,
+					Length: 0,
+				},
+			},
+		}
+		result := reader.cover("/fake/path", pdbDb, mobi)
+		if result != nil {
+			t.Errorf("cover() = %v, want nil", result)
+		}
+	})
+
+	t.Run("oversized cover record returns nil", func(t *testing.T) {
+		mobi := &Mobi{
+			EXTH: &Exth{
+				Records: map[uint32][][]byte{
+					COVER_OFFSET: {func() []byte {
+						b := make([]byte, 4)
+						binary.BigEndian.PutUint32(b, 0)
+						return b
+					}()},
+				},
+			},
+			FirstImageRecord: 1,
+			recordCount:      10,
+		}
+		pdbDb := &PdbDb{
+			PdbRecords: []PdbRecord{
+				{},
+				{
+					Offset: 0,
+					Length: maxExpectedCoverSize + 1,
+				},
+			},
+		}
+		result := reader.cover("/fake/path", pdbDb, mobi)
+		if result != nil {
+			t.Errorf("cover() = %v, want nil", result)
+		}
+	})
+
+	t.Run("valid JPEG cover returns Resource with lazy Data", func(t *testing.T) {
+		imgData := []byte{
+			0xFF, 0xD8, 0xFF, 0xE0, // JPEG magic + APP0 marker
+			0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, // rest of JPEG header
+			0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, // more data
+		}
+		imgPath := filepath.Join(tmpDir, "cover_test.bin")
+		if err := os.WriteFile(imgPath, imgData, 0644); err != nil {
+			t.Fatalf("WriteFile error: %v", err)
+		}
+
+		mobi := &Mobi{
+			EXTH: &Exth{
+				Records: map[uint32][][]byte{
+					COVER_OFFSET: {func() []byte {
+						b := make([]byte, 4)
+						binary.BigEndian.PutUint32(b, 0)
+						return b
+					}()},
+				},
+			},
+			FirstImageRecord: 1,
+			recordCount:      10,
+		}
+		pdbDb := &PdbDb{
+			PdbRecords: []PdbRecord{
+				{},
+				{
+					Offset: 0,
+					Length: uint32(len(imgData)),
+					DataSlice: func(n uint32) ([]byte, error) {
+						return imgData[:n], nil
+					},
+					Data: func() ([]byte, error) {
+						return imgData, nil
+					},
+				},
+			},
+		}
+		result := reader.cover(imgPath, pdbDb, mobi)
+		if result == nil {
+			t.Fatalf("cover() = nil, want Resource")
+		}
+		if result.Name != "cover.jpg" {
+			t.Errorf("Name = %q, want %q", result.Name, "cover.jpg")
+		}
+		if result.MediaType != "image/jpeg" {
+			t.Errorf("MediaType = %q, want %q", result.MediaType, "image/jpeg")
+		}
+		if result.Size != len(imgData) {
+			t.Errorf("Size = %d, want %d", result.Size, len(imgData))
+		}
+		if result.Data == nil {
+			t.Fatal("Data function is nil")
+		}
+
+		loaded, err := result.Data()
+		if err != nil {
+			t.Fatalf("Data() error: %v", err)
+		}
+		if string(loaded) != string(imgData) {
+			t.Errorf("Data() = %x, want %x", loaded, imgData)
+		}
+	})
+
+	t.Run("valid PNG cover", func(t *testing.T) {
+		pngData := []byte{
+			0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG magic
+			0x00, 0x00, 0x00, 0x0D, // etc
+		}
+		imgPath := filepath.Join(tmpDir, "png_test.bin")
+		if err := os.WriteFile(imgPath, pngData, 0644); err != nil {
+			t.Fatalf("WriteFile error: %v", err)
+		}
+
+		mobi := &Mobi{
+			EXTH: &Exth{
+				Records: map[uint32][][]byte{
+					COVER_OFFSET: {func() []byte {
+						b := make([]byte, 4)
+						binary.BigEndian.PutUint32(b, 0)
+						return b
+					}()},
+				},
+			},
+			FirstImageRecord: 1,
+			recordCount:      10,
+		}
+		pdbDb := &PdbDb{
+			PdbRecords: []PdbRecord{
+				{},
+				{
+					Offset: 0,
+					Length: uint32(len(pngData)),
+					DataSlice: func(n uint32) ([]byte, error) {
+						return pngData[:n], nil
+					},
+					Data: func() ([]byte, error) {
+						return pngData, nil
+					},
+				},
+			},
+		}
+		result := reader.cover(imgPath, pdbDb, mobi)
+		if result == nil {
+			t.Fatalf("cover() = nil, want Resource")
+		}
+		if result.Name != "cover.png" {
+			t.Errorf("Name = %q, want %q", result.Name, "cover.png")
+		}
+		if result.MediaType != "image/png" {
+			t.Errorf("MediaType = %q, want %q", result.MediaType, "image/png")
+		}
+	})
 }
 
 // Helper function to build a valid PDB file for reader tests

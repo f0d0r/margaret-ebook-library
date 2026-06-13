@@ -9,6 +9,8 @@ import (
 	"faun.projects/margaret/margaret-ebook-library/pkg/model"
 )
 
+const maxExpectedCoverSize = 50 * 1024 * 1024 // 50 MB safety limit for cover image
+
 type MobiReader struct{}
 
 func (r *MobiReader) Supports(path string) bool {
@@ -63,10 +65,14 @@ func (r *MobiReader) ReadMetadata(path string) (*model.Metadata, error) {
 
 func (r *MobiReader) cover(path string, pdbDb *PdbDb, mobi *Mobi) *model.Resource {
 	coverIdx := mobi.CoverRecordIdx()
-	if coverIdx == 0 {
+	if coverIdx == 0 || int(coverIdx) >= len(pdbDb.PdbRecords) {
 		return nil
 	}
 	coverRecord := pdbDb.PdbRecords[coverIdx]
+	coverLength := coverRecord.Length
+	if coverLength == 0 || coverLength > maxExpectedCoverSize {
+		return nil
+	}
 	magicData, err := coverRecord.DataSlice(8)
 	if err != nil {
 		return nil
@@ -75,27 +81,28 @@ func (r *MobiReader) cover(path string, pdbDb *PdbDb, mobi *Mobi) *model.Resourc
 	if media == nil {
 		return nil
 	}
+	coverOffset := coverRecord.Offset
 	return &model.Resource{
 		Name:      "cover." + media.Extension,
 		MediaType: media.Type,
-		Size:      int(coverRecord.Length),
+		Size:      int(coverLength),
 		Data: func() ([]byte, error) {
-			return r.loadRecord(path, coverIdx)
+			return r.loadRecord(path, coverOffset, coverLength)
 		},
 	}
 }
 
-func (r *MobiReader) loadRecord(path string, coverIdx uint32) ([]byte, error) {
+func (r *MobiReader) loadRecord(path string, offset, length uint32) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 
-	pdbDb, err := ReadPdbDb(f)
+	data := make([]byte, length)
+	_, err = f.ReadAt(data, int64(offset))
 	if err != nil {
-		return nil, fmt.Errorf("failed to read PDB database: %w", err)
+		return nil, fmt.Errorf("failed to read cover record: %w", err)
 	}
-	coverRecord := pdbDb.PdbRecords[coverIdx]
-	return coverRecord.Data()
+	return data, nil
 }

@@ -299,6 +299,10 @@ func (m *Mobi) Language() string {
 	return language
 }
 
+// CoverRecordIdx returns the record index of the cover image.
+// In a dual MOBI file it checks the KF8 header first, then falls back to
+// the EXTH CoverOffset combined with FirstImageRecord.
+// Returns 0 if no cover image is found.
 func (m *Mobi) CoverRecordIdx() uint32 {
 	if m.KF8 != nil {
 		absIdx := uint32(m.EXTH.KF8HeaderIndex()) + m.KF8.CoverRecordIdx()
