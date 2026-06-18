@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"faun.projects/margaret/margaret-ebook-library/pkg/ebook"
+	"git.home/margaret/margaret-ebook-library/pkg/ebook"
 )
 
 func main() {

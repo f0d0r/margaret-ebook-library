@@ -1,4 +1,4 @@
-module faun.projects/margaret/margaret-ebook-library
+module git.home/margaret/margaret-ebook-library
 
 go 1.25.0
 

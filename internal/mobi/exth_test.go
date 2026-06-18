@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"faun.projects/margaret/margaret-ebook-library/pkg/errs"
+	"git.home/margaret/margaret-ebook-library/pkg/errs"
 )
 
 func TestReadExth(t *testing.T) {

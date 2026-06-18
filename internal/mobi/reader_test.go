@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"faun.projects/margaret/margaret-ebook-library/pkg/model"
+	"git.home/margaret/margaret-ebook-library/pkg/model"
 )
 
 func TestMOBISupports(t *testing.T) {

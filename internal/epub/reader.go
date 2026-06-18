@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"faun.projects/margaret/margaret-ebook-library/pkg/model"
+	"git.home/margaret/margaret-ebook-library/pkg/model"
 )
 
 type EpubReader struct {

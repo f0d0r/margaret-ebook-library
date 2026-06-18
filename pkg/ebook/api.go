@@ -8,9 +8,9 @@ import (
 	"os"
 	"strings"
 
-	"faun.projects/margaret/margaret-ebook-library/internal/registry"
-	"faun.projects/margaret/margaret-ebook-library/pkg/errs"
-	"faun.projects/margaret/margaret-ebook-library/pkg/model"
+	"git.home/margaret/margaret-ebook-library/internal/registry"
+	"git.home/margaret/margaret-ebook-library/pkg/errs"
+	"git.home/margaret/margaret-ebook-library/pkg/model"
 )
 
 // ReadMetadata reads ebook metadata from the specified file path.

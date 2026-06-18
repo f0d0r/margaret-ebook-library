@@ -1,7 +1,7 @@
 package registry
 
 import (
-	"faun.projects/margaret/margaret-ebook-library/pkg/model"
+	"git.home/margaret/margaret-ebook-library/pkg/model"
 )
 
 type Reader interface {

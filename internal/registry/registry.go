@@ -1,9 +1,9 @@
 package registry
 
 import (
-	"faun.projects/margaret/margaret-ebook-library/internal/epub"
-	"faun.projects/margaret/margaret-ebook-library/internal/mobi"
-	"faun.projects/margaret/margaret-ebook-library/pkg/errs"
+	"git.home/margaret/margaret-ebook-library/internal/epub"
+	"git.home/margaret/margaret-ebook-library/internal/mobi"
+	"git.home/margaret/margaret-ebook-library/pkg/errs"
 )
 
 type Registry struct {
