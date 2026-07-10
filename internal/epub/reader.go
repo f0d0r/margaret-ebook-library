@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path"
-	"strings"
 
 	"git.home/margaret/margaret-ebook-library/pkg/model"
 )
@@ -37,15 +36,10 @@ func (r *EpubReader) Supports(path string) bool {
 		return false
 	}
 
-	hasEpubExt := strings.HasSuffix(strings.ToLower(path), ".epub")
 	hasValidEpubHeader := r.hasValidEpubHeader(f)
 
 	if hasValidEpubHeader {
 		return true
-	}
-
-	if !hasEpubExt {
-		return false
 	}
 
 	zr, err := zip.NewReader(f, info.Size())
