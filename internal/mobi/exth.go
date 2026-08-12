@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"git.home/margaret/margaret-ebook-library/pkg/errs"
+	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
 )
 
 const MAX_EXTH_RECORDS = 256

@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
-	"git.home/margaret/margaret-ebook-library/internal/util"
-	"git.home/margaret/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
 const MAX_EXPECTED_COVER_SIZE = 50 * 1024 * 1024 // 50 MB safety limit for cover image

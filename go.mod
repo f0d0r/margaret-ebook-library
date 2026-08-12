@@ -1,4 +1,4 @@
-module git.home/margaret/margaret-ebook-library
+module github.com/f0d0r/margaret-ebook-library
 
 go 1.25.0
 

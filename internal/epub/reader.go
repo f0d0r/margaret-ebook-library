@@ -8,7 +8,7 @@ import (
 	"os"
 	"path"
 
-	"git.home/margaret/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
 type EpubReader struct {

@@ -3,7 +3,7 @@ package ebook
 import (
 	"testing"
 
-	"git.home/margaret/margaret-ebook-library/pkg/errs"
+	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
 )
 
 func TestReadMetadata_EmptyPath(t *testing.T) {
