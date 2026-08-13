@@ -27,31 +27,82 @@ func ReadMetadata(path string) (model.Metadata, error) {
 	if path == "" {
 		return model.Metadata{}, errs.ErrUnsupportedFormat
 	}
+	return readMetadata(model.NewPathBlob(path), path)
+}
 
-	r := registry.New()
-	reader, err := r.ReaderFor(path)
+// ReadMetadataFromBlob reads ebook metadata from a random-access source such
+// as a local file, an e-book entry inside an archive, or a remote source.
+//
+// It selects the appropriate reader implementation from the internal registry
+// based on the file format detected purely from the contents. The selected
+// reader is then used to extract and return the metadata.
+//
+// The caller retains ownership of the blob and must keep it usable until the
+// returned metadata (including any cover data) has been consumed. The file
+// position of the source is never modified.
+//
+// If no suitable reader is found for the format, it returns an error wrapping
+// [errs.ErrUnsupportedFormat].
+func ReadMetadataFromBlob(b model.Blob) (model.Metadata, error) {
+	return readMetadata(b, "")
+}
+
+// ReadMetadataFromFile reads ebook metadata from an already-open file.
+//
+// It is a convenience wrapper around [ReadMetadataFromBlob]. The caller
+// retains ownership of the file and must keep it open until the returned
+// metadata (including any cover data) has been consumed.
+func ReadMetadataFromFile(f *os.File) (model.Metadata, error) {
+	b, err := model.NewFileBlob(f)
 	if err != nil {
-		return model.Metadata{}, fmt.Errorf("failed to get reader for %s: %w", path, err)
+		return model.Metadata{}, fmt.Errorf("failed to inspect file %s: %w", f.Name(), err)
 	}
-	metadata, err := reader.ReadMetadata(path)
+	return readMetadata(b, f.Name())
+}
+
+func readMetadata(b model.Blob, name string) (model.Metadata, error) {
+	r := registry.New()
+	reader, err := r.ReaderForBlob(b)
 	if err != nil {
-		return model.Metadata{}, fmt.Errorf("failed to read metadata for %s: %w", path, err)
+		return model.Metadata{}, fmt.Errorf("failed to get reader for %s: %w", name, err)
+	}
+	metadata, err := reader.ReadMetadata(b)
+	if err != nil {
+		return model.Metadata{}, fmt.Errorf("failed to read metadata for %s: %w", name, err)
 	}
 	return *metadata, nil
 }
 
 // CalculateFileHash calculates the sha256 hash of the file at the specified path.
 func CalculateFileHash(path string) (string, error) {
-	file, err := os.Open(path)
+	return CalculateFileHashFromBlob(model.NewPathBlob(path))
+}
+
+// CalculateFileHashFromBlob calculates the sha256 hash of a random-access
+// source by reading it in chunks, so it works for local files as well as
+// archive entries and remote sources without materializing a temporary file.
+// It never modifies the source's position.
+func CalculateFileHashFromBlob(b model.Blob) (string, error) {
+	size, err := b.Size()
 	if err != nil {
-		return "", fmt.Errorf("failed to open file: %w", err)
+		return "", fmt.Errorf("failed to get file size: %w", err)
 	}
-	defer func() { _ = file.Close() }()
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", fmt.Errorf("failed to calculate hash: %w", err)
+
+	h := sha256.New()
+	buf := make([]byte, 32*1024)
+	for off := int64(0); off < size; {
+		n, err := b.ReadAt(buf, off)
+		if n > 0 {
+			_, _ = h.Write(buf[:n])
+		}
+		off += int64(n)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("failed to read: %w", err)
+		}
 	}
-	hashInBytes := hash.Sum(nil)
-	hashString := hex.EncodeToString(hashInBytes)
-	return hashString, nil
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

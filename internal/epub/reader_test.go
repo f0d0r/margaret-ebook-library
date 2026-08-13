@@ -2,85 +2,26 @@ package epub
 
 import (
 	"archive/zip"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
-
-func TestSupports(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	validEPUBPath := filepath.Join(tmpDir, "valid.epub")
-	createValidTestEPUB(t, validEPUBPath, "My Test Book")
-
-	regularZIPPath := filepath.Join(tmpDir, "regular.zip")
-	createTestZIP(t, regularZIPPath, []testFile{
-		{name: "hello.txt", content: "hello world", method: zip.Deflate},
-	})
-
-	wrongOrderPath := filepath.Join(tmpDir, "wrong_order.epub")
-	createTestZIP(t, wrongOrderPath, []testFile{
-		{name: "OEBPS/content.opf", content: createOPF("Test"), method: zip.Deflate},
-		{name: "mimetype", content: "application/epub+zip", method: zip.Store},
-	})
-
-	wrongContentPath := filepath.Join(tmpDir, "wrong_content.epub")
-	createTestZIP(t, wrongContentPath, []testFile{
-		{name: "mimetype", content: "text/plain", method: zip.Store},
-	})
-
-	plainTextPath := filepath.Join(tmpDir, "text.txt")
-	err := os.WriteFile(plainTextPath, []byte("This is a plain text file, not a ZIP."), 0644)
-	if err != nil {
-		t.Fatalf("failed to create plain text file: %v", err)
-	}
-
-	shortFilePath := filepath.Join(tmpDir, "short.dat")
-	err = os.WriteFile(shortFilePath, []byte("PK\x03\x04short"), 0644)
-	if err != nil {
-		t.Fatalf("failed to create short file: %v", err)
-	}
-
-	tests := []struct {
-		name     string
-		filePath string
-		want     bool
-	}{
-		{"Valid EPUB file", validEPUBPath, true},
-		{"Regular ZIP without mimetype", regularZIPPath, false},
-		{"Wrong order with mimetype second", wrongOrderPath, false},
-		{"Wrong mimetype content", wrongContentPath, false},
-		{"Plain text file", plainTextPath, false},
-		{"Too short file", shortFilePath, false},
-		{"Non-existent file", filepath.Join(tmpDir, "does_not_exist.epub"), false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, supportsTest(tt.filePath, tt.want))
-	}
-}
-
-func supportsTest(path string, want bool) func(t *testing.T) {
-	return func(t *testing.T) {
-		reader := NewEpubReader()
-		if got := reader.Supports(path); got != want {
-			t.Errorf("EPUBReader.Supports() = %v, want %v (file: %s)", got, want, path)
-		}
-	}
-}
 
 func TestGetCover(t *testing.T) {
 	tmpDir := t.TempDir()
 	reader := NewEpubReader()
 
 	tests := []struct {
-		name           string
-		epubContent    []testFile
-		shouldFindCover bool
-		expectedID     string
-		expectedName   string
+		name              string
+		epubContent       []testFile
+		shouldFindCover   bool
+		expectedID        string
+		expectedName      string
 		expectedMediaType string
-		expectedSize   int
+		expectedSize      int
 	}{
 		{
 			name: "Cover found by cover-image property",
@@ -90,11 +31,11 @@ func TestGetCover(t *testing.T) {
 				{name: "OEBPS/content.opf", content: createOPFWithCoverImage("cover_id"), method: zip.Deflate},
 				{name: "OEBPS/cover.jpg", content: string(createTestImageData()), method: zip.Deflate},
 			},
-			shouldFindCover: true,
-			expectedID:      "cover_id",
-			expectedName:    "cover.jpg",
+			shouldFindCover:   true,
+			expectedID:        "cover_id",
+			expectedName:      "cover.jpg",
 			expectedMediaType: "image/jpeg",
-			expectedSize:    len(createTestImageData()),
+			expectedSize:      len(createTestImageData()),
 		},
 		{
 			name: "Cover found by cover meta element",
@@ -104,11 +45,11 @@ func TestGetCover(t *testing.T) {
 				{name: "OEBPS/content.opf", content: createOPFWithCoverMeta("cover_id"), method: zip.Deflate},
 				{name: "OEBPS/cover.png", content: string(createTestImageData()), method: zip.Deflate},
 			},
-			shouldFindCover: true,
-			expectedID:      "cover_id",
-			expectedName:    "cover.png",
+			shouldFindCover:   true,
+			expectedID:        "cover_id",
+			expectedName:      "cover.png",
 			expectedMediaType: "image/png",
-			expectedSize:    len(createTestImageData()),
+			expectedSize:      len(createTestImageData()),
 		},
 		{
 			name: "No cover found - no property or meta",
@@ -146,11 +87,11 @@ func TestGetCover(t *testing.T) {
 				{name: "OEBPS/cover_image.jpg", content: string(createTestImageData()), method: zip.Deflate},
 				{name: "OEBPS/cover_meta.png", content: string(createTestImageData()), method: zip.Deflate},
 			},
-			shouldFindCover: true,
-			expectedID:      "cover_image_id",
-			expectedName:    "cover_image.jpg",
+			shouldFindCover:   true,
+			expectedID:        "cover_image_id",
+			expectedName:      "cover_image.jpg",
 			expectedMediaType: "image/jpeg",
-			expectedSize:    len(createTestImageData()),
+			expectedSize:      len(createTestImageData()),
 		},
 	}
 
@@ -160,11 +101,15 @@ func TestGetCover(t *testing.T) {
 			createTestZIP(t, epubPath, tt.epubContent)
 
 			// Parse the EPUB to get the OPF Package
-			zr, closer, err := reader.openZipReader(epubPath)
+			b := model.NewPathBlob(epubPath)
+			size, err := b.Size()
+			if err != nil {
+				t.Fatalf("failed to stat epub: %v", err)
+			}
+			zr, err := zip.NewReader(b, size)
 			if err != nil {
 				t.Fatalf("failed to open epub: %v", err)
 			}
-			defer func() { _ = closer.Close() }()
 
 			container, err := reader.ocfReader.Read(zr)
 			if err != nil {
@@ -176,11 +121,8 @@ func TestGetCover(t *testing.T) {
 				t.Fatalf("failed to read opf: %v", err)
 			}
 
-			// Close for GetCover usage (it reopens the zip)
-			_ = closer.Close()
-
 			// Get the cover
-			cover := reader.cover(epubPath, zr, pkg)
+			cover := reader.cover(b, pkg)
 
 			if tt.shouldFindCover {
 				if cover == nil {
@@ -260,4 +202,50 @@ func createOPFWithBothCovers(coverImageID, coverMetaID string) string {
     <item id="` + coverMetaID + `" media-type="image/png" href="cover_meta.png" />
   </manifest>
 </package>`
+}
+
+func TestEpubReaderSupportsPreservesPosition(t *testing.T) {
+	tmpDir := t.TempDir()
+	reader := NewEpubReader()
+
+	validPath := filepath.Join(tmpDir, "valid.epub")
+	createValidTestEPUB(t, validPath, "My Test Book")
+
+	f, err := os.Open(validPath)
+	if err != nil {
+		t.Fatalf("failed to open epub: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	if _, err := f.Seek(10, io.SeekCurrent); err != nil {
+		t.Fatalf("failed to seek: %v", err)
+	}
+
+	b, err := model.NewFileBlob(f)
+	if err != nil {
+		t.Fatalf("NewFileBlob() error: %v", err)
+	}
+	if !reader.Supports(b) {
+		t.Error("Supports() = false at non-zero position, want true")
+	}
+
+	posAfter, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		t.Fatalf("failed to get current position: %v", err)
+	}
+	if posAfter != 10 {
+		t.Errorf("file position changed: before=10 after=%d", posAfter)
+	}
+}
+
+func TestEpubReaderSupports(t *testing.T) {
+	tmpDir := t.TempDir()
+	reader := NewEpubReader()
+
+	validPath := filepath.Join(tmpDir, "valid.epub")
+	createValidTestEPUB(t, validPath, "My Test Book")
+
+	if !reader.Supports(model.NewPathBlob(validPath)) {
+		t.Error("Supports() = false for valid EPUB path blob, want true")
+	}
 }

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
 func TestParseAttributes(t *testing.T) {
@@ -291,7 +293,7 @@ func TestReadPdbDbValidFile(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(f)
+	pdb, err := ReadPdbDb(blobForFile(t, f))
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -311,24 +313,11 @@ func TestReadPdbDbValidFile(t *testing.T) {
 }
 
 func TestReadPdbDbNonExistentFile(t *testing.T) {
-	// Cannot test with file path anymore since ReadPdbDb takes *os.File
-	// Test instead that we handle already-closed files or read errors
 	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "test.pdb")
-	pdbData := buildValidPdbFile()
-	if err := os.WriteFile(testFile, pdbData, 0644); err != nil {
-		t.Fatalf("WriteFile() error: %v", err)
-	}
 
-	f, err := os.Open(testFile)
-	if err != nil {
-		t.Fatalf("Open() error: %v", err)
-	}
-	_ = f.Close() // Close immediately to cause read error
-
-	_, err = ReadPdbDb(f)
+	_, err := ReadPdbDb(model.NewPathBlob(filepath.Join(tmpDir, "missing.pdb")))
 	if err == nil {
-		t.Errorf("ReadPdbDb() expected error for closed file, got nil")
+		t.Errorf("ReadPdbDb() expected error for non-existent file, got nil")
 	}
 }
 
@@ -348,7 +337,7 @@ func TestReadPdbDbTruncatedHeader(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	_, err = ReadPdbDb(f)
+	_, err = ReadPdbDb(blobForFile(t, f))
 	if err == nil {
 		t.Errorf("ReadPdbDb() expected error for truncated header, got nil")
 	}
@@ -376,7 +365,7 @@ func TestReadPdbDbAttributes(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(f)
+	pdb, err := ReadPdbDb(blobForFile(t, f))
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -413,7 +402,7 @@ func TestReadPdbDbDates(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(f)
+	pdb, err := ReadPdbDb(blobForFile(t, f))
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -445,7 +434,7 @@ func TestLazyReadRecord(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	got, err := readRecordData(f, offset, uint32(len(recordData)))
+	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)))
 	if err != nil {
 		t.Fatalf("readRecordData() error: %v", err)
 	}
@@ -477,7 +466,7 @@ func TestReadRecordData(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	got, err := readRecordData(f, offset, uint32(len(recordData)))
+	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)))
 	if err != nil {
 		t.Fatalf("readRecordData() error: %v", err)
 	}
@@ -502,7 +491,7 @@ func TestPdbRecordGetData(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(f)
+	pdb, err := ReadPdbDb(blobForFile(t, f))
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -545,7 +534,7 @@ func TestReadPdbDbFileVersion(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(f)
+	pdb, err := ReadPdbDb(blobForFile(t, f))
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -572,7 +561,7 @@ func TestReadPdbDbMultipleRecords(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(f)
+	pdb, err := ReadPdbDb(blobForFile(t, f))
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -586,6 +575,15 @@ func TestReadPdbDbMultipleRecords(t *testing.T) {
 }
 
 // Helper functions
+
+func blobForFile(t *testing.T, f *os.File) model.Blob {
+	t.Helper()
+	b, err := model.NewFileBlob(f)
+	if err != nil {
+		t.Fatalf("NewFileBlob() error: %v", err)
+	}
+	return b
+}
 
 func buildValidPdbFile() []byte {
 	var buf bytes.Buffer

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
 func TestReadMetadataTitle(t *testing.T) {
@@ -66,7 +68,7 @@ func TestReadMetadataTitle(t *testing.T) {
 			epubPath := filepath.Join(tmpDir, tt.name+".epub")
 			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
 
-			metadata, err := reader.ReadMetadata(epubPath)
+			metadata, err := reader.ReadMetadata(model.NewPathBlob(epubPath))
 
 			if tt.shouldError && err == nil {
 				t.Errorf("expected error but got none")
@@ -174,7 +176,7 @@ func TestReadMetadataAuthors(t *testing.T) {
 			epubPath := filepath.Join(tmpDir, tt.name+".epub")
 			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
 
-			metadata, err := reader.ReadMetadata(epubPath)
+			metadata, err := reader.ReadMetadata(model.NewPathBlob(epubPath))
 
 			if tt.shouldError && err == nil {
 				t.Errorf("expected error but got none")
@@ -283,7 +285,7 @@ func TestReadMetadataDescription(t *testing.T) {
 			epubPath := filepath.Join(tmpDir, tt.name+".epub")
 			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
 
-			metadata, err := reader.ReadMetadata(epubPath)
+			metadata, err := reader.ReadMetadata(model.NewPathBlob(epubPath))
 
 			if tt.shouldError && err == nil {
 				t.Errorf("expected error but got none")
@@ -396,7 +398,7 @@ func TestReadMetadataLanguages(t *testing.T) {
 			epubPath := filepath.Join(tmpDir, tt.name+".epub")
 			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
 
-			metadata, err := reader.ReadMetadata(epubPath)
+			metadata, err := reader.ReadMetadata(model.NewPathBlob(epubPath))
 
 			if tt.shouldError && err == nil {
 				t.Errorf("expected error but got none")

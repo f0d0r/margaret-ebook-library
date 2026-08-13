@@ -5,6 +5,6 @@ import (
 )
 
 type Reader interface {
-	Supports(path string) bool
-	ReadMetadata(path string) (*model.Metadata, error)
+	Supports(b model.Blob) bool
+	ReadMetadata(b model.Blob) (*model.Metadata, error)
 }

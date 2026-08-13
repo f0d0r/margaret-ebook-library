@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"os"
 	"path"
 
 	"github.com/f0d0r/margaret-ebook-library/pkg/model"
@@ -24,25 +23,17 @@ func NewEpubReader() *EpubReader {
 	}
 }
 
-func (r *EpubReader) Supports(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = f.Close() }()
-
-	info, err := f.Stat()
-	if err != nil || info.Size() < 22 {
+func (r *EpubReader) Supports(b model.Blob) bool {
+	size, err := b.Size()
+	if err != nil || size < 22 {
 		return false
 	}
 
-	hasValidEpubHeader := r.hasValidEpubHeader(f)
-
-	if hasValidEpubHeader {
+	if r.hasValidEpubHeader(b) {
 		return true
 	}
 
-	zr, err := zip.NewReader(f, info.Size())
+	zr, err := zip.NewReader(b, size)
 	if err != nil {
 		return false
 	}
@@ -51,10 +42,10 @@ func (r *EpubReader) Supports(path string) bool {
 	return err == nil
 }
 
-func (r *EpubReader) hasValidEpubHeader(f *os.File) bool {
+func (r *EpubReader) hasValidEpubHeader(b model.Blob) bool {
 	// A valid EPUB starts with a ZIP local file header, followed by the uncompressed "mimetype" file and its 20-byte value.
 	buf := make([]byte, 100)
-	n, err := f.ReadAt(buf, 0)
+	n, err := b.ReadAt(buf, 0)
 	if err != nil || n < 58 {
 		return false
 	}
@@ -101,33 +92,13 @@ func (r *EpubReader) hasValidEpubHeader(f *os.File) bool {
 	return string(buf[mimetypeStart:mimetypeEnd]) == "application/epub+zip"
 }
 
-func (r *EpubReader) openZipReader(path string) (*zip.Reader, io.Closer, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	info, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-		return nil, nil, err
-	}
-
-	zr, err := zip.NewReader(f, info.Size())
-	if err != nil {
-		_ = f.Close()
-		return nil, nil, err
-	}
-
-	return zr, f, nil
-}
-
-func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
-	zr, closer, err := r.openZipReader(path)
+// ReadMetadata reads ebook metadata from a random-access source. It
+// never modifies the source's position and does not take ownership of it.
+func (r *EpubReader) ReadMetadata(b model.Blob) (*model.Metadata, error) {
+	zr, err := openZip(b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open epub: %w", err)
 	}
-	defer func() { _ = closer.Close() }()
 
 	c, err := r.ocfReader.Read(zr)
 	if err != nil {
@@ -144,12 +115,21 @@ func (r *EpubReader) ReadMetadata(path string) (*model.Metadata, error) {
 		Authors:     r.opfReader.Authors(p),
 		Description: r.opfReader.Description(p),
 		Languages:   r.opfReader.Languages(p),
-		Cover:       r.cover(path, zr, p),
+		Cover:       r.cover(b, p),
 		FileType:    model.EPUB,
 	}, nil
 }
 
-func (r *EpubReader) cover(epubPath string, zr *zip.Reader, p Package) *model.Resource {
+// openZip builds a zip.Reader from the blob.
+func openZip(b model.Blob) (*zip.Reader, error) {
+	size, err := b.Size()
+	if err != nil {
+		return nil, err
+	}
+	return zip.NewReader(b, size)
+}
+
+func (r *EpubReader) cover(b model.Blob, p Package) *model.Resource {
 	coverItems := r.opfReader.ItemsByProperty(p, "cover-image")
 	var coverItem *Item
 	if len(coverItems) > 0 {
@@ -164,6 +144,11 @@ func (r *EpubReader) cover(epubPath string, zr *zip.Reader, p Package) *model.Re
 		return nil
 	}
 	coverPath := p.ResolvePath(coverItem.Href)
+
+	zr, err := openZip(b)
+	if err != nil {
+		return nil
+	}
 	coverFile := findFileInZip(zr, coverPath)
 	if coverFile == nil {
 		return nil
@@ -174,20 +159,20 @@ func (r *EpubReader) cover(epubPath string, zr *zip.Reader, p Package) *model.Re
 		MediaType: coverItem.MediaType,
 		Size:      int(coverFile.UncompressedSize64),
 		Data: func() ([]byte, error) {
-			return r.loadRecord(epubPath, coverPath)
+			return r.loadRecord(b, coverPath)
 		},
 	}
 }
 
-func (r *EpubReader) loadRecord(filePath string, resourcePath string) ([]byte, error) {
-	zr, closer, err := r.openZipReader(filePath)
+func (r *EpubReader) loadRecord(b model.Blob, resourcePath string) ([]byte, error) {
+	zr, err := openZip(b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open epub: %w", err)
 	}
-	defer func() { _ = closer.Close() }()
+
 	targetFile := findFileInZip(zr, resourcePath)
 	if targetFile == nil {
-		return nil, fmt.Errorf("resource not found")
+		return nil, fmt.Errorf("resource %q not found", resourcePath)
 	}
 
 	rc, err := targetFile.Open()
