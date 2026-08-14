@@ -11,7 +11,7 @@ import (
 
 func TestReadMetadataTitle(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader()
+	reader := NewEpubReader(model.DefaultConfig())
 
 	tests := []struct {
 		name          string
@@ -88,86 +88,86 @@ func TestReadMetadataTitle(t *testing.T) {
 
 func TestReadMetadataAuthors(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader()
+	reader := NewEpubReader(model.DefaultConfig())
 
 	tests := []struct {
-		name             string
-		opfContent       string
-		expectedAuthors  []string
-		shouldError      bool
+		name            string
+		opfContent      string
+		expectedAuthors []string
+		shouldError     bool
 	}{
 		{
-			name:             "Single author",
-			opfContent:       createOPFWithSingleAuthor("Jane Austen"),
-			expectedAuthors:  []string{"Jane Austen"},
-			shouldError:      false,
+			name:            "Single author",
+			opfContent:      createOPFWithSingleAuthor("Jane Austen"),
+			expectedAuthors: []string{"Jane Austen"},
+			shouldError:     false,
 		},
 		{
-			name:             "Multiple authors",
-			opfContent:       createOPFWithMultipleAuthors([]string{"Stephen King", "Peter Straub"}),
-			expectedAuthors:  []string{"Stephen King", "Peter Straub"},
-			shouldError:      false,
+			name:            "Multiple authors",
+			opfContent:      createOPFWithMultipleAuthors([]string{"Stephen King", "Peter Straub"}),
+			expectedAuthors: []string{"Stephen King", "Peter Straub"},
+			shouldError:     false,
 		},
 		{
-			name:             "No authors",
-			opfContent:       createOPFWithoutAuthors(),
-			expectedAuthors:  []string{},
-			shouldError:      false,
+			name:            "No authors",
+			opfContent:      createOPFWithoutAuthors(),
+			expectedAuthors: []string{},
+			shouldError:     false,
 		},
 		{
-			name:             "Author with whitespace",
-			opfContent:       createOPFWithSingleAuthor("   J.K. Rowling   "),
-			expectedAuthors:  []string{"J.K. Rowling"},
-			shouldError:      false,
+			name:            "Author with whitespace",
+			opfContent:      createOPFWithSingleAuthor("   J.K. Rowling   "),
+			expectedAuthors: []string{"J.K. Rowling"},
+			shouldError:     false,
 		},
 		{
-			name:             "Empty author element",
-			opfContent:       createOPFWithEmptyAuthor(),
-			expectedAuthors:  []string{},
-			shouldError:      false,
+			name:            "Empty author element",
+			opfContent:      createOPFWithEmptyAuthor(),
+			expectedAuthors: []string{},
+			shouldError:     false,
 		},
 		{
-			name:             "Mixed empty and non-empty authors",
-			opfContent:       createOPFWithMixedAuthors([]string{"Author One", "", "Author Two"}),
-			expectedAuthors:  []string{"Author One", "Author Two"},
-			shouldError:      false,
+			name:            "Mixed empty and non-empty authors",
+			opfContent:      createOPFWithMixedAuthors([]string{"Author One", "", "Author Two"}),
+			expectedAuthors: []string{"Author One", "Author Two"},
+			shouldError:     false,
 		},
 		{
-			name:             "Author with aut role",
-			opfContent:       createOPFWithAuthorRole("George Orwell", "aut"),
-			expectedAuthors:  []string{"George Orwell"},
-			shouldError:      false,
+			name:            "Author with aut role",
+			opfContent:      createOPFWithAuthorRole("George Orwell", "aut"),
+			expectedAuthors: []string{"George Orwell"},
+			shouldError:     false,
 		},
 		{
-			name:             "Author with file-as attribute",
-			opfContent:       createOPFWithAuthorFileAs("George Orwell", "Orwell, George"),
-			expectedAuthors:  []string{"George Orwell"},
-			shouldError:      false,
+			name:            "Author with file-as attribute",
+			opfContent:      createOPFWithAuthorFileAs("George Orwell", "Orwell, George"),
+			expectedAuthors: []string{"George Orwell"},
+			shouldError:     false,
 		},
 		{
-			name:             "Multiple creators - only authors included",
-			opfContent:       createOPFWithCreatorsMultipleRoles([]creatorInfo{
+			name: "Multiple creators - only authors included",
+			opfContent: createOPFWithCreatorsMultipleRoles([]creatorInfo{
 				{name: "Isaac Asimov", role: "aut"},
 				{name: "Ralph Macchio", role: "ill"},
 				{name: "Penthouse Press", role: "pbl"},
 			}),
-			expectedAuthors:  []string{"Isaac Asimov"},
-			shouldError:      false,
+			expectedAuthors: []string{"Isaac Asimov"},
+			shouldError:     false,
 		},
 		{
-			name:             "Author with dc prefix",
-			opfContent:       createOPFWithAuthorDcPrefix("Haruki Murakami"),
-			expectedAuthors:  []string{"Haruki Murakami"},
-			shouldError:      false,
+			name:            "Author with dc prefix",
+			opfContent:      createOPFWithAuthorDcPrefix("Haruki Murakami"),
+			expectedAuthors: []string{"Haruki Murakami"},
+			shouldError:     false,
 		},
 		{
-			name:             "Creator with no role (defaults to author)",
-			opfContent:       createOPFWithCreatorsMultipleRoles([]creatorInfo{
+			name: "Creator with no role (defaults to author)",
+			opfContent: createOPFWithCreatorsMultipleRoles([]creatorInfo{
 				{name: "Main Author", role: ""},
 				{name: "Illustrator", role: "ill"},
 			}),
-			expectedAuthors:  []string{"Main Author"},
-			shouldError:      false,
+			expectedAuthors: []string{"Main Author"},
+			shouldError:     false,
 		},
 	}
 
@@ -204,7 +204,7 @@ func TestReadMetadataAuthors(t *testing.T) {
 
 func TestReadMetadataDescription(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader()
+	reader := NewEpubReader(model.DefaultConfig())
 
 	tests := []struct {
 		name                string
@@ -305,7 +305,7 @@ func TestReadMetadataDescription(t *testing.T) {
 
 func TestReadMetadataLanguages(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader()
+	reader := NewEpubReader(model.DefaultConfig())
 
 	tests := []struct {
 		name              string
@@ -693,11 +693,11 @@ func createOPFWithLanguageDcPrefix(language string) string {
 func TestGetMetaByName(t *testing.T) {
 	opf := NewOpfReader()
 	tests := []struct {
-		name           string
-		opfContent     string
-		searchName     string
-		expectedMeta   *Meta
-		shouldFind     bool
+		name         string
+		opfContent   string
+		searchName   string
+		expectedMeta *Meta
+		shouldFind   bool
 	}{
 		{
 			name:       "Meta with matching name",
@@ -721,21 +721,21 @@ func TestGetMetaByName(t *testing.T) {
 			shouldFind: true,
 		},
 		{
-			name:           "Meta not found",
-			opfContent:     createOPFWithMeta("calibre", "value"),
-			searchName:     "non-existent",
-			expectedMeta:   nil,
-			shouldFind:     false,
+			name:         "Meta not found",
+			opfContent:   createOPFWithMeta("calibre", "value"),
+			searchName:   "non-existent",
+			expectedMeta: nil,
+			shouldFind:   false,
 		},
 		{
-			name:           "Empty metadata - no metas",
-			opfContent:     createOPF("Test Book"),
-			searchName:     "calibre",
-			expectedMeta:   nil,
-			shouldFind:     false,
+			name:         "Empty metadata - no metas",
+			opfContent:   createOPF("Test Book"),
+			searchName:   "calibre",
+			expectedMeta: nil,
+			shouldFind:   false,
 		},
 		{
-			name:       "Multiple metas - find specific one",
+			name: "Multiple metas - find specific one",
 			opfContent: createOPFWithMultipleMetas([]MetaData{
 				{Name: "meta1", Content: "value1"},
 				{Name: "meta2", Content: "value2"},
@@ -825,7 +825,7 @@ func TestGetItemById(t *testing.T) {
 			shouldFind:   false,
 		},
 		{
-			name:       "Multiple items - find specific one",
+			name: "Multiple items - find specific one",
 			opfContent: createOPFWithMultipleItems([]ItemData{
 				{ID: "item1", MediaType: "text/html", Href: "chapter1.html", Properties: ""},
 				{ID: "item2", MediaType: "text/html", Href: "chapter2.html", Properties: ""},
@@ -875,15 +875,15 @@ func TestGetItemById(t *testing.T) {
 func TestGetItemsByProperty(t *testing.T) {
 	opf := NewOpfReader()
 	tests := []struct {
-		name             string
-		opfContent       string
-		searchProperty   string
-		expectedItems    []Item
-		expectedCount    int
+		name           string
+		opfContent     string
+		searchProperty string
+		expectedItems  []Item
+		expectedCount  int
 	}{
 		{
-			name:           "Items with matching property",
-			opfContent:     createOPFWithMultipleItems([]ItemData{
+			name: "Items with matching property",
+			opfContent: createOPFWithMultipleItems([]ItemData{
 				{ID: "item1", MediaType: "text/html", Href: "chapter1.html", Properties: "svg"},
 				{ID: "item2", MediaType: "text/html", Href: "chapter2.html", Properties: ""},
 				{ID: "item3", MediaType: "image/svg+xml", Href: "image.svg", Properties: "svg"},
@@ -898,8 +898,8 @@ func TestGetItemsByProperty(t *testing.T) {
 			expectedCount:  1,
 		},
 		{
-			name:           "Property with space in properties",
-			opfContent:     createOPFWithMultipleItems([]ItemData{
+			name: "Property with space in properties",
+			opfContent: createOPFWithMultipleItems([]ItemData{
 				{ID: "item1", MediaType: "text/html", Href: "chapter1.html", Properties: "scripted remote-resources"},
 				{ID: "item2", MediaType: "text/html", Href: "chapter2.html", Properties: "remote-resources"},
 				{ID: "item3", MediaType: "text/html", Href: "chapter3.html", Properties: "scripted"},
@@ -908,8 +908,8 @@ func TestGetItemsByProperty(t *testing.T) {
 			expectedCount:  2,
 		},
 		{
-			name:           "No items with property",
-			opfContent:     createOPFWithMultipleItems([]ItemData{
+			name: "No items with property",
+			opfContent: createOPFWithMultipleItems([]ItemData{
 				{ID: "item1", MediaType: "text/html", Href: "chapter1.html", Properties: ""},
 				{ID: "item2", MediaType: "text/html", Href: "chapter2.html", Properties: ""},
 			}),
@@ -958,9 +958,9 @@ type MetaData struct {
 }
 
 type ItemData struct {
-	ID        string
-	MediaType string
-	Href      string
+	ID         string
+	MediaType  string
+	Href       string
 	Properties string
 }
 

@@ -16,14 +16,9 @@ type EpubReader struct {
 	opfReader OpfReader
 }
 
-// NewEpubReader creates a new EPUB reader instance using the default limits.
-func NewEpubReader() *EpubReader {
-	return NewEpubReaderWithConfig(model.DefaultConfig())
-}
-
-// NewEpubReaderWithConfig creates a new EPUB reader instance with the given
+// NewEpubReader creates a new EPUB reader instance with the given
 // safety limits.
-func NewEpubReaderWithConfig(cfg model.Config) *EpubReader {
+func NewEpubReader(cfg model.Config) *EpubReader {
 	return &EpubReader{
 		cfg:       cfg,
 		ocfReader: NewOcfReader(),

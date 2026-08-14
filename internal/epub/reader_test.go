@@ -13,7 +13,7 @@ import (
 
 func TestGetCover(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader()
+	reader := NewEpubReader(model.DefaultConfig())
 
 	tests := []struct {
 		name              string
@@ -207,7 +207,7 @@ func createOPFWithBothCovers(coverImageID, coverMetaID string) string {
 
 func TestEpubReaderSupportsPreservesPosition(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader()
+	reader := NewEpubReader(model.DefaultConfig())
 
 	validPath := filepath.Join(tmpDir, "valid.epub")
 	createValidTestEPUB(t, validPath, "My Test Book")
@@ -241,7 +241,7 @@ func TestEpubReaderSupportsPreservesPosition(t *testing.T) {
 
 func TestEpubReaderSupports(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader()
+	reader := NewEpubReader(model.DefaultConfig())
 
 	validPath := filepath.Join(tmpDir, "valid.epub")
 	createValidTestEPUB(t, validPath, "My Test Book")
@@ -274,7 +274,7 @@ func TestReadZipFileRejectsOversizedEntry(t *testing.T) {
 		t.Fatalf("got %d files, want 1", len(zr.File))
 	}
 
-	if _, err := NewEpubReader().readZipFile(zr.File[0]); err == nil {
+	if _, err := NewEpubReader(model.DefaultConfig()).readZipFile(zr.File[0]); err == nil {
 		t.Fatalf("readZipFile() expected error for oversized entry, got nil")
 	}
 }
@@ -301,7 +301,7 @@ func TestReadZipFile_ConfigOverrideRejectsEntry(t *testing.T) {
 
 	cfg := model.DefaultConfig()
 	cfg.MaxCoverSize = 1
-	reader := NewEpubReaderWithConfig(cfg)
+	reader := NewEpubReader(cfg)
 
 	if _, err := reader.readZipFile(zr.File[0]); err == nil {
 		t.Fatalf("readZipFile() expected error with reduced MaxCoverSize, got nil")
@@ -328,7 +328,7 @@ func TestReadZipFileReadsNormalEntry(t *testing.T) {
 		t.Fatalf("zip.NewReader() error: %v", err)
 	}
 
-	data, err := NewEpubReader().readZipFile(zr.File[0])
+	data, err := NewEpubReader(model.DefaultConfig()).readZipFile(zr.File[0])
 	if err != nil {
 		t.Fatalf("readZipFile() unexpected error: %v", err)
 	}

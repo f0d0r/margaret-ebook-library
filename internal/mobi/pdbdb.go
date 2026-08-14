@@ -12,7 +12,6 @@ import (
 
 const PDB_HEADER_SIZE = 78
 const PALM_EPOCH_OFFSET = 2082844800
-const MAX_RECORD_SIZE = 100 * 1024 * 1024 // 100 MB safety limit for any single record
 
 const (
 	AttrReadOnly     uint16 = 0x0002
@@ -55,8 +54,8 @@ type PdbRecord struct {
 	Length     uint32
 	Attributes RecordAttributes
 	UniqueId   uint32
-	Data    func() ([]byte, error)
-	DataSlice func(len uint32) ([]byte, error)
+	Data       func() ([]byte, error)
+	DataSlice  func(len uint32) ([]byte, error)
 }
 
 type PdbDb struct {
@@ -77,7 +76,7 @@ type PdbDb struct {
 	PdbRecords         []PdbRecord
 }
 
-func ReadPdbDb(b model.Blob) (*PdbDb, error) {
+func ReadPdbDb(b model.Blob, maxRecordSize int64) (*PdbDb, error) {
 	fileSize, err := b.Size()
 	if err != nil {
 		return nil, fmt.Errorf("get file size: %w", err)
@@ -109,7 +108,7 @@ func ReadPdbDb(b model.Blob) (*PdbDb, error) {
 	nextRecordListId := binary.BigEndian.Uint32(header[72:76])
 	numberOfRecords := binary.BigEndian.Uint16(header[76:78])
 
-	pdbRecords, err := parsePdbRecords(uint32(fileSize), numberOfRecords, b)
+	pdbRecords, err := parsePdbRecords(uint32(fileSize), numberOfRecords, b, maxRecordSize)
 	if err != nil {
 		return nil, fmt.Errorf("parse pdb records: %w", err)
 	}
@@ -176,7 +175,7 @@ func parseRecordInfo(raw []byte) (*PdbRecord, error) {
 	}, nil
 }
 
-func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b model.Blob) ([]PdbRecord, error) {
+func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b model.Blob, maxRecordSize int64) ([]PdbRecord, error) {
 	pdbRecords := make([]PdbRecord, numberOfRecords)
 
 	// The record info table is contiguous: one 8-byte entry per record,
@@ -204,10 +203,10 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b model.Blob) ([]P
 			length := prevRecord.Length
 
 			prevRecord.Data = func() ([]byte, error) {
-				return readRecordData(b, offset, length)
+				return readRecordData(b, offset, length, maxRecordSize)
 			}
 			prevRecord.DataSlice = func(len uint32) ([]byte, error) {
-				return readRecordData(b, offset, len)
+				return readRecordData(b, offset, len, maxRecordSize)
 			}
 		}
 		pdbRecords[i] = *record
@@ -223,18 +222,18 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b model.Blob) ([]P
 		lastOffset := lastRecord.Offset
 		lastLength := lastRecord.Length
 		lastRecord.Data = func() ([]byte, error) {
-			return readRecordData(b, lastOffset, lastLength)
+			return readRecordData(b, lastOffset, lastLength, maxRecordSize)
 		}
 		lastRecord.DataSlice = func(len uint32) ([]byte, error) {
-			return readRecordData(b, lastOffset, len)
+			return readRecordData(b, lastOffset, len, maxRecordSize)
 		}
 	}
 	return pdbRecords, nil
 }
 
-func readRecordData(b model.Blob, offset uint32, length uint32) ([]byte, error) {
-	if length > MAX_RECORD_SIZE {
-		return nil, fmt.Errorf("record length %d exceeds maximum %d", length, MAX_RECORD_SIZE)
+func readRecordData(b model.Blob, offset uint32, length uint32, maxRecordSize int64) ([]byte, error) {
+	if uint64(length) > uint64(maxRecordSize) {
+		return nil, fmt.Errorf("record length %d exceeds maximum %d", length, maxRecordSize)
 	}
 
 	data := make([]byte, length)

@@ -293,7 +293,7 @@ func TestReadPdbDbValidFile(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f))
+	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -315,7 +315,7 @@ func TestReadPdbDbValidFile(t *testing.T) {
 func TestReadPdbDbNonExistentFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	_, err := ReadPdbDb(model.NewPathBlob(filepath.Join(tmpDir, "missing.pdb")))
+	_, err := ReadPdbDb(model.NewPathBlob(filepath.Join(tmpDir, "missing.pdb")), model.DefaultConfig().MaxRecordSize)
 	if err == nil {
 		t.Errorf("ReadPdbDb() expected error for non-existent file, got nil")
 	}
@@ -337,7 +337,7 @@ func TestReadPdbDbTruncatedHeader(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	_, err = ReadPdbDb(blobForFile(t, f))
+	_, err = ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
 	if err == nil {
 		t.Errorf("ReadPdbDb() expected error for truncated header, got nil")
 	}
@@ -365,7 +365,7 @@ func TestReadPdbDbAttributes(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f))
+	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -402,7 +402,7 @@ func TestReadPdbDbDates(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f))
+	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -434,7 +434,7 @@ func TestLazyReadRecord(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)))
+	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)), model.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("readRecordData() error: %v", err)
 	}
@@ -466,7 +466,7 @@ func TestReadRecordData(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)))
+	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)), model.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("readRecordData() error: %v", err)
 	}
@@ -491,7 +491,7 @@ func TestPdbRecordGetData(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f))
+	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -534,7 +534,7 @@ func TestReadPdbDbFileVersion(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f))
+	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -561,7 +561,7 @@ func TestReadPdbDbMultipleRecords(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f))
+	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}

@@ -12,14 +12,9 @@ type MobiReader struct {
 	cfg model.Config
 }
 
-// NewMobiReader creates a new MOBI reader instance using the default limits.
-func NewMobiReader() *MobiReader {
-	return NewMobiReaderWithConfig(model.DefaultConfig())
-}
-
-// NewMobiReaderWithConfig creates a new MOBI reader instance with the given
+// NewMobiReader creates a new MOBI reader instance with the given
 // safety limits.
-func NewMobiReaderWithConfig(cfg model.Config) *MobiReader {
+func NewMobiReader(cfg model.Config) *MobiReader {
 	return &MobiReader{cfg: cfg}
 }
 
@@ -42,12 +37,20 @@ func (r *MobiReader) Supports(b model.Blob) bool {
 // ReadMetadata reads ebook metadata from a random-access source. It
 // never modifies the source's position and does not take ownership of it.
 func (r *MobiReader) ReadMetadata(b model.Blob) (*model.Metadata, error) {
-	pdbDb, err := ReadPdbDb(b)
+	maxRecordSize := r.cfg.MaxRecordSize
+	if maxRecordSize <= 0 {
+		maxRecordSize = model.DefaultConfig().MaxRecordSize
+	}
+	pdbDb, err := ReadPdbDb(b, maxRecordSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read PDB database: %w", err)
 	}
 
-	mobi, err := ReadMobi(pdbDb)
+	maxExthRecords := r.cfg.MaxExthRecords
+	if maxExthRecords <= 0 {
+		maxExthRecords = model.DefaultConfig().MaxExthRecords
+	}
+	mobi, err := ReadMobi(pdbDb, maxExthRecords)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read MOBI file: %w", err)
 	}
@@ -89,12 +92,16 @@ func (r *MobiReader) cover(b model.Blob, pdbDb *PdbDb, mobi *Mobi) *model.Resour
 		return nil
 	}
 	coverOffset := coverRecord.Offset
+	maxRecordSize := r.cfg.MaxRecordSize
+	if maxRecordSize <= 0 {
+		maxRecordSize = model.DefaultConfig().MaxRecordSize
+	}
 	return &model.Resource{
 		Name:      "cover." + media.Extension,
 		MediaType: media.Type,
 		Size:      int(coverLength),
 		Data: func() ([]byte, error) {
-			return readRecordData(b, coverOffset, coverLength)
+			return readRecordData(b, coverOffset, coverLength, maxRecordSize)
 		},
 	}
 }

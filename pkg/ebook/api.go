@@ -20,17 +20,17 @@ import (
 // reader implementation from the internal registry based on the file format.
 // The selected reader is then used to extract and return the metadata.
 //
-// An optional [model.Config] can be passed to override the library-wide
-// safety limits; when omitted (or nil), the [model.DefaultConfig] is used.
+// An optional [Option] can be passed to override the library-wide safety
+// limits; when omitted, the defaults of [model.DefaultConfig] are used.
 //
 // If no suitable reader is found for the format, it returns an error wrapping
 // [errs.ErrUnsupportedFormat].
-func ReadMetadata(path string, cfg ...*Config) (model.Metadata, error) {
+func ReadMetadata(path string, opts ...Option) (model.Metadata, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return model.Metadata{}, errs.ErrUnsupportedFormat
 	}
-	return readMetadata(model.NewPathBlob(path), path, cfg)
+	return readMetadata(model.NewPathBlob(path), path, opts)
 }
 
 // ReadMetadataFromBlob reads ebook metadata from a random-access source such
@@ -40,8 +40,8 @@ func ReadMetadata(path string, cfg ...*Config) (model.Metadata, error) {
 // based on the file format detected purely from the contents. The selected
 // reader is then used to extract and return the metadata.
 //
-// An optional [model.Config] can be passed to override the library-wide
-// safety limits; when omitted (or nil), the [model.DefaultConfig] is used.
+// An optional [Option] can be passed to override the library-wide safety
+// limits; when omitted, the defaults of [model.DefaultConfig] are used.
 //
 // The caller retains ownership of the blob and must keep it usable until the
 // returned metadata (including any cover data) has been consumed. The file
@@ -49,8 +49,8 @@ func ReadMetadata(path string, cfg ...*Config) (model.Metadata, error) {
 //
 // If no suitable reader is found for the format, it returns an error wrapping
 // [errs.ErrUnsupportedFormat].
-func ReadMetadataFromBlob(b model.Blob, cfg ...*Config) (model.Metadata, error) {
-	return readMetadata(b, "", cfg)
+func ReadMetadataFromBlob(b model.Blob, opts ...Option) (model.Metadata, error) {
+	return readMetadata(b, "", opts)
 }
 
 // ReadMetadataFromFile reads ebook metadata from an already-open file.
@@ -59,35 +59,22 @@ func ReadMetadataFromBlob(b model.Blob, cfg ...*Config) (model.Metadata, error) 
 // retains ownership of the file and must keep it open until the returned
 // metadata (including any cover data) has been consumed.
 //
-// An optional [model.Config] can be passed to override the library-wide
-// safety limits; when omitted (or nil), the [model.DefaultConfig] is used.
-func ReadMetadataFromFile(f *os.File, cfg ...*Config) (model.Metadata, error) {
+// An optional [Option] can be passed to override the library-wide safety
+// limits; when omitted, the defaults of [model.DefaultConfig] are used.
+func ReadMetadataFromFile(f *os.File, opts ...Option) (model.Metadata, error) {
 	b, err := model.NewFileBlob(f)
 	if err != nil {
 		return model.Metadata{}, fmt.Errorf("failed to inspect file %s: %w", f.Name(), err)
 	}
-	return readMetadata(b, f.Name(), cfg)
+	return readMetadata(b, f.Name(), opts)
 }
 
 // Config is a convenience alias for [model.Config], the library-wide safety
-// limits that can be passed to the metadata reading functions.
+// limits used internally to configure the format readers.
 type Config = model.Config
 
-// resolveConfig returns the effective configuration for the given optional
-// overrides, falling back to [model.DefaultConfig] when none is provided.
-func resolveConfig(cfg []*Config) model.Config {
-	if len(cfg) > 0 && cfg[0] != nil {
-		c := *cfg[0]
-		if c.MaxCoverSize <= 0 {
-			c.MaxCoverSize = model.DefaultConfig().MaxCoverSize
-		}
-		return c
-	}
-	return model.DefaultConfig()
-}
-
-func readMetadata(b model.Blob, name string, cfg []*Config) (model.Metadata, error) {
-	r := registry.New(resolveConfig(cfg))
+func readMetadata(b model.Blob, name string, opts []Option) (model.Metadata, error) {
+	r := registry.New(resolveOptions(opts))
 	reader, err := r.ReaderForBlob(b)
 	if err != nil {
 		return model.Metadata{}, fmt.Errorf("failed to get reader for %s: %w", name, err)

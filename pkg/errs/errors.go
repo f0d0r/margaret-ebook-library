@@ -10,5 +10,4 @@ var (
 	// ErrInvalidOffset is returned when the application encounters an invalid
 	// offset into the data.
 	ErrInvalidOffset = errors.New("invalid offset")
-	
 )

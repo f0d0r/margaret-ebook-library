@@ -81,14 +81,28 @@ if metadata.Cover != nil {
 
 ### Overriding the safety limits
 
-By default a config with a 50 MB cover-size limit is used. Pass a custom
-[`model.Config`](pkg/model/config.go) to change it:
+By default the library applies conservative safety limits (50 MB max cover
+size, 100 MB max single MOBI record, 256 max EXTH records). Override them
+with functional options:
 
 ```go
-cfg := model.DefaultConfig()
-cfg.MaxCoverSize = 10 * 1024 * 1024 // 10 MB
+metadata, err := ebook.ReadMetadata(
+    "books/my-book.epub",
+    ebook.WithMaxCoverSize(10*1024*1024), // 10 MB
+)
+if err != nil {
+    log.Fatal(err)
+}
+```
 
-metadata, err := ebook.ReadMetadata("books/my-book.epub", &cfg)
+MOBI-specific limits can be adjusted the same way:
+
+```go
+metadata, err := ebook.ReadMetadata(
+    "books/my-book.mobi",
+    ebook.WithMaxRecordSize(50*1024*1024), // max single PDB record
+    ebook.WithMaxExthRecords(512),         // max EXTH records to parse
+)
 if err != nil {
     log.Fatal(err)
 }

@@ -190,10 +190,7 @@ func TestReadMetadata_ConfigOverrideRejectsOversizedCover(t *testing.T) {
 	path := filepath.Join(tmpDir, "book.epub")
 	createTestEPUB(t, path, "My Test Book")
 
-	cfg := model.DefaultConfig()
-	cfg.MaxCoverSize = 16
-
-	m, err := ReadMetadata(path, &cfg)
+	m, err := ReadMetadata(path, WithMaxCoverSize(16))
 	if err != nil {
 		t.Fatalf("ReadMetadata() error: %v", err)
 	}
@@ -205,37 +202,40 @@ func TestReadMetadata_ConfigOverrideRejectsOversizedCover(t *testing.T) {
 	}
 }
 
-func TestReadMetadata_NilConfigUsesDefault(t *testing.T) {
+func TestReadMetadata_OptionsAccumulate(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createTestEPUB(t, path, "My Test Book")
 
-	m, err := ReadMetadata(path, nil)
+	m, err := ReadMetadata(path, WithMaxCoverSize(1<<30), WithMaxCoverSize(16))
 	if err != nil {
 		t.Fatalf("ReadMetadata() error: %v", err)
 	}
 	if m.Cover == nil {
 		t.Fatal("Cover = nil, want non-nil")
 	}
-	if _, err := m.Cover.Data(); err != nil {
-		t.Fatalf("Cover.Data() error: %v", err)
+	if _, err := m.Cover.Data(); err == nil {
+		t.Fatal("Cover.Data() expected error for oversized cover, got nil")
 	}
 }
 
-func TestReadMetadata_ZeroValueConfigUsesDefault(t *testing.T) {
+func TestReadMetadata_MobiRecordSizeOption(t *testing.T) {
 	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "book.epub")
-	createTestEPUB(t, path, "My Test Book")
+	path := filepath.Join(tmpDir, "book.mobi")
+	if err := os.WriteFile(path, buildMinimalMOBI(), 0644); err != nil {
+		t.Fatalf("failed to write MOBI file: %v", err)
+	}
 
-	m, err := ReadMetadata(path, &model.Config{})
+	if _, err := ReadMetadata(path, WithMaxRecordSize(10)); err == nil {
+		t.Fatal("ReadMetadata() expected error with reduced MaxRecordSize, got nil")
+	}
+
+	m, err := ReadMetadata(path, WithMaxRecordSize(100*1024*1024))
 	if err != nil {
-		t.Fatalf("ReadMetadata() error: %v", err)
+		t.Fatalf("ReadMetadata() with default MaxRecordSize error: %v", err)
 	}
-	if m.Cover == nil {
-		t.Fatal("Cover = nil, want non-nil")
-	}
-	if _, err := m.Cover.Data(); err != nil {
-		t.Fatalf("Cover.Data() error: %v", err)
+	if m.FileType != model.MOBI {
+		t.Errorf("FileType = %v, want %v", m.FileType, model.MOBI)
 	}
 }
 
@@ -244,10 +244,7 @@ func TestReadMetadataFromBlob_ConfigOverride(t *testing.T) {
 	path := filepath.Join(tmpDir, "book.epub")
 	createTestEPUB(t, path, "My Test Book")
 
-	cfg := model.DefaultConfig()
-	cfg.MaxCoverSize = 16
-
-	m, err := ReadMetadataFromBlob(model.NewPathBlob(path), &cfg)
+	m, err := ReadMetadataFromBlob(model.NewPathBlob(path), WithMaxCoverSize(16))
 	if err != nil {
 		t.Fatalf("ReadMetadataFromBlob() error: %v", err)
 	}

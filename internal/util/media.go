@@ -29,6 +29,6 @@ func DetectImageMedia(data []byte) *Media {
 	if strings.HasPrefix(headerStr, "<svg") || strings.Contains(headerStr, "<?xml") {
 		return &Media{Type: "image/svg+xml", Extension: "svg"}
 	}
-	
+
 	return nil
 }

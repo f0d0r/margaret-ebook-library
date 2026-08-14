@@ -18,8 +18,8 @@ func New(cfg ...model.Config) *Registry {
 	}
 	return &Registry{
 		readers: []Reader{
-			epub.NewEpubReaderWithConfig(c),
-			mobi.NewMobiReaderWithConfig(c),
+			epub.NewEpubReader(c),
+			mobi.NewMobiReader(c),
 		},
 	}
 }

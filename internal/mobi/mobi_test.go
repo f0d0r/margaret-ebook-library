@@ -3,6 +3,8 @@ package mobi
 import (
 	"encoding/binary"
 	"testing"
+
+	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
 func TestDecodeString(t *testing.T) {
@@ -348,7 +350,7 @@ func TestReadMobiValidHeader(t *testing.T) {
 		},
 	}
 
-	mobi, err := ReadMobi(pdbDb)
+	mobi, err := ReadMobi(pdbDb, model.DefaultConfig().MaxExthRecords)
 	if err != nil {
 		t.Fatalf("ReadMobi() error: %v", err)
 	}
@@ -369,7 +371,7 @@ func TestReadMobiNoRecords(t *testing.T) {
 		PdbRecords: []PdbRecord{},
 	}
 
-	_, err := ReadMobi(pdbDb)
+	_, err := ReadMobi(pdbDb, model.DefaultConfig().MaxExthRecords)
 	if err == nil {
 		t.Errorf("ReadMobi() expected error for empty record list, got nil")
 	}
@@ -382,7 +384,7 @@ func TestReadMobiTooShort(t *testing.T) {
 		},
 	}
 
-	_, err := ReadMobi(pdbDb)
+	_, err := ReadMobi(pdbDb, model.DefaultConfig().MaxExthRecords)
 	if err == nil {
 		t.Errorf("ReadMobi() expected error for short record, got nil")
 	}
@@ -410,7 +412,7 @@ func TestReadMobiExtendedHeader(t *testing.T) {
 		},
 	}
 
-	mobi, err := ReadMobi(pdbDb)
+	mobi, err := ReadMobi(pdbDb, model.DefaultConfig().MaxExthRecords)
 	if err != nil {
 		t.Fatalf("ReadMobi() error: %v", err)
 	}
@@ -443,7 +445,7 @@ func TestReadMobiFullHeader(t *testing.T) {
 		},
 	}
 
-	mobi, err := ReadMobi(pdbDb)
+	mobi, err := ReadMobi(pdbDb, model.DefaultConfig().MaxExthRecords)
 	if err != nil {
 		t.Fatalf("ReadMobi() error: %v", err)
 	}
@@ -466,7 +468,7 @@ func TestReadMobiDRMDefaults(t *testing.T) {
 		},
 	}
 
-	mobi, err := ReadMobi(pdbDb)
+	mobi, err := ReadMobi(pdbDb, model.DefaultConfig().MaxExthRecords)
 	if err != nil {
 		t.Fatalf("ReadMobi() error: %v", err)
 	}
@@ -501,7 +503,7 @@ func TestReadMobiCompressionTypes(t *testing.T) {
 				},
 			}
 
-			mobi, err := ReadMobi(pdbDb)
+			mobi, err := ReadMobi(pdbDb, model.DefaultConfig().MaxExthRecords)
 			if err != nil {
 				t.Fatalf("ReadMobi() error: %v", err)
 			}

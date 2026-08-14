@@ -34,7 +34,7 @@ func TestMobiReaderLoadRecord(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data, err := readRecordData(model.NewPathBlob(path), tt.offset, tt.length)
+			data, err := readRecordData(model.NewPathBlob(path), tt.offset, tt.length, model.DefaultConfig().MaxRecordSize)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("readRecordData() expected error, got nil")
@@ -53,7 +53,7 @@ func TestMobiReaderLoadRecord(t *testing.T) {
 
 func TestMobiReaderCover(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := &MobiReader{}
+	reader := NewMobiReader(model.DefaultConfig())
 
 	t.Run("CoverRecordIdx returns 0", func(t *testing.T) {
 		mobi := &Mobi{}
@@ -210,7 +210,7 @@ func TestMobiReaderCover(t *testing.T) {
 	t.Run("config override rejects cover", func(t *testing.T) {
 		cfg := model.DefaultConfig()
 		cfg.MaxCoverSize = 4
-		cfgReader := NewMobiReaderWithConfig(cfg)
+		cfgReader := NewMobiReader(cfg)
 
 		mobi := &Mobi{
 			EXTH: &Exth{
@@ -358,7 +358,7 @@ func TestMobiReaderCover(t *testing.T) {
 
 func TestMobiReaderSupportsPreservesPosition(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := &MobiReader{}
+	reader := NewMobiReader(model.DefaultConfig())
 
 	validPath := filepath.Join(tmpDir, "valid.mobi")
 	validData := make([]byte, 60)
@@ -396,7 +396,7 @@ func TestMobiReaderSupportsPreservesPosition(t *testing.T) {
 
 func TestMobiReaderSupports(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := &MobiReader{}
+	reader := NewMobiReader(model.DefaultConfig())
 
 	validPath := filepath.Join(tmpDir, "valid.mobi")
 	validData := make([]byte, 60)
