@@ -3,6 +3,7 @@ package mobi
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -321,6 +322,25 @@ func TestReadPdbDbNonExistentFile(t *testing.T) {
 	}
 }
 
+func TestReadPdbDbOversizedFile(t *testing.T) {
+	_, err := ReadPdbDb(oversizedBlob{}, model.DefaultConfig().MaxRecordSize)
+	if err == nil {
+		t.Fatal("ReadPdbDb() expected error for oversized file, got nil")
+	}
+}
+
+// oversizedBlob reports a size larger than math.MaxUint32 to exercise the
+// guard that rejects files whose size would truncate the uint32 conversion.
+type oversizedBlob struct{}
+
+func (oversizedBlob) ReadAt(p []byte, off int64) (int, error) {
+	return 0, io.EOF
+}
+
+func (oversizedBlob) Size() (int64, error) {
+	return int64(^uint32(0)) + 1, nil
+}
+
 func TestReadPdbDbTruncatedHeader(t *testing.T) {
 	tmpDir := t.TempDir()
 	testFile := filepath.Join(tmpDir, "truncated.pdb")
@@ -571,6 +591,31 @@ func TestReadPdbDbMultipleRecords(t *testing.T) {
 	}
 	if len(pdb.PdbRecords) != 3 {
 		t.Errorf("len(PdbRecords) = %d, want 3", len(pdb.PdbRecords))
+	}
+
+	for i, rec := range pdb.PdbRecords {
+		if rec.Data == nil {
+			t.Errorf("PdbRecords[%d].Data is nil, want non-nil", i)
+		}
+		if rec.DataSlice == nil {
+			t.Errorf("PdbRecords[%d].DataSlice is nil, want non-nil", i)
+		}
+	}
+
+	first, err := pdb.PdbRecords[0].Data()
+	if err != nil {
+		t.Fatalf("PdbRecords[0].Data() error: %v", err)
+	}
+	if !bytes.HasPrefix(first, []byte("Record data")) {
+		t.Errorf("PdbRecords[0].Data() = %q, want prefix %q", first, "Record data")
+	}
+
+	last, err := pdb.PdbRecords[2].Data()
+	if err != nil {
+		t.Fatalf("PdbRecords[2].Data() error: %v", err)
+	}
+	if !bytes.HasPrefix(last, []byte("Record data")) {
+		t.Errorf("PdbRecords[2].Data() = %q, want prefix %q", last, "Record data")
 	}
 }
 

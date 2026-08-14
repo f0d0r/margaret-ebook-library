@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"time"
 
 	"github.com/f0d0r/margaret-ebook-library/pkg/model"
@@ -80,6 +81,9 @@ func ReadPdbDb(b model.Blob, maxRecordSize int64) (*PdbDb, error) {
 	fileSize, err := b.Size()
 	if err != nil {
 		return nil, fmt.Errorf("get file size: %w", err)
+	}
+	if fileSize > math.MaxUint32 {
+		return nil, fmt.Errorf("file too large: %d", fileSize)
 	}
 
 	header, err := readFullAt(b, 0, PDB_HEADER_SIZE)
