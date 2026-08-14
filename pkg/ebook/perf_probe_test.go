@@ -22,7 +22,7 @@ func createBenchEPUB(b *testing.B, path string, nEntries int) {
     <dc:title>Bench Book</dc:title>
   </metadata>
   <manifest>
-    <item id="cover" href="cover.jpg" media-type="image/jpeg"/>
+    <item id="cover" href="cover.jpg" media-type="image/jpeg" properties="cover-image"/>
   </manifest>
   <spine>
     <itemref idref="cover"/>
@@ -64,6 +64,19 @@ func createBenchEPUB(b *testing.B, path string, nEntries int) {
 	}
 }
 
+// consumeCover reads the cover data of the metadata, if any, so that the
+// benchmarks exercise the lazy cover loading path (including the underlying
+// zip central-directory access) rather than skipping it.
+func consumeCover(b *testing.B, m model.Metadata) {
+	b.Helper()
+	if m.Cover == nil {
+		return
+	}
+	if _, err := m.Cover.Data(); err != nil {
+		b.Fatalf("cover data error: %v", err)
+	}
+}
+
 func BenchmarkReadMetadata(b *testing.B) {
 	tmpDir := b.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
@@ -72,9 +85,11 @@ func BenchmarkReadMetadata(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if _, err := ReadMetadata(path); err != nil {
+			m, err := ReadMetadata(path)
+			if err != nil {
 				b.Fatalf("ReadMetadata() error: %v", err)
 			}
+			consumeCover(b, m)
 		}
 	})
 }
@@ -91,9 +106,11 @@ func BenchmarkReadMetadataFromFile(b *testing.B) {
 			if err != nil {
 				b.Fatalf("failed to open file: %v", err)
 			}
-			if _, err := ReadMetadataFromFile(f); err != nil {
+			m, err := ReadMetadataFromFile(f)
+			if err != nil {
 				b.Fatalf("ReadMetadataFromFile() error: %v", err)
 			}
+			consumeCover(b, m)
 			_ = f.Close()
 		}
 	})
@@ -107,9 +124,11 @@ func BenchmarkReadMetadataFromPathBlob(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if _, err := ReadMetadataFromBlob(model.NewPathBlob(path)); err != nil {
+			m, err := ReadMetadataFromBlob(model.NewPathBlob(path))
+			if err != nil {
 				b.Fatalf("ReadMetadataFromBlob() error: %v", err)
 			}
+			consumeCover(b, m)
 		}
 	})
 }

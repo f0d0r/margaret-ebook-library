@@ -115,7 +115,7 @@ func (r *EpubReader) ReadMetadata(b model.Blob) (*model.Metadata, error) {
 		Authors:     r.opfReader.Authors(p),
 		Description: r.opfReader.Description(p),
 		Languages:   r.opfReader.Languages(p),
-		Cover:       r.cover(b, p),
+		Cover:       r.cover(zr, p),
 		FileType:    model.EPUB,
 	}, nil
 }
@@ -129,7 +129,16 @@ func openZip(b model.Blob) (*zip.Reader, error) {
 	return zip.NewReader(b, size)
 }
 
-func (r *EpubReader) cover(b model.Blob, p Package) *model.Resource {
+// maxCoverSize bounds how many bytes of a cover image we are willing to
+// decompress, protecting against zip-bomb style EPUBs. It mirrors the safety
+// limit used by the MOBI reader.
+const maxCoverSize = 50 * 1024 * 1024
+
+// cover resolves the cover image of an EPUB from the OPF package and returns
+// a Resource whose Data closure reads the cover lazily from the already-open
+// zip.Reader. The caller must keep the underlying blob usable until the Data
+// closure has been consumed.
+func (r *EpubReader) cover(zr *zip.Reader, p Package) *model.Resource {
 	coverItems := r.opfReader.ItemsByProperty(p, "cover-image")
 	var coverItem *Item
 	if len(coverItems) > 0 {
@@ -145,10 +154,6 @@ func (r *EpubReader) cover(b model.Blob, p Package) *model.Resource {
 	}
 	coverPath := p.ResolvePath(coverItem.Href)
 
-	zr, err := openZip(b)
-	if err != nil {
-		return nil
-	}
 	coverFile := findFileInZip(zr, coverPath)
 	if coverFile == nil {
 		return nil
@@ -159,27 +164,29 @@ func (r *EpubReader) cover(b model.Blob, p Package) *model.Resource {
 		MediaType: coverItem.MediaType,
 		Size:      int(coverFile.UncompressedSize64),
 		Data: func() ([]byte, error) {
-			return r.loadRecord(b, coverPath)
+			return readZipFile(coverFile)
 		},
 	}
 }
 
-func (r *EpubReader) loadRecord(b model.Blob, resourcePath string) ([]byte, error) {
-	zr, err := openZip(b)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open epub: %w", err)
+// readZipFile reads the full contents of a zip entry, refusing entries that
+// would decompress to more than maxCoverSize bytes.
+func readZipFile(f *zip.File) ([]byte, error) {
+	if f.UncompressedSize64 > maxCoverSize {
+		return nil, fmt.Errorf("resource %q too large (%d bytes)", f.Name, f.UncompressedSize64)
 	}
-
-	targetFile := findFileInZip(zr, resourcePath)
-	if targetFile == nil {
-		return nil, fmt.Errorf("resource %q not found", resourcePath)
-	}
-
-	rc, err := targetFile.Open()
+	rc, err := f.Open()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rc.Close() }()
 
-	return io.ReadAll(rc)
+	data, err := io.ReadAll(io.LimitReader(rc, maxCoverSize+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > maxCoverSize {
+		return nil, fmt.Errorf("resource %q too large", f.Name)
+	}
+	return data, nil
 }

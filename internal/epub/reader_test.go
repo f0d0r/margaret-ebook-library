@@ -2,6 +2,7 @@ package epub
 
 import (
 	"archive/zip"
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -122,7 +123,7 @@ func TestGetCover(t *testing.T) {
 			}
 
 			// Get the cover
-			cover := reader.cover(b, pkg)
+			cover := reader.cover(zr, pkg)
 
 			if tt.shouldFindCover {
 				if cover == nil {
@@ -247,5 +248,62 @@ func TestEpubReaderSupports(t *testing.T) {
 
 	if !reader.Supports(model.NewPathBlob(validPath)) {
 		t.Error("Supports() = false for valid EPUB path blob, want true")
+	}
+}
+
+func TestReadZipFileRejectsOversizedEntry(t *testing.T) {
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	fw, err := w.CreateHeader(&zip.FileHeader{Name: "cover.jpg", Method: zip.Deflate})
+	if err != nil {
+		t.Fatalf("CreateHeader() error: %v", err)
+	}
+	chunk := make([]byte, 1024*1024)
+	if _, err := fw.Write(bytes.Repeat(chunk, 51)); err != nil { // 51 MB of zeros
+		t.Fatalf("Write() error: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("zip.NewReader() error: %v", err)
+	}
+	if len(zr.File) != 1 {
+		t.Fatalf("got %d files, want 1", len(zr.File))
+	}
+
+	if _, err := readZipFile(zr.File[0]); err == nil {
+		t.Fatalf("readZipFile() expected error for oversized entry, got nil")
+	}
+}
+
+func TestReadZipFileReadsNormalEntry(t *testing.T) {
+	imgData := createTestImageData()
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	fw, err := w.CreateHeader(&zip.FileHeader{Name: "cover.jpg", Method: zip.Store})
+	if err != nil {
+		t.Fatalf("CreateHeader() error: %v", err)
+	}
+	if _, err := fw.Write(imgData); err != nil {
+		t.Fatalf("Write() error: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("zip.NewReader() error: %v", err)
+	}
+
+	data, err := readZipFile(zr.File[0])
+	if err != nil {
+		t.Fatalf("readZipFile() unexpected error: %v", err)
+	}
+	if string(data) != string(imgData) {
+		t.Errorf("readZipFile() returned %d bytes, want %d", len(data), len(imgData))
 	}
 }

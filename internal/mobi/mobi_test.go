@@ -364,6 +364,17 @@ func TestReadMobiValidHeader(t *testing.T) {
 	}
 }
 
+func TestReadMobiNoRecords(t *testing.T) {
+	pdbDb := &PdbDb{
+		PdbRecords: []PdbRecord{},
+	}
+
+	_, err := ReadMobi(pdbDb)
+	if err == nil {
+		t.Errorf("ReadMobi() expected error for empty record list, got nil")
+	}
+}
+
 func TestReadMobiTooShort(t *testing.T) {
 	pdbDb := &PdbDb{
 		PdbRecords: []PdbRecord{

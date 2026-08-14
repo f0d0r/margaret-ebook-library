@@ -89,6 +89,10 @@ type Mobi struct {
 }
 
 func ReadMobi(pdbDb *PdbDb) (*Mobi, error) {
+	if len(pdbDb.PdbRecords) == 0 {
+		return nil, fmt.Errorf("failed to read Record 0: no records in PDB database")
+	}
+
 	data, err := pdbDb.PdbRecords[0].Data()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Record 0: %w", err)

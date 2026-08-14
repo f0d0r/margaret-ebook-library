@@ -71,6 +71,18 @@ func TestReadMetadataFromFile_ValidEPUB(t *testing.T) {
 	}
 }
 
+func TestReadMetadata_ZeroRecordMOBI_NoPanic(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "empty.mobi")
+	if err := os.WriteFile(path, buildZeroRecordMOBI(), 0644); err != nil {
+		t.Fatalf("failed to write MOBI file: %v", err)
+	}
+
+	if _, err := ReadMetadata(path); err == nil {
+		t.Errorf("ReadMetadata() expected error for zero-record MOBI, got nil")
+	}
+}
+
 func TestReadMetadataFromFile_ValidMOBI(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.mobi")
@@ -305,4 +317,29 @@ func buildMinimalMOBI() []byte {
 	buf = append(buf, mobiData...)
 
 	return buf
+}
+
+// buildZeroRecordMOBI returns a PDB header that passes the "BOOKMOBI" magic
+// check but declares zero records. It exercises the guard that prevents an
+// index-out-of-range panic when no record data is present.
+func buildZeroRecordMOBI() []byte {
+	const pdbHeaderSize = 78
+
+	header := make([]byte, pdbHeaderSize)
+	copy(header[0:], "EmptyBook")
+	binary.BigEndian.PutUint16(header[32:34], 0x0000) // attributes
+	binary.BigEndian.PutUint16(header[34:36], 0x0000) // file version
+	binary.BigEndian.PutUint32(header[36:40], 0)      // created
+	binary.BigEndian.PutUint32(header[40:44], 0)      // updated
+	binary.BigEndian.PutUint32(header[44:48], 0)      // backup
+	binary.BigEndian.PutUint32(header[48:52], 0)      // modification number
+	binary.BigEndian.PutUint32(header[52:56], 0)      // app info offset
+	binary.BigEndian.PutUint32(header[56:60], 0)      // sort info offset
+	copy(header[60:64], "BOOK")                       // type
+	copy(header[64:68], "MOBI")                       // creator -> "BOOKMOBI" magic
+	binary.BigEndian.PutUint32(header[68:72], 0)      // unique id seed
+	binary.BigEndian.PutUint32(header[72:76], 0)      // next record list id
+	binary.BigEndian.PutUint16(header[76:78], 0)      // number of records: 0
+
+	return header
 }
