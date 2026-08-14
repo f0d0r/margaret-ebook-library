@@ -5,13 +5,14 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"os"
+	"math"
 	"time"
+
+	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
 const PDB_HEADER_SIZE = 78
 const PALM_EPOCH_OFFSET = 2082844800
-const MAX_RECORD_SIZE = 100 * 1024 * 1024 // 100 MB safety limit for any single record
 
 const (
 	AttrReadOnly     uint16 = 0x0002
@@ -54,8 +55,8 @@ type PdbRecord struct {
 	Length     uint32
 	Attributes RecordAttributes
 	UniqueId   uint32
-	Data    func() ([]byte, error)
-	DataSlice func(len uint32) ([]byte, error)
+	Data       func() ([]byte, error)
+	DataSlice  func(len uint32) ([]byte, error)
 }
 
 type PdbDb struct {
@@ -76,22 +77,18 @@ type PdbDb struct {
 	PdbRecords         []PdbRecord
 }
 
-func ReadPdbDb(f *os.File) (*PdbDb, error) {
-	fileSize, err := f.Seek(0, io.SeekEnd)
+func ReadPdbDb(b model.Blob, maxRecordSize int64) (*PdbDb, error) {
+	fileSize, err := b.Size()
 	if err != nil {
-		return nil, fmt.Errorf("seek to end of file: %w", err)
+		return nil, fmt.Errorf("get file size: %w", err)
 	}
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return nil, fmt.Errorf("seek to start of file: %w", err)
+	if fileSize > math.MaxUint32 {
+		return nil, fmt.Errorf("file too large: %d", fileSize)
 	}
 
-	header := make([]byte, PDB_HEADER_SIZE)
-	n, err := io.ReadFull(f, header)
+	header, err := readFullAt(b, 0, PDB_HEADER_SIZE)
 	if err != nil {
 		return nil, fmt.Errorf("read pdb header: %w", err)
-	}
-	if n != PDB_HEADER_SIZE {
-		return nil, fmt.Errorf("read pdb header: expected %d bytes, got %d", PDB_HEADER_SIZE, n)
 	}
 
 	nameBytes := header[0:32]
@@ -115,7 +112,7 @@ func ReadPdbDb(f *os.File) (*PdbDb, error) {
 	nextRecordListId := binary.BigEndian.Uint32(header[72:76])
 	numberOfRecords := binary.BigEndian.Uint16(header[76:78])
 
-	pdbRecords, err := parsePdbRecords(uint32(fileSize), numberOfRecords, f)
+	pdbRecords, err := parsePdbRecords(uint32(fileSize), numberOfRecords, b, maxRecordSize)
 	if err != nil {
 		return nil, fmt.Errorf("parse pdb records: %w", err)
 	}
@@ -182,18 +179,21 @@ func parseRecordInfo(raw []byte) (*PdbRecord, error) {
 	}, nil
 }
 
-func parsePdbRecords(fileSize uint32, numberOfRecords uint16, f *os.File) ([]PdbRecord, error) {
+func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b model.Blob, maxRecordSize int64) ([]PdbRecord, error) {
 	pdbRecords := make([]PdbRecord, numberOfRecords)
+
+	// The record info table is contiguous: one 8-byte entry per record,
+	// starting right after the PDB header. Read it in a single random-access
+	// read to avoid one syscall (and, for path-based blobs, one file open)
+	// per record.
+	tableLen := int(numberOfRecords) * 8
+	table, err := readFullAt(b, int64(PDB_HEADER_SIZE), tableLen)
+	if err != nil {
+		return nil, fmt.Errorf("read record info: %w", err)
+	}
+
 	for i := 0; i < int(numberOfRecords); i++ {
-		recordInfo := make([]byte, 8)
-		n, err := io.ReadFull(f, recordInfo)
-		if err != nil {
-			return nil, fmt.Errorf("read record info: %w", err)
-		}
-		if n != 8 {
-			return nil, fmt.Errorf("expected 8 bytes, got %d", n)
-		}
-		record, err := parseRecordInfo(recordInfo)
+		record, err := parseRecordInfo(table[i*8 : i*8+8])
 		if err != nil {
 			return nil, fmt.Errorf("parse record info: %w", err)
 		}
@@ -207,10 +207,10 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, f *os.File) ([]Pdb
 			length := prevRecord.Length
 
 			prevRecord.Data = func() ([]byte, error) {
-				return readRecordData(f, offset, length)
+				return readRecordData(b, offset, length, maxRecordSize)
 			}
 			prevRecord.DataSlice = func(len uint32) ([]byte, error) {
-				return readRecordData(f, offset, len)
+				return readRecordData(b, offset, len, maxRecordSize)
 			}
 		}
 		pdbRecords[i] = *record
@@ -226,39 +226,41 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, f *os.File) ([]Pdb
 		lastOffset := lastRecord.Offset
 		lastLength := lastRecord.Length
 		lastRecord.Data = func() ([]byte, error) {
-			return readRecordData(f, lastOffset, lastLength)
+			return readRecordData(b, lastOffset, lastLength, maxRecordSize)
 		}
 		lastRecord.DataSlice = func(len uint32) ([]byte, error) {
-			return readRecordData(f, lastOffset, len)
+			return readRecordData(b, lastOffset, len, maxRecordSize)
 		}
 	}
 	return pdbRecords, nil
 }
 
-func readRecordData(f *os.File, offset uint32, length uint32) ([]byte, error) {
-	if length > MAX_RECORD_SIZE {
-		return nil, fmt.Errorf("record length %d exceeds maximum %d", length, MAX_RECORD_SIZE)
-	}
-
-	currentMetaOffset, err := f.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current position: %w", err)
-	}
-
-	defer func() { _, _ = f.Seek(currentMetaOffset, io.SeekStart) }()
-	
-	if _, err = f.Seek(int64(offset), io.SeekStart); err != nil {
-		return nil, fmt.Errorf("read pdb record: %w", err)
+func readRecordData(b model.Blob, offset uint32, length uint32, maxRecordSize int64) ([]byte, error) {
+	if uint64(length) > uint64(maxRecordSize) {
+		return nil, fmt.Errorf("record length %d exceeds maximum %d", length, maxRecordSize)
 	}
 
 	data := make([]byte, length)
-	n, err := io.ReadFull(f, data)
-	if err != nil {
+	n, err := b.ReadAt(data, int64(offset))
+	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("read pdb record: %w", err)
 	}
 	if n != int(length) {
 		return nil, fmt.Errorf("read pdb record: expected %d bytes, got %d", length, n)
 	}
 
+	return data, nil
+}
+
+// readFullAt reads exactly length bytes at offset using random access.
+func readFullAt(r io.ReaderAt, offset int64, length int) ([]byte, error) {
+	data := make([]byte, length)
+	n, err := r.ReadAt(data, offset)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+	if n != length {
+		return nil, io.ErrUnexpectedEOF
+	}
 	return data, nil
 }

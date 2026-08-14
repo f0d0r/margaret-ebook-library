@@ -7,8 +7,6 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
 )
 
-const MAX_EXTH_RECORDS = 256
-
 const (
 	AUTHOR           = 100
 	DESCRIPTION      = 103
@@ -27,7 +25,7 @@ type Exth struct {
 	textEncoding TextEncodingType
 }
 
-func ReadExth(offset uint32, data []byte, textEncoding TextEncodingType) (*Exth, error) {
+func ReadExth(offset uint32, data []byte, textEncoding TextEncodingType, maxExthRecords int) (*Exth, error) {
 	if offset+12 > uint32(len(data)) {
 		return nil, errs.ErrInvalidOffset
 	}
@@ -41,7 +39,7 @@ func ReadExth(offset uint32, data []byte, textEncoding TextEncodingType) (*Exth,
 
 	exth.Records = make(map[uint32][][]byte)
 	offset += 12
-	for i := 0; i < int(exth.RecordCount) && i < MAX_EXTH_RECORDS; i++ {
+	for i := 0; i < int(exth.RecordCount) && i < maxExthRecords; i++ {
 		if offset+8 > uint32(len(data)) {
 			return nil, fmt.Errorf("EXTH record %d header exceeds data bounds", i)
 		}

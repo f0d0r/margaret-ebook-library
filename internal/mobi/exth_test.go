@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
+	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
 func TestReadExth(t *testing.T) {
@@ -61,7 +62,7 @@ func TestReadExth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ReadExth(tt.offset, tt.data, tt.textEncoding)
+			got, err := ReadExth(tt.offset, tt.data, tt.textEncoding, model.DefaultConfig().MaxExthRecords)
 
 			if tt.wantErr != nil {
 				if err != tt.wantErr {
@@ -126,7 +127,7 @@ func TestExthUpdatedTitle(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Identifier:  "EXTH",
+				Identifier:   "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -149,7 +150,7 @@ func TestExthCP1252Encoding(t *testing.T) {
 	// Test CP1252 encoding with special character
 	// 0x92 in CP1252 is the right single quotation mark (')
 	exth := &Exth{
-		Identifier:  "EXTH",
+		Identifier:   "EXTH",
 		HeaderLength: 12,
 		RecordCount:  1,
 		Records: map[uint32][][]byte{
@@ -213,7 +214,7 @@ func TestExthDescription(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Identifier:  "EXTH",
+				Identifier:   "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -262,7 +263,7 @@ func TestExthAuthors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Identifier:  "EXTH",
+				Identifier:   "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -295,7 +296,7 @@ func TestExthRecordMap(t *testing.T) {
 		102: "value3",
 	})
 
-	exth, err := ReadExth(0, data, UTF8)
+	exth, err := ReadExth(0, data, UTF8, model.DefaultConfig().MaxExthRecords)
 	if err != nil {
 		t.Fatalf("ReadExth() error: %v", err)
 	}
@@ -364,7 +365,7 @@ func TestExthLanguage(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Identifier:  "EXTH",
+				Identifier:   "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      make(map[uint32][][]byte),
@@ -423,7 +424,7 @@ func TestExthCoverOffset(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Identifier:  "EXTH",
+				Identifier:   "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      tt.records,
@@ -478,7 +479,7 @@ func TestExthThumbnailOffset(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exth := &Exth{
-				Identifier:  "EXTH",
+				Identifier:   "EXTH",
 				HeaderLength: 12,
 				RecordCount:  uint32(len(tt.records)),
 				Records:      tt.records,

@@ -88,13 +88,17 @@ type Mobi struct {
 	recordCount uint16 // Number of records in the MOBI file
 }
 
-func ReadMobi(pdbDb *PdbDb) (*Mobi, error) {
+func ReadMobi(pdbDb *PdbDb, maxExthRecords int) (*Mobi, error) {
+	if len(pdbDb.PdbRecords) == 0 {
+		return nil, fmt.Errorf("failed to read Record 0: no records in PDB database")
+	}
+
 	data, err := pdbDb.PdbRecords[0].Data()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read Record 0: %w", err)
 	}
 
-	mobi, err := readMobiHeader(data)
+	mobi, err := readMobiHeader(data, maxExthRecords)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read MOBI header: %w", err)
 	}
@@ -111,7 +115,7 @@ func ReadMobi(pdbDb *PdbDb) (*Mobi, error) {
 				if err != nil {
 					return nil, fmt.Errorf("failed to read KF8 data: %w", err)
 				}
-				kf8, err := readMobiHeader(kf8Data)
+				kf8, err := readMobiHeader(kf8Data, maxExthRecords)
 				if err != nil {
 					return nil, fmt.Errorf("failed to read KF8 header: %w", err)
 				}
@@ -125,7 +129,7 @@ func ReadMobi(pdbDb *PdbDb) (*Mobi, error) {
 	return mobi, nil
 }
 
-func readMobiHeader(data []byte) (*Mobi, error) {
+func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
 	if len(data) < 96 {
 		return nil, fmt.Errorf("record 0 is too short")
 	}
@@ -203,7 +207,7 @@ func readMobiHeader(data []byte) (*Mobi, error) {
 
 	if mobi.HasEXTH() {
 		exthOffset := mobi.HeaderLength + PALM_DOC_HEADER_SIZE
-		exth, err := ReadExth(exthOffset, data, mobi.TextEncoding)
+		exth, err := ReadExth(exthOffset, data, mobi.TextEncoding, maxExthRecords)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read EXTH record: %w", err)
 		}
