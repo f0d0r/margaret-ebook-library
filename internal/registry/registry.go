@@ -11,11 +11,15 @@ type Registry struct {
 	readers []Reader
 }
 
-func New() *Registry {
+func New(cfg ...model.Config) *Registry {
+	c := model.DefaultConfig()
+	if len(cfg) > 0 {
+		c = cfg[0]
+	}
 	return &Registry{
 		readers: []Reader{
-			&epub.EpubReader{},
-			&mobi.MobiReader{},
+			epub.NewEpubReaderWithConfig(c),
+			mobi.NewMobiReaderWithConfig(c),
 		},
 	}
 }

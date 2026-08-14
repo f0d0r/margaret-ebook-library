@@ -197,11 +197,44 @@ func TestMobiReaderCover(t *testing.T) {
 				{},
 				{
 					Offset: 0,
-					Length: MAX_EXPECTED_COVER_SIZE + 1,
+					Length: 50*1024*1024 + 1,
 				},
 			},
 		}
 		result := reader.cover(model.NewPathBlob("/fake/path"), pdbDb, mobi)
+		if result != nil {
+			t.Errorf("cover() = %v, want nil", result)
+		}
+	})
+
+	t.Run("config override rejects cover", func(t *testing.T) {
+		cfg := model.DefaultConfig()
+		cfg.MaxCoverSize = 4
+		cfgReader := NewMobiReaderWithConfig(cfg)
+
+		mobi := &Mobi{
+			EXTH: &Exth{
+				Records: map[uint32][][]byte{
+					COVER_OFFSET: {func() []byte {
+						b := make([]byte, 4)
+						binary.BigEndian.PutUint32(b, 0)
+						return b
+					}()},
+				},
+			},
+			FirstImageRecord: 1,
+			recordCount:      10,
+		}
+		pdbDb := &PdbDb{
+			PdbRecords: []PdbRecord{
+				{},
+				{
+					Offset: 0,
+					Length: 16,
+				},
+			},
+		}
+		result := cfgReader.cover(model.NewPathBlob("/fake/path"), pdbDb, mobi)
 		if result != nil {
 			t.Errorf("cover() = %v, want nil", result)
 		}

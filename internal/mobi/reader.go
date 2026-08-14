@@ -8,9 +8,20 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
-const MAX_EXPECTED_COVER_SIZE = 50 * 1024 * 1024 // 50 MB safety limit for cover image
+type MobiReader struct {
+	cfg model.Config
+}
 
-type MobiReader struct{}
+// NewMobiReader creates a new MOBI reader instance using the default limits.
+func NewMobiReader() *MobiReader {
+	return NewMobiReaderWithConfig(model.DefaultConfig())
+}
+
+// NewMobiReaderWithConfig creates a new MOBI reader instance with the given
+// safety limits.
+func NewMobiReaderWithConfig(cfg model.Config) *MobiReader {
+	return &MobiReader{cfg: cfg}
+}
 
 func (r *MobiReader) Supports(b model.Blob) bool {
 	// The "BOOKMOBI" identifier starts at byte 60 and ends at byte 67.
@@ -62,7 +73,11 @@ func (r *MobiReader) cover(b model.Blob, pdbDb *PdbDb, mobi *Mobi) *model.Resour
 	}
 	coverRecord := pdbDb.PdbRecords[coverIdx]
 	coverLength := coverRecord.Length
-	if coverLength == 0 || coverLength > MAX_EXPECTED_COVER_SIZE {
+	maxCoverSize := r.cfg.MaxCoverSize
+	if maxCoverSize <= 0 {
+		maxCoverSize = model.DefaultConfig().MaxCoverSize
+	}
+	if coverLength == 0 || uint64(coverLength) > uint64(maxCoverSize) {
 		return nil
 	}
 	magicData, err := coverRecord.DataSlice(8)

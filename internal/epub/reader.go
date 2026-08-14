@@ -11,13 +11,21 @@ import (
 )
 
 type EpubReader struct {
+	cfg       model.Config
 	ocfReader OcfReader
 	opfReader OpfReader
 }
 
-// NewEpubReader creates a new EPUB reader instance
+// NewEpubReader creates a new EPUB reader instance using the default limits.
 func NewEpubReader() *EpubReader {
+	return NewEpubReaderWithConfig(model.DefaultConfig())
+}
+
+// NewEpubReaderWithConfig creates a new EPUB reader instance with the given
+// safety limits.
+func NewEpubReaderWithConfig(cfg model.Config) *EpubReader {
 	return &EpubReader{
+		cfg:       cfg,
 		ocfReader: NewOcfReader(),
 		opfReader: NewOpfReader(),
 	}
@@ -129,11 +137,6 @@ func openZip(b model.Blob) (*zip.Reader, error) {
 	return zip.NewReader(b, size)
 }
 
-// maxCoverSize bounds how many bytes of a cover image we are willing to
-// decompress, protecting against zip-bomb style EPUBs. It mirrors the safety
-// limit used by the MOBI reader.
-const maxCoverSize = 50 * 1024 * 1024
-
 // cover resolves the cover image of an EPUB from the OPF package and returns
 // a Resource whose Data closure reads the cover lazily from the already-open
 // zip.Reader. The caller must keep the underlying blob usable until the Data
@@ -164,15 +167,19 @@ func (r *EpubReader) cover(zr *zip.Reader, p Package) *model.Resource {
 		MediaType: coverItem.MediaType,
 		Size:      int(coverFile.UncompressedSize64),
 		Data: func() ([]byte, error) {
-			return readZipFile(coverFile)
+			return r.readZipFile(coverFile)
 		},
 	}
 }
 
 // readZipFile reads the full contents of a zip entry, refusing entries that
-// would decompress to more than maxCoverSize bytes.
-func readZipFile(f *zip.File) ([]byte, error) {
-	if f.UncompressedSize64 > maxCoverSize {
+// would decompress to more than the configured max cover size.
+func (r *EpubReader) readZipFile(f *zip.File) ([]byte, error) {
+	maxSize := r.cfg.MaxCoverSize
+	if maxSize <= 0 {
+		maxSize = model.DefaultConfig().MaxCoverSize
+	}
+	if f.UncompressedSize64 > uint64(maxSize) {
 		return nil, fmt.Errorf("resource %q too large (%d bytes)", f.Name, f.UncompressedSize64)
 	}
 	rc, err := f.Open()
@@ -181,11 +188,11 @@ func readZipFile(f *zip.File) ([]byte, error) {
 	}
 	defer func() { _ = rc.Close() }()
 
-	data, err := io.ReadAll(io.LimitReader(rc, maxCoverSize+1))
+	data, err := io.ReadAll(io.LimitReader(rc, maxSize+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > maxCoverSize {
+	if int64(len(data)) > maxSize {
 		return nil, fmt.Errorf("resource %q too large", f.Name)
 	}
 	return data, nil

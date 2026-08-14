@@ -274,8 +274,37 @@ func TestReadZipFileRejectsOversizedEntry(t *testing.T) {
 		t.Fatalf("got %d files, want 1", len(zr.File))
 	}
 
-	if _, err := readZipFile(zr.File[0]); err == nil {
+	if _, err := NewEpubReader().readZipFile(zr.File[0]); err == nil {
 		t.Fatalf("readZipFile() expected error for oversized entry, got nil")
+	}
+}
+
+func TestReadZipFile_ConfigOverrideRejectsEntry(t *testing.T) {
+	imgData := createTestImageData()
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	fw, err := w.CreateHeader(&zip.FileHeader{Name: "cover.jpg", Method: zip.Store})
+	if err != nil {
+		t.Fatalf("CreateHeader() error: %v", err)
+	}
+	if _, err := fw.Write(imgData); err != nil {
+		t.Fatalf("Write() error: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close() error: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("zip.NewReader() error: %v", err)
+	}
+
+	cfg := model.DefaultConfig()
+	cfg.MaxCoverSize = 1
+	reader := NewEpubReaderWithConfig(cfg)
+
+	if _, err := reader.readZipFile(zr.File[0]); err == nil {
+		t.Fatalf("readZipFile() expected error with reduced MaxCoverSize, got nil")
 	}
 }
 
@@ -299,7 +328,7 @@ func TestReadZipFileReadsNormalEntry(t *testing.T) {
 		t.Fatalf("zip.NewReader() error: %v", err)
 	}
 
-	data, err := readZipFile(zr.File[0])
+	data, err := NewEpubReader().readZipFile(zr.File[0])
 	if err != nil {
 		t.Fatalf("readZipFile() unexpected error: %v", err)
 	}

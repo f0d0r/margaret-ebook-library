@@ -168,6 +168,97 @@ func TestReadMetadataFromBlob_UnsupportedFormat(t *testing.T) {
 	}
 }
 
+func TestReadMetadata_DefaultConfigReadsCover(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "book.epub")
+	createTestEPUB(t, path, "My Test Book")
+
+	m, err := ReadMetadata(path)
+	if err != nil {
+		t.Fatalf("ReadMetadata() error: %v", err)
+	}
+	if m.Cover == nil {
+		t.Fatal("Cover = nil, want non-nil")
+	}
+	if _, err := m.Cover.Data(); err != nil {
+		t.Fatalf("Cover.Data() error: %v", err)
+	}
+}
+
+func TestReadMetadata_ConfigOverrideRejectsOversizedCover(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "book.epub")
+	createTestEPUB(t, path, "My Test Book")
+
+	cfg := model.DefaultConfig()
+	cfg.MaxCoverSize = 16
+
+	m, err := ReadMetadata(path, &cfg)
+	if err != nil {
+		t.Fatalf("ReadMetadata() error: %v", err)
+	}
+	if m.Cover == nil {
+		t.Fatal("Cover = nil, want non-nil")
+	}
+	if _, err := m.Cover.Data(); err == nil {
+		t.Fatal("Cover.Data() expected error for oversized cover, got nil")
+	}
+}
+
+func TestReadMetadata_NilConfigUsesDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "book.epub")
+	createTestEPUB(t, path, "My Test Book")
+
+	m, err := ReadMetadata(path, nil)
+	if err != nil {
+		t.Fatalf("ReadMetadata() error: %v", err)
+	}
+	if m.Cover == nil {
+		t.Fatal("Cover = nil, want non-nil")
+	}
+	if _, err := m.Cover.Data(); err != nil {
+		t.Fatalf("Cover.Data() error: %v", err)
+	}
+}
+
+func TestReadMetadata_ZeroValueConfigUsesDefault(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "book.epub")
+	createTestEPUB(t, path, "My Test Book")
+
+	m, err := ReadMetadata(path, &model.Config{})
+	if err != nil {
+		t.Fatalf("ReadMetadata() error: %v", err)
+	}
+	if m.Cover == nil {
+		t.Fatal("Cover = nil, want non-nil")
+	}
+	if _, err := m.Cover.Data(); err != nil {
+		t.Fatalf("Cover.Data() error: %v", err)
+	}
+}
+
+func TestReadMetadataFromBlob_ConfigOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "book.epub")
+	createTestEPUB(t, path, "My Test Book")
+
+	cfg := model.DefaultConfig()
+	cfg.MaxCoverSize = 16
+
+	m, err := ReadMetadataFromBlob(model.NewPathBlob(path), &cfg)
+	if err != nil {
+		t.Fatalf("ReadMetadataFromBlob() error: %v", err)
+	}
+	if m.Cover == nil {
+		t.Fatal("Cover = nil, want non-nil")
+	}
+	if _, err := m.Cover.Data(); err == nil {
+		t.Fatal("Cover.Data() expected error for oversized cover, got nil")
+	}
+}
+
 func TestCalculateFileHashFromBlob(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.bin")
@@ -229,6 +320,9 @@ func createTestEPUB(t *testing.T, path, title string) {
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
     <dc:title>` + title + `</dc:title>
   </metadata>
+  <manifest>
+    <item id="cover" href="cover.jpg" media-type="image/jpeg" properties="cover-image"/>
+  </manifest>
 </package>`
 
 	container := `<?xml version="1.0" encoding="UTF-8"?>
@@ -263,6 +357,7 @@ func createTestEPUB(t *testing.T, path, title string) {
 		{name: "mimetype", content: "application/epub+zip", method: zip.Store},
 		{name: "META-INF/container.xml", content: container, method: zip.Deflate},
 		{name: "OEBPS/content.opf", content: opf, method: zip.Deflate},
+		{name: "OEBPS/cover.jpg", content: string(createTestCoverImage()), method: zip.Store},
 	}
 	for _, file := range files {
 		fw, err := w.CreateHeader(&zip.FileHeader{Name: file.name, Method: file.method})
@@ -273,6 +368,15 @@ func createTestEPUB(t *testing.T, path, title string) {
 			t.Fatalf("failed to write zip entry: %v", err)
 		}
 	}
+}
+
+// createTestCoverImage returns a small JPEG-ish blob used as a cover image.
+func createTestCoverImage() []byte {
+	img := make([]byte, 128)
+	for i := range img {
+		img[i] = byte(i)
+	}
+	return img
 }
 
 // buildMinimalMOBI returns the bytes of a minimal but parseable MOBI (PDB) file.
