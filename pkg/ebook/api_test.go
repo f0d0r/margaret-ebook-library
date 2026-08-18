@@ -185,6 +185,37 @@ func TestReadMetadata_DefaultConfigReadsCover(t *testing.T) {
 	}
 }
 
+func TestReadMetadata_CoverOpenStreams(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "book.epub")
+	createTestEPUB(t, path, "My Test Book")
+
+	m, err := ReadMetadata(path)
+	if err != nil {
+		t.Fatalf("ReadMetadata() error: %v", err)
+	}
+	if m.Cover == nil {
+		t.Fatal("Cover = nil, want non-nil")
+	}
+	if m.Cover.Open == nil {
+		t.Fatal("Cover.Open = nil, want non-nil")
+	}
+
+	rc, err := m.Cover.Open()
+	if err != nil {
+		t.Fatalf("Cover.Open() error: %v", err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("ReadAll() error: %v", err)
+	}
+	if int64(len(data)) != m.Cover.Size {
+		t.Errorf("streamed %d bytes, want Cover.Size %d", len(data), m.Cover.Size)
+	}
+}
+
 func TestReadMetadata_ConfigOverrideRejectsOversizedCover(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
