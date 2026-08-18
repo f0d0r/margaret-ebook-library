@@ -71,12 +71,34 @@ fmt.Println("Description:", metadata.Description)
 fmt.Println("FileType:", metadata.FileType)
 
 if metadata.Cover != nil {
-    data, err := metadata.Cover.Data()
+    rc, err := metadata.Cover.Open()
     if err != nil {
         log.Fatal(err)
     }
-    fmt.Printf("Cover %q (%s): %d bytes\n", metadata.Cover.Name, metadata.Cover.MediaType, len(data))
+    defer rc.Close()
+
+    // Stream the cover, e.g. write it to a file:
+    f, err := os.Create(metadata.Cover.Name)
+    if err != nil {
+        log.Fatal(err)
+    }
+    if _, err := io.Copy(f, rc); err != nil {
+        log.Fatal(err)
+    }
+    if err := f.Close(); err != nil {
+        log.Fatal(err)
+    }
 }
+```
+
+To load the whole cover into memory instead, use the convenience method:
+
+```go
+data, err := metadata.Cover.Data() // reads the whole cover into a []byte
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf("Cover %q (%s): %d bytes\n", metadata.Cover.Name, metadata.Cover.MediaType, len(data))
 ```
 
 ### Overriding the safety limits

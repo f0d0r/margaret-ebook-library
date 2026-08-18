@@ -240,7 +240,7 @@ func TestMobiReaderCover(t *testing.T) {
 		}
 	})
 
-	t.Run("valid JPEG cover returns Resource with lazy Data", func(t *testing.T) {
+	t.Run("valid JPEG cover returns Resource with lazy Open", func(t *testing.T) {
 		imgData := []byte{
 			0xFF, 0xD8, 0xFF, 0xE0, // JPEG magic + APP0 marker
 			0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, // rest of JPEG header
@@ -289,19 +289,24 @@ func TestMobiReaderCover(t *testing.T) {
 		if result.MediaType != "image/jpeg" {
 			t.Errorf("MediaType = %q, want %q", result.MediaType, "image/jpeg")
 		}
-		if result.Size != len(imgData) {
+		if result.Size != int64(len(imgData)) {
 			t.Errorf("Size = %d, want %d", result.Size, len(imgData))
 		}
-		if result.Data == nil {
-			t.Fatal("Data function is nil")
+		if result.Open == nil {
+			t.Fatal("Open function is nil")
 		}
 
-		loaded, err := result.Data()
+		rc, err := result.Open()
 		if err != nil {
-			t.Fatalf("Data() error: %v", err)
+			t.Fatalf("Open() error: %v", err)
+		}
+		defer func() { _ = rc.Close() }()
+		loaded, err := io.ReadAll(rc)
+		if err != nil {
+			t.Fatalf("ReadAll() error: %v", err)
 		}
 		if string(loaded) != string(imgData) {
-			t.Errorf("Data() = %x, want %x", loaded, imgData)
+			t.Errorf("Open() = %x, want %x", loaded, imgData)
 		}
 	})
 

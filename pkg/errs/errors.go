@@ -10,4 +10,9 @@ var (
 	// ErrInvalidOffset is returned when the application encounters an invalid
 	// offset into the data.
 	ErrInvalidOffset = errors.New("invalid offset")
+
+	// ErrLimitExceeded is returned by [LimitReader] when the underlying reader
+	// produces more data than the configured maximum, instead of silently
+	// truncating the stream.
+	ErrLimitExceeded = errors.New("resource exceeds configured size limit")
 )

@@ -7,6 +7,8 @@ import (
 	"io"
 	"path"
 
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
 	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
@@ -133,8 +135,8 @@ func openZip(b model.Blob) (*zip.Reader, error) {
 }
 
 // cover resolves the cover image of an EPUB from the OPF package and returns
-// a Resource whose Data closure reads the cover lazily from the already-open
-// zip.Reader. The caller must keep the underlying blob usable until the Data
+// a Resource whose Open closure reads the cover lazily from the already-open
+// zip.Reader. The caller must keep the underlying blob usable until the Open
 // closure has been consumed.
 func (r *EpubReader) cover(zr *zip.Reader, p Package) *model.Resource {
 	coverItems := r.opfReader.ItemsByProperty(p, "cover-image")
@@ -160,35 +162,35 @@ func (r *EpubReader) cover(zr *zip.Reader, p Package) *model.Resource {
 		Id:        coverItem.ID,
 		Name:      path.Base(coverFile.Name),
 		MediaType: coverItem.MediaType,
-		Size:      int(coverFile.UncompressedSize64),
-		Data: func() ([]byte, error) {
-			return r.readZipFile(coverFile)
+		Size:      int64(coverFile.UncompressedSize64),
+		Open: func() (io.ReadCloser, error) {
+			return r.openZipFile(coverFile)
 		},
 	}
 }
 
-// readZipFile reads the full contents of a zip entry, refusing entries that
-// would decompress to more than the configured max cover size.
-func (r *EpubReader) readZipFile(f *zip.File) ([]byte, error) {
+// openZipFile opens a zip entry as a streaming reader, refusing entries that
+// would decompress to more than the configured max cover size. The returned
+// reader reports an error instead of silently truncating if the decompressed
+// stream exceeds the limit, protecting against zip-bomb style e-books.
+func (r *EpubReader) openZipFile(f *zip.File) (io.ReadCloser, error) {
 	maxSize := r.cfg.MaxCoverSize
 	if maxSize <= 0 {
 		maxSize = model.DefaultConfig().MaxCoverSize
 	}
 	if f.UncompressedSize64 > uint64(maxSize) {
-		return nil, fmt.Errorf("resource %q too large (%d bytes)", f.Name, f.UncompressedSize64)
+		return nil, fmt.Errorf("%w: %q declares %d bytes (limit %d)", errs.ErrLimitExceeded, f.Name, f.UncompressedSize64, maxSize)
 	}
 	rc, err := f.Open()
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rc.Close() }()
+	return &readCloser{Reader: util.LimitReader(rc, maxSize), Closer: rc}, nil
+}
 
-	data, err := io.ReadAll(io.LimitReader(rc, maxSize+1))
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(data)) > maxSize {
-		return nil, fmt.Errorf("resource %q too large", f.Name)
-	}
-	return data, nil
+// readCloser combines a size-limited reader with the closer of the underlying
+// zip entry so callers can close the underlying file after streaming.
+type readCloser struct {
+	io.Reader
+	io.Closer
 }

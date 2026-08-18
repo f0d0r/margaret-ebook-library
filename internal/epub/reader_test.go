@@ -22,7 +22,7 @@ func TestGetCover(t *testing.T) {
 		expectedID        string
 		expectedName      string
 		expectedMediaType string
-		expectedSize      int
+		expectedSize      int64
 	}{
 		{
 			name: "Cover found by cover-image property",
@@ -36,7 +36,7 @@ func TestGetCover(t *testing.T) {
 			expectedID:        "cover_id",
 			expectedName:      "cover.jpg",
 			expectedMediaType: "image/jpeg",
-			expectedSize:      len(createTestImageData()),
+			expectedSize:      int64(len(createTestImageData())),
 		},
 		{
 			name: "Cover found by cover meta element",
@@ -50,7 +50,7 @@ func TestGetCover(t *testing.T) {
 			expectedID:        "cover_id",
 			expectedName:      "cover.png",
 			expectedMediaType: "image/png",
-			expectedSize:      len(createTestImageData()),
+			expectedSize:      int64(len(createTestImageData())),
 		},
 		{
 			name: "No cover found - no property or meta",
@@ -92,7 +92,7 @@ func TestGetCover(t *testing.T) {
 			expectedID:        "cover_image_id",
 			expectedName:      "cover_image.jpg",
 			expectedMediaType: "image/jpeg",
-			expectedSize:      len(createTestImageData()),
+			expectedSize:      int64(len(createTestImageData())),
 		},
 	}
 
@@ -142,8 +142,8 @@ func TestGetCover(t *testing.T) {
 				if cover.Size != tt.expectedSize {
 					t.Errorf("got cover size %d, want %d", cover.Size, tt.expectedSize)
 				}
-				if cover.Data == nil {
-					t.Errorf("expected GetData function to be set")
+				if cover.Open == nil {
+					t.Errorf("expected Open function to be set")
 				}
 			} else {
 				if cover != nil {
@@ -274,8 +274,10 @@ func TestReadZipFileRejectsOversizedEntry(t *testing.T) {
 		t.Fatalf("got %d files, want 1", len(zr.File))
 	}
 
-	if _, err := NewEpubReader(model.DefaultConfig()).readZipFile(zr.File[0]); err == nil {
-		t.Fatalf("readZipFile() expected error for oversized entry, got nil")
+	if rc, err := NewEpubReader(model.DefaultConfig()).openZipFile(zr.File[0]); err == nil {
+		t.Fatalf("openZipFile() expected error for oversized entry, got nil")
+	} else if rc != nil {
+		_ = rc.Close()
 	}
 }
 
@@ -303,8 +305,10 @@ func TestReadZipFile_ConfigOverrideRejectsEntry(t *testing.T) {
 	cfg.MaxCoverSize = 1
 	reader := NewEpubReader(cfg)
 
-	if _, err := reader.readZipFile(zr.File[0]); err == nil {
-		t.Fatalf("readZipFile() expected error with reduced MaxCoverSize, got nil")
+	if rc, err := reader.openZipFile(zr.File[0]); err == nil {
+		t.Fatalf("openZipFile() expected error with reduced MaxCoverSize, got nil")
+	} else if rc != nil {
+		_ = rc.Close()
 	}
 }
 
@@ -328,11 +332,17 @@ func TestReadZipFileReadsNormalEntry(t *testing.T) {
 		t.Fatalf("zip.NewReader() error: %v", err)
 	}
 
-	data, err := NewEpubReader(model.DefaultConfig()).readZipFile(zr.File[0])
+	rc, err := NewEpubReader(model.DefaultConfig()).openZipFile(zr.File[0])
 	if err != nil {
-		t.Fatalf("readZipFile() unexpected error: %v", err)
+		t.Fatalf("openZipFile() unexpected error: %v", err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("ReadAll() unexpected error: %v", err)
 	}
 	if string(data) != string(imgData) {
-		t.Errorf("readZipFile() returned %d bytes, want %d", len(data), len(imgData))
+		t.Errorf("openZipFile() returned %d bytes, want %d", len(data), len(imgData))
 	}
 }

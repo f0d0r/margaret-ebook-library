@@ -99,9 +99,10 @@ func (r *MobiReader) cover(b model.Blob, pdbDb *PdbDb, mobi *Mobi) *model.Resour
 	return &model.Resource{
 		Name:      "cover." + media.Extension,
 		MediaType: media.Type,
-		Size:      int(coverLength),
-		Data: func() ([]byte, error) {
-			return readRecordData(b, coverOffset, coverLength, maxRecordSize)
+		Size:      int64(coverLength),
+		Open: func() (io.ReadCloser, error) {
+			sr := io.NewSectionReader(b, int64(coverOffset), int64(coverLength))
+			return io.NopCloser(util.LimitReader(sr, maxRecordSize)), nil
 		},
 	}
 }
