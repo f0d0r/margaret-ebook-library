@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/f0d0r/margaret-ebook-library/actions/workflows/build.yml/badge.svg)](https://github.com/f0d0r/margaret-ebook-library/actions/workflows/build.yml)
 
-This project is a Go library for handling ebook files. It currently supports reading metadata from EPUB and MOBI formats.
+This project is a Go library for handling ebook files. It currently supports reading EPUB and MOBI formats.
 
 ## Getting Started
 
@@ -17,18 +17,18 @@ Import the library:
 import "github.com/f0d0r/margaret-ebook-library/pkg/ebook"
 ```
 
-### Reading metadata from a file path
+### Reading an ebook from a file path
 
 The simplest way is to pass the file path directly:
 
 ```go
-metadata, err := ebook.ReadMetadata("books/my-book.epub")
+ebook, err := ebook.Read("books/my-book.epub")
 if err != nil {
     // handle the error, e.g. with errors.Is(err, errs.ErrUnsupportedFormat)
 }
 ```
 
-### Reading metadata from an already-open file
+### Reading an ebook from an already-open file
 
 Use this when you already have the file open:
 
@@ -39,36 +39,38 @@ if err != nil {
 }
 defer f.Close()
 
-metadata, err := ebook.ReadMetadataFromFile(f)
+ebook, err := ebook.ReadFromFile(f)
 if err != nil {
     log.Fatal(err)
 }
 ```
 
 The caller retains ownership of the file and must keep it open until the
-returned metadata (including any cover data) has been consumed.
+returned ebook (including any cover and content data) has been consumed.
 
-### Reading metadata from a blob
+### Reading an ebook from a blob
 
 Blobs are random-access sources, so the same API works for local files,
 ebook entries inside an archive, or remote sources. The source position is
 never modified and the caller keeps ownership.
 
 ```go
-metadata, err := ebook.ReadMetadataFromBlob(model.NewPathBlob("books/my-book.epub"))
+ebook, err := ebook.ReadFromBlob(model.NewPathBlob("books/my-book.epub"))
 if err != nil {
     log.Fatal(err)
 }
 ```
 
-### Using the metadata
+### Using the ebook
 
 ```go
+metadata := ebook.Metadata
 fmt.Println("Title:", metadata.Title)
 fmt.Println("Authors:", strings.Join(metadata.Authors, ", "))
 fmt.Println("Language:", metadata.Languages)
 fmt.Println("Description:", metadata.Description)
-fmt.Println("FileType:", metadata.FileType)
+fmt.Println("FileType:", ebook.FileType)
+fmt.Println("Version:", ebook.Version)
 
 if metadata.Cover != nil {
     rc, err := metadata.Cover.Open()
@@ -94,11 +96,11 @@ if metadata.Cover != nil {
 To load the whole cover into memory instead, use the convenience method:
 
 ```go
-data, err := metadata.Cover.Data() // reads the whole cover into a []byte
+data, err := ebook.Metadata.Cover.Data() // reads the whole cover into a []byte
 if err != nil {
     log.Fatal(err)
 }
-fmt.Printf("Cover %q (%s): %d bytes\n", metadata.Cover.Name, metadata.Cover.MediaType, len(data))
+fmt.Printf("Cover %q (%s): %d bytes\n", ebook.Metadata.Cover.Name, ebook.Metadata.Cover.MediaType, len(data))
 ```
 
 ### Overriding the safety limits
@@ -108,7 +110,7 @@ size, 100 MB max single MOBI record, 256 max EXTH records). Override them
 with functional options:
 
 ```go
-metadata, err := ebook.ReadMetadata(
+ebook, err := ebook.Read(
     "books/my-book.epub",
     ebook.WithMaxCoverSize(10*1024*1024), // 10 MB
 )
@@ -120,7 +122,7 @@ if err != nil {
 MOBI-specific limits can be adjusted the same way:
 
 ```go
-metadata, err := ebook.ReadMetadata(
+ebook, err := ebook.Read(
     "books/my-book.mobi",
     ebook.WithMaxRecordSize(50*1024*1024), // max single PDB record
     ebook.WithMaxExthRecords(512),         // max EXTH records to parse

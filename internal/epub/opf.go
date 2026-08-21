@@ -11,6 +11,7 @@ type Package struct {
 	Version  string   `xml:"version,attr"`
 	Metadata Metadata `xml:"metadata"`
 	Manifest Manifest `xml:"manifest"`
+	Spine    Spine    `xml:"spine"`
 }
 
 func (p *Package) ResolvePath(href string) string {
@@ -49,12 +50,29 @@ type Meta struct {
 }
 
 type Item struct {
-	ID         string `xml:"id,attr"`
-	MediaType  string `xml:"media-type,attr"`
-	Href       string `xml:"href,attr"`
-	Properties string `xml:"properties,attr"`
+	ID           string `xml:"id,attr"`
+	MediaType    string `xml:"media-type,attr"`
+	Href         string `xml:"href,attr"`
+	Properties   string `xml:"properties,attr"`
+	Fallback     string `xml:"fallback,attr"`
+	MediaOverlay string `xml:"media-overlay,attr"`
 }
 
 type Manifest struct {
+	ID    string `xml:"id,attr"`
 	Items []Item `xml:"item"`
+}
+
+type ItemRef struct {
+	ID         string `xml:"id,attr"`
+	IdRef      string `xml:"idref,attr"`
+	Linear     string `xml:"linear,attr"`
+	Properties string `xml:"properties,attr"`
+}
+
+type Spine struct {
+	ID                       string    `xml:"id,attr"`
+	Toc                      string    `xml:"toc,attr"`
+	PageProgressionDirection string    `xml:"page-progression-direction,attr"`
+	ItemRefs                 []ItemRef `xml:"itemref"`
 }

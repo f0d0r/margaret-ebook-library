@@ -77,7 +77,7 @@ func consumeCover(b *testing.B, m model.Metadata) {
 	}
 }
 
-func BenchmarkReadMetadata(b *testing.B) {
+func BenchmarkRead(b *testing.B) {
 	tmpDir := b.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createBenchEPUB(b, path, 2000)
@@ -85,16 +85,16 @@ func BenchmarkReadMetadata(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			m, err := ReadMetadata(path)
+			ebook, err := Read(path)
 			if err != nil {
-				b.Fatalf("ReadMetadata() error: %v", err)
+				b.Fatalf("Read() error: %v", err)
 			}
-			consumeCover(b, m)
+			consumeCover(b, ebook.Metadata)
 		}
 	})
 }
 
-func BenchmarkReadMetadataFromFile(b *testing.B) {
+func BenchmarkReadFromFile(b *testing.B) {
 	tmpDir := b.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createBenchEPUB(b, path, 2000)
@@ -106,17 +106,17 @@ func BenchmarkReadMetadataFromFile(b *testing.B) {
 			if err != nil {
 				b.Fatalf("failed to open file: %v", err)
 			}
-			m, err := ReadMetadataFromFile(f)
+			ebook, err := ReadFromFile(f)
 			if err != nil {
-				b.Fatalf("ReadMetadataFromFile() error: %v", err)
+				b.Fatalf("ReadFromFile() error: %v", err)
 			}
-			consumeCover(b, m)
+			consumeCover(b, ebook.Metadata)
 			_ = f.Close()
 		}
 	})
 }
 
-func BenchmarkReadMetadataFromPathBlob(b *testing.B) {
+func BenchmarkReadFromPathBlob(b *testing.B) {
 	tmpDir := b.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createBenchEPUB(b, path, 2000)
@@ -124,11 +124,11 @@ func BenchmarkReadMetadataFromPathBlob(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			m, err := ReadMetadataFromBlob(model.NewPathBlob(path))
+			ebook, err := ReadFromBlob(model.NewPathBlob(path))
 			if err != nil {
-				b.Fatalf("ReadMetadataFromBlob() error: %v", err)
+				b.Fatalf("ReadFromBlob() error: %v", err)
 			}
-			consumeCover(b, m)
+			consumeCover(b, ebook.Metadata)
 		}
 	})
 }
@@ -187,7 +187,7 @@ func createBenchMOBI(b *testing.B, path string, records int) []byte {
 	return data
 }
 
-func BenchmarkReadMetadataMOBIPath(b *testing.B) {
+func BenchmarkReadMOBIPath(b *testing.B) {
 	tmpDir := b.TempDir()
 	path := filepath.Join(tmpDir, "book.mobi")
 	createBenchMOBI(b, path, 1000)
@@ -195,14 +195,14 @@ func BenchmarkReadMetadataMOBIPath(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if _, err := ReadMetadata(path); err != nil {
-				b.Fatalf("ReadMetadata() error: %v", err)
+			if _, err := Read(path); err != nil {
+				b.Fatalf("Read() error: %v", err)
 			}
 		}
 	})
 }
 
-func BenchmarkReadMetadataMOBIFromFile(b *testing.B) {
+func BenchmarkReadMOBIFromFile(b *testing.B) {
 	tmpDir := b.TempDir()
 	path := filepath.Join(tmpDir, "book.mobi")
 	createBenchMOBI(b, path, 1000)
@@ -214,15 +214,15 @@ func BenchmarkReadMetadataMOBIFromFile(b *testing.B) {
 			if err != nil {
 				b.Fatalf("failed to open file: %v", err)
 			}
-			if _, err := ReadMetadataFromFile(f); err != nil {
-				b.Fatalf("ReadMetadataFromFile() error: %v", err)
+			if _, err := ReadFromFile(f); err != nil {
+				b.Fatalf("ReadFromFile() error: %v", err)
 			}
 			_ = f.Close()
 		}
 	})
 }
 
-func BenchmarkReadMetadataMOBIFromPathBlob(b *testing.B) {
+func BenchmarkReadMOBIFromPathBlob(b *testing.B) {
 	tmpDir := b.TempDir()
 	path := filepath.Join(tmpDir, "book.mobi")
 	createBenchMOBI(b, path, 1000)
@@ -230,8 +230,8 @@ func BenchmarkReadMetadataMOBIFromPathBlob(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if _, err := ReadMetadataFromBlob(model.NewPathBlob(path)); err != nil {
-				b.Fatalf("ReadMetadataFromBlob() error: %v", err)
+			if _, err := ReadFromBlob(model.NewPathBlob(path)); err != nil {
+				b.Fatalf("ReadFromBlob() error: %v", err)
 			}
 		}
 	})
