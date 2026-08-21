@@ -15,9 +15,7 @@ func DecompressPalmDoc(in []byte, remain int64) ([]byte, error) {
 	capHint := len(in) * 2
 	if remain >= 0 && int64(capHint) > remain {
 		capHint = int(remain)
-		if capHint < 0 {
-			capHint = 0
-		}
+		capHint = max(capHint, 0)
 	}
 	out := make([]byte, 0, capHint)
 	p := 0

@@ -8,7 +8,7 @@ type options struct {
 	maxExthRecords  int
 }
 
-// Option configures a metadata read.
+// Option configures an ebook read.
 type Option func(*options)
 
 // WithMaxResourceSize sets the maximum decompressed size in bytes of a single

@@ -72,20 +72,9 @@ func parseIndxHeader(data []byte) (*indxHeader, error) {
 	// We only need OrdtMap for decode_string ordt mapping; for most books it's empty.
 	// Check ordt1
 	if h.Ordt1 > 0 && h.Ordt1+4 <= len(data) && string(data[h.Ordt1:h.Ordt1+4]) == "ORDT" {
-		// We ignore raw, just keep empty map
-		// For completeness, if code==65002 handle special mapping
 		if h.Code == 65002 {
-			// calibre builds parsed map from every second byte
-			// We simplify: build '?' * oentries as calibre fallback
-			// But try to build if possible
-			raw := []byte{}
-			end := h.Ordt1 + 4 + h.Oentries
-			if end <= len(data) {
-				raw = data[h.Ordt1+4 : end]
-				// calibre's second ORDT (ordt2) is the one with 2*oentries
-				// Actually for code 65002, ordt2 is relevant. We'll handle below.
-				_ = raw
-			}
+			// calibre builds parsed map from every second byte; for ordt1 we
+			// use the fallback '?' * oentries (ordt2 below handles the real map)
 			h.OrdtMap = string(bytes.Repeat([]byte{'?'}, h.Oentries))
 		}
 	}
@@ -211,16 +200,13 @@ func getTagMap(controlByteCount int, tagx []TagX, data []byte) (map[uint32][]int
 	return ans, rest, nil
 }
 
-func parseIndexRecord(table map[string]map[uint32][]int, data []byte, controlByteCount int, tags []TagX, codec string, ordtMap string) error {
+func parseIndexRecord(table map[string]map[uint32][]int, ordered *[]string, data []byte, controlByteCount int, tags []TagX, codec string, ordtMap string) error {
 	hdr, err := parseIndxHeader(data)
 	if err != nil {
 		return err
 	}
 	idxtPos := hdr.Start
-	if idxtPos+4 > len(data) || string(data[idxtPos:idxtPos+4]) != "IDXT" {
-		// calibre prints warning but continues
-		// we just proceed
-	}
+	// calibre prints a warning on missing IDXT but continues regardless
 	entryCount := hdr.Count
 	idxPositions := make([]int, 0, entryCount+1)
 	for j := 0; j < entryCount; j++ {
@@ -250,6 +236,11 @@ func parseIndexRecord(table map[string]map[uint32][]int, data []byte, controlByt
 		tagMap, _, err := getTagMap(controlByteCount, tags, rec)
 		if err != nil {
 			continue
+		}
+		if ordered != nil {
+			if _, exists := table[ident]; !exists {
+				*ordered = append(*ordered, ident)
+			}
 		}
 		table[ident] = tagMap
 	}
@@ -364,52 +355,9 @@ func ReadIndex(sections [][]byte, idx int, codec string) (map[string]map[uint32]
 		return table, ordered, cncx, err
 	}
 
-	// Need to preserve order: calibre uses OrderedDict; we collect ordered keys via parsing order
-	// We'll parse records sequentially and append keys
-	// To preserve order, we need to intercept parseIndexRecord ordering; we do loop directly
 	for i := idx + 1; i < idx+1+indxCount && i < len(sections); i++ {
 		recData := sections[i]
-		// Before calling parseIndexRecord, we need to know current keys to track new ones
-		before := len(table)
-		// Use a temporary map to capture new entries in order
-		tmpTable := make(map[string]map[uint32][]int)
-		// We need to parse but also capture ordered keys: we will re-implement inline to capture order
-		hdr2, err := parseIndxHeader(recData)
-		if err != nil {
-			continue
-		}
-		idxtPos := hdr2.Start
-		entryCount := hdr2.Count
-		idxPositions := make([]int, 0, entryCount+1)
-		for j := 0; j < entryCount; j++ {
-			off := idxtPos + 4 + 2*j
-			if off+2 > len(recData) {
-				break
-			}
-			pos := int(binary.BigEndian.Uint16(recData[off : off+2]))
-			idxPositions = append(idxPositions, pos)
-		}
-		idxPositions = append(idxPositions, idxtPos)
-		for j := 0; j < entryCount && j < len(idxPositions)-1; j++ {
-			startPos := idxPositions[j]
-			endPos := idxPositions[j+1]
-			if startPos < 0 || endPos > len(recData) || startPos >= endPos {
-				continue
-			}
-			rec := recData[startPos:endPos]
-			ident, consumed, err := decodeIdent(rec, codec, hdr.OrdtMap)
-			if err != nil {
-				continue
-			}
-			recRest := rec[consumed:]
-			tagMap, _, _ := getTagMap(controlByteCount, tags, recRest)
-			if _, exists := table[ident]; !exists {
-				ordered = append(ordered, ident)
-			}
-			table[ident] = tagMap
-			tmpTable[ident] = tagMap
-		}
-		_ = before
+		_ = parseIndexRecord(table, &ordered, recData, controlByteCount, tags, codec, hdr.OrdtMap)
 	}
 
 	return table, ordered, cncx, nil

@@ -105,14 +105,14 @@ fmt.Printf("Cover %q (%s): %d bytes\n", ebook.Metadata.Cover.Name, ebook.Metadat
 
 ### Overriding the safety limits
 
-By default the library applies conservative safety limits (50 MB max cover
+By default the library applies conservative safety limits (100 MB max resource
 size, 100 MB max single MOBI record, 256 max EXTH records). Override them
 with functional options:
 
 ```go
 ebook, err := ebook.Read(
     "books/my-book.epub",
-    ebook.WithMaxCoverSize(10*1024*1024), // 10 MB
+    ebook.WithMaxResourceSize(10*1024*1024), // 10 MB
 )
 if err != nil {
     log.Fatal(err)

@@ -139,9 +139,7 @@ func (h *HuffCdicReader) unpack(data []byte, remain int64, depth int) ([]byte, e
 	capHint := len(data) * 2
 	if remain >= 0 && int64(capHint) > remain {
 		capHint = int(remain)
-		if capHint < 0 {
-			capHint = 0
-		}
+		capHint = max(capHint, 0)
 	}
 	out := make([]byte, 0, capHint)
 
@@ -188,10 +186,7 @@ func (h *HuffCdicReader) unpack(data []byte, remain int64, depth int) ([]byte, e
 			h.dictionary[r] = huffEntry{}
 			remForRec := remain
 			if remain >= 0 {
-				remForRec = remain - int64(len(out))
-				if remForRec < 0 {
-					remForRec = 0
-				}
+				remForRec = max(remain-int64(len(out)), 0)
 			}
 			slice, err := h.unpack(entry.slice, remForRec, depth+1)
 			if err != nil {

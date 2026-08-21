@@ -73,10 +73,7 @@ func extractTextWithOffset(pdbDb *PdbDb, mobi *Mobi, offset int, maxSize int64) 
 		case CompressionPalmDOC:
 			remain := int64(-1)
 			if maxSize > 0 {
-				remain = maxSize - int64(len(out))
-				if remain < 0 {
-					remain = 0
-				}
+				remain = max(maxSize-int64(len(out)), 0)
 			}
 			dec, err = DecompressPalmDoc(section, remain)
 			if err != nil {
@@ -85,10 +82,7 @@ func extractTextWithOffset(pdbDb *PdbDb, mobi *Mobi, offset int, maxSize int64) 
 		case CompressionHUFF:
 			remain := int64(-1)
 			if maxSize > 0 {
-				remain = maxSize - int64(len(out))
-				if remain < 0 {
-					remain = 0
-				}
+				remain = max(maxSize-int64(len(out)), 0)
 			}
 			dec, err = huff.Unpack(section, remain)
 			if err != nil {
