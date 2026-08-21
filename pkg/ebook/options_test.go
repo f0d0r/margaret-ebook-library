@@ -17,13 +17,13 @@ func TestResolveOptionsDefaults(t *testing.T) {
 
 func TestResolveOptionsOverrides(t *testing.T) {
 	cfg := resolveOptions([]Option{
-		WithMaxCoverSize(1),
+		WithMaxResourceSize(1),
 		WithMaxRecordSize(2),
 		WithMaxExthRecords(3),
 	})
 
-	if cfg.MaxCoverSize != 1 {
-		t.Errorf("MaxCoverSize = %d, want 1", cfg.MaxCoverSize)
+	if cfg.MaxResourceSize != 1 {
+		t.Errorf("MaxResourceSize = %d, want 1", cfg.MaxResourceSize)
 	}
 	if cfg.MaxRecordSize != 2 {
 		t.Errorf("MaxRecordSize = %d, want 2", cfg.MaxRecordSize)
@@ -37,8 +37,8 @@ func TestResolveOptionsPartialOverride(t *testing.T) {
 	cfg := resolveOptions([]Option{WithMaxExthRecords(5)})
 	d := model.DefaultConfig()
 
-	if cfg.MaxCoverSize != d.MaxCoverSize {
-		t.Errorf("MaxCoverSize = %d, want default %d", cfg.MaxCoverSize, d.MaxCoverSize)
+	if cfg.MaxResourceSize != d.MaxResourceSize {
+		t.Errorf("MaxResourceSize = %d, want default %d", cfg.MaxResourceSize, d.MaxResourceSize)
 	}
 	if cfg.MaxRecordSize != d.MaxRecordSize {
 		t.Errorf("MaxRecordSize = %d, want default %d", cfg.MaxRecordSize, d.MaxRecordSize)

@@ -7,6 +7,8 @@ import (
 
 const PALM_DOC_HEADER_SIZE = 16
 
+const NullIndex uint32 = 0xFFFFFFFF
+
 type CompressionType uint16
 
 const (
@@ -79,7 +81,17 @@ type Mobi struct {
 	FLISRecordOffset    uint32 // Offset to FLIS record in the file.
 	FLISRecordCount     uint32 // Number of FLIS records in the file.
 	ExtraRecordFlags    uint32 // A set of binary flags, some of which indicate extra data at the end of each text block.
-	IndxRecordOffset    uint32 // Offset to INDX record in the file.
+	IndxRecordOffset    uint32 // Offset to INDX record in the file (alias for NcxIdx, kept for compatibility).
+	NcxIdx              uint32 // NCX index (at 0xF4), 0xFFFFFFFF if not present
+	DivIdx              uint32 // DIV table index (at 0xF8), 0xFFFFFFFF if not present
+	SkelIdx             uint32 // Skeleton index (at 0xFC), 0xFFFFFFFF if not present
+	DatpIdx             uint32 // DATP index (at 0x100), 0xFFFFFFFF if not present
+	OthIdx              uint32 // OTH (guide) index (at 0x104), 0xFFFFFFFF if not present
+	FdstIdx             uint32 // FDST index (at 0xC0), 0xFFFFFFFF if not present or count <=1
+	FdstCount           uint32 // FDST count (at 0xC4)
+	Codec               string // Go codec name derived from TextEncoding: "cp1252" or "utf-8"
+	Kf8FirstImageIndex  uint32 // For KF8 header: absolute first image index (KF8 FirstImageRecord + KF8HeaderIndex)
+	Mobi6Records        uint16 // For KF8 header in joint files: number of MOBI6 text records
 
 	EXTH        *Exth // EXTH record, if present
 	title       string
@@ -121,6 +133,16 @@ func ReadMobi(pdbDb *PdbDb, maxExthRecords int) (*Mobi, error) {
 				}
 
 				kf8.recordCount = uint16(uint32(pdbDb.NumberOfRecords) - kf8HeaderIdx + 1)
+				// calibre: kf8_first_image_index = kf8.first_image_index + k8i
+				kf8.Kf8FirstImageIndex = kf8.FirstImageRecord + kf8HeaderIdx
+				kf8.Mobi6Records = mobi.TextRecordCount
+				// calibre restores first_image_index to MOBI6's value on the KF8 header
+				// so that generic code sees MOBI6's index, but keep absolute via Kf8FirstImageIndex
+				kf8.FirstImageRecord = mobi.FirstImageRecord
+				if kf8.HuffmanRecordCount > 0 {
+					// calibre: huff_offset += k8i for joint files
+					kf8.HuffmanRecordOffset += kf8HeaderIdx
+				}
 				mobi.KF8 = kf8
 			}
 		}
@@ -130,6 +152,7 @@ func ReadMobi(pdbDb *PdbDb, maxExthRecords int) (*Mobi, error) {
 }
 
 func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
+
 	if len(data) < 96 {
 		return nil, fmt.Errorf("record 0 is too short")
 	}
@@ -149,6 +172,17 @@ func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
 	fullNameLength := binary.BigEndian.Uint32(data[88:92])
 	locale := binary.BigEndian.Uint32(data[92:96])
 
+	var codec string
+	switch TextEncodingType(textEncoding) {
+	case UTF8:
+		codec = "utf-8"
+	case CP1252:
+		codec = "cp1252"
+	default:
+		// calibre: unknown codepage -> cp1252 fallback
+		codec = "cp1252"
+	}
+
 	mobi := &Mobi{
 		Compression:        CompressionType(compression),
 		TextLength:         textLength,
@@ -164,12 +198,20 @@ func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
 		FullNameOffset:     fullNameOffset,
 		FullNameLength:     fullNameLength,
 		Locale:             locale,
+		Codec:              codec,
 
 		DRMOffset:        0xFFFFFFFF,
 		FCISRecordOffset: 0xFFFFFFFF,
 		FLISRecordOffset: 0xFFFFFFFF,
 		ExtraRecordFlags: 0,
 		IndxRecordOffset: 0xFFFFFFFF,
+		NcxIdx:           NullIndex,
+		DivIdx:           NullIndex,
+		SkelIdx:          NullIndex,
+		DatpIdx:          NullIndex,
+		OthIdx:           NullIndex,
+		FdstIdx:          NullIndex,
+		FdstCount:        0,
 	}
 
 	if len(data) >= 184 {
@@ -197,12 +239,29 @@ func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
 		mobi.FLISRecordCount = binary.BigEndian.Uint32(data[212:216])
 	}
 
-	if len(data) >= 244 {
-		mobi.ExtraRecordFlags = binary.BigEndian.Uint32(data[240:244])
+	if len(data) >= 244 && mobi.Identifier == "MOBI" && mobi.HeaderLength >= 0xE4 && mobi.HeaderLength <= 500 {
+		// Extra Data Flags is a 16-bit field at offset 242. calibre reads it
+		// as raw[0xF2:0xF4] and only honors it for BOOKMOBI files whose
+		// header length is at least 0xE4 (228).
+		mobi.ExtraRecordFlags = uint32(binary.BigEndian.Uint16(data[242:244]))
 	}
 
 	if len(data) >= 248 {
 		mobi.IndxRecordOffset = binary.BigEndian.Uint32(data[244:248])
+		mobi.NcxIdx = binary.BigEndian.Uint32(data[244:248])
+	}
+
+	// calibre: BookHeader fdst/skel/div/oth only for MobiVersion==8, see headers.py:267
+	if mobi.MobiVersion == 8 && len(data) >= 0xF8+16 {
+		mobi.DivIdx = binary.BigEndian.Uint32(data[0xF8 : 0xF8+4])
+		mobi.SkelIdx = binary.BigEndian.Uint32(data[0xFC : 0xFC+4])
+		mobi.DatpIdx = binary.BigEndian.Uint32(data[0x100 : 0x100+4])
+		mobi.OthIdx = binary.BigEndian.Uint32(data[0x104 : 0x104+4])
+		mobi.FdstIdx = binary.BigEndian.Uint32(data[0xC0 : 0xC0+4])
+		mobi.FdstCount = binary.BigEndian.Uint32(data[0xC4 : 0xC4+4])
+		if mobi.FdstCount <= 1 {
+			mobi.FdstIdx = NullIndex
+		}
 	}
 
 	if mobi.HasEXTH() {
@@ -299,6 +358,26 @@ func (m *Mobi) Language() string {
 		language = m.localeCode()
 	}
 	return language
+}
+
+// Version returns the declared Mobipocket format version of the file. For a
+// dual MOBI/KF8 file both versions are reported, e.g. "6/8". It returns an
+// empty string if no version is declared.
+func (m *Mobi) Version() string {
+	ver := m.MobiVersion
+	if m.KF8 != nil {
+		kf8Ver := m.KF8.MobiVersion
+		switch {
+		case ver != 0 && kf8Ver != 0:
+			return fmt.Sprintf("%d/%d", ver, kf8Ver)
+		case kf8Ver != 0:
+			return fmt.Sprintf("%d", kf8Ver)
+		}
+	}
+	if ver == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d", ver)
 }
 
 // CoverRecordIdx returns the record index of the cover image.

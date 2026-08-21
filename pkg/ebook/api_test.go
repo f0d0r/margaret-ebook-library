@@ -15,21 +15,21 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
-func TestReadMetadata_EmptyPath(t *testing.T) {
-	_, err := ReadMetadata("")
+func TestRead_EmptyPath(t *testing.T) {
+	_, err := Read("")
 	if err != errs.ErrUnsupportedFormat {
 		t.Fatalf("expected ErrUnsupportedFormat for empty path, got %v", err)
 	}
 }
 
-func TestReadMetadata_WhitespacePath(t *testing.T) {
-	_, err := ReadMetadata("   \t\n  ")
+func TestRead_WhitespacePath(t *testing.T) {
+	_, err := Read("   \t\n  ")
 	if err != errs.ErrUnsupportedFormat {
 		t.Fatalf("expected ErrUnsupportedFormat for whitespace-only path, got %v", err)
 	}
 }
 
-func TestReadMetadataFromFile_UnsupportedFormat(t *testing.T) {
+func TestReadFromFile_UnsupportedFormat(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.txt")
 	if err := os.WriteFile(path, []byte("plain text"), 0644); err != nil {
@@ -42,13 +42,13 @@ func TestReadMetadataFromFile_UnsupportedFormat(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	_, err = ReadMetadataFromFile(f)
+	_, err = ReadFromFile(f)
 	if !errors.Is(err, errs.ErrUnsupportedFormat) {
-		t.Errorf("ReadMetadataFromFile() error = %v, want ErrUnsupportedFormat", err)
+		t.Errorf("ReadFromFile() error = %v, want ErrUnsupportedFormat", err)
 	}
 }
 
-func TestReadMetadataFromFile_ValidEPUB(t *testing.T) {
+func TestReadFromFile_ValidEPUB(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createTestEPUB(t, path, "My Test Book")
@@ -59,31 +59,31 @@ func TestReadMetadataFromFile_ValidEPUB(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	metadata, err := ReadMetadataFromFile(f)
+	ebook, err := ReadFromFile(f)
 	if err != nil {
-		t.Fatalf("ReadMetadataFromFile() error: %v", err)
+		t.Fatalf("ReadFromFile() error: %v", err)
 	}
-	if metadata.FileType != model.EPUB {
-		t.Errorf("FileType = %v, want %v", metadata.FileType, model.EPUB)
+	if ebook.FileType != model.EPUB {
+		t.Errorf("FileType = %v, want %v", ebook.FileType, model.EPUB)
 	}
-	if metadata.Title != "My Test Book" {
-		t.Errorf("Title = %q, want %q", metadata.Title, "My Test Book")
+	if ebook.Metadata.Title != "My Test Book" {
+		t.Errorf("Title = %q, want %q", ebook.Metadata.Title, "My Test Book")
 	}
 }
 
-func TestReadMetadata_ZeroRecordMOBI_NoPanic(t *testing.T) {
+func TestRead_ZeroRecordMOBI_NoPanic(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "empty.mobi")
 	if err := os.WriteFile(path, buildZeroRecordMOBI(), 0644); err != nil {
 		t.Fatalf("failed to write MOBI file: %v", err)
 	}
 
-	if _, err := ReadMetadata(path); err == nil {
-		t.Errorf("ReadMetadata() expected error for zero-record MOBI, got nil")
+	if _, err := Read(path); err == nil {
+		t.Errorf("Read() expected error for zero-record MOBI, got nil")
 	}
 }
 
-func TestReadMetadataFromFile_ValidMOBI(t *testing.T) {
+func TestReadFromFile_ValidMOBI(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.mobi")
 	if err := os.WriteFile(path, buildMinimalMOBI(), 0644); err != nil {
@@ -96,16 +96,16 @@ func TestReadMetadataFromFile_ValidMOBI(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	metadata, err := ReadMetadataFromFile(f)
+	ebook, err := ReadFromFile(f)
 	if err != nil {
-		t.Fatalf("ReadMetadataFromFile() error: %v", err)
+		t.Fatalf("ReadFromFile() error: %v", err)
 	}
-	if metadata.FileType != model.MOBI {
-		t.Errorf("FileType = %v, want %v", metadata.FileType, model.MOBI)
+	if ebook.FileType != model.MOBI {
+		t.Errorf("FileType = %v, want %v", ebook.FileType, model.MOBI)
 	}
 }
 
-func TestReadMetadataFromFile_PreservesPosition(t *testing.T) {
+func TestReadFromFile_PreservesPosition(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createTestEPUB(t, path, "My Test Book")
@@ -125,8 +125,8 @@ func TestReadMetadataFromFile_PreservesPosition(t *testing.T) {
 		t.Fatalf("failed to get current position: %v", err)
 	}
 
-	if _, err := ReadMetadataFromFile(f); err != nil {
-		t.Fatalf("ReadMetadataFromFile() error: %v", err)
+	if _, err := ReadFromFile(f); err != nil {
+		t.Fatalf("ReadFromFile() error: %v", err)
 	}
 
 	posAfter, err := f.Seek(0, io.SeekCurrent)
@@ -138,70 +138,70 @@ func TestReadMetadataFromFile_PreservesPosition(t *testing.T) {
 	}
 }
 
-func TestReadMetadataFromBlob_ValidEPUB(t *testing.T) {
+func TestReadFromBlob_ValidEPUB(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createTestEPUB(t, path, "My Test Book")
 
-	metadata, err := ReadMetadataFromBlob(model.NewPathBlob(path))
+	ebook, err := ReadFromBlob(model.NewPathBlob(path))
 	if err != nil {
-		t.Fatalf("ReadMetadataFromBlob() error: %v", err)
+		t.Fatalf("ReadFromBlob() error: %v", err)
 	}
-	if metadata.FileType != model.EPUB {
-		t.Errorf("FileType = %v, want %v", metadata.FileType, model.EPUB)
+	if ebook.FileType != model.EPUB {
+		t.Errorf("FileType = %v, want %v", ebook.FileType, model.EPUB)
 	}
-	if metadata.Title != "My Test Book" {
-		t.Errorf("Title = %q, want %q", metadata.Title, "My Test Book")
+	if ebook.Metadata.Title != "My Test Book" {
+		t.Errorf("Title = %q, want %q", ebook.Metadata.Title, "My Test Book")
 	}
 }
 
-func TestReadMetadataFromBlob_UnsupportedFormat(t *testing.T) {
+func TestReadFromBlob_UnsupportedFormat(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.txt")
 	if err := os.WriteFile(path, []byte("plain text"), 0644); err != nil {
 		t.Fatalf("failed to write text file: %v", err)
 	}
 
-	_, err := ReadMetadataFromBlob(model.NewPathBlob(path))
+	_, err := ReadFromBlob(model.NewPathBlob(path))
 	if !errors.Is(err, errs.ErrUnsupportedFormat) {
-		t.Errorf("ReadMetadataFromBlob() error = %v, want ErrUnsupportedFormat", err)
+		t.Errorf("ReadFromBlob() error = %v, want ErrUnsupportedFormat", err)
 	}
 }
 
-func TestReadMetadata_DefaultConfigReadsCover(t *testing.T) {
+func TestRead_DefaultConfigReadsCover(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createTestEPUB(t, path, "My Test Book")
 
-	m, err := ReadMetadata(path)
+	m, err := Read(path)
 	if err != nil {
-		t.Fatalf("ReadMetadata() error: %v", err)
+		t.Fatalf("Read() error: %v", err)
 	}
-	if m.Cover == nil {
+	if m.Metadata.Cover == nil {
 		t.Fatal("Cover = nil, want non-nil")
 	}
-	if _, err := m.Cover.Data(); err != nil {
+	if _, err := m.Metadata.Cover.Data(); err != nil {
 		t.Fatalf("Cover.Data() error: %v", err)
 	}
 }
 
-func TestReadMetadata_CoverOpenStreams(t *testing.T) {
+func TestRead_CoverOpenStreams(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createTestEPUB(t, path, "My Test Book")
 
-	m, err := ReadMetadata(path)
+	m, err := Read(path)
 	if err != nil {
-		t.Fatalf("ReadMetadata() error: %v", err)
+		t.Fatalf("Read() error: %v", err)
 	}
-	if m.Cover == nil {
+	if m.Metadata.Cover == nil {
 		t.Fatal("Cover = nil, want non-nil")
 	}
-	if m.Cover.Open == nil {
+	if m.Metadata.Cover.Open == nil {
 		t.Fatal("Cover.Open = nil, want non-nil")
 	}
 
-	rc, err := m.Cover.Open()
+	rc, err := m.Metadata.Cover.Open()
 	if err != nil {
 		t.Fatalf("Cover.Open() error: %v", err)
 	}
@@ -211,78 +211,78 @@ func TestReadMetadata_CoverOpenStreams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadAll() error: %v", err)
 	}
-	if int64(len(data)) != m.Cover.Size {
-		t.Errorf("streamed %d bytes, want Cover.Size %d", len(data), m.Cover.Size)
+	if int64(len(data)) != m.Metadata.Cover.Size {
+		t.Errorf("streamed %d bytes, want Cover.Size %d", len(data), m.Metadata.Cover.Size)
 	}
 }
 
-func TestReadMetadata_ConfigOverrideRejectsOversizedCover(t *testing.T) {
+func TestRead_ConfigOverrideRejectsOversizedCover(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createTestEPUB(t, path, "My Test Book")
 
-	m, err := ReadMetadata(path, WithMaxCoverSize(16))
+	m, err := Read(path, WithMaxResourceSize(16))
 	if err != nil {
-		t.Fatalf("ReadMetadata() error: %v", err)
+		t.Fatalf("Read() error: %v", err)
 	}
-	if m.Cover == nil {
+	if m.Metadata.Cover == nil {
 		t.Fatal("Cover = nil, want non-nil")
 	}
-	if _, err := m.Cover.Data(); err == nil {
+	if _, err := m.Metadata.Cover.Data(); err == nil {
 		t.Fatal("Cover.Data() expected error for oversized cover, got nil")
 	}
 }
 
-func TestReadMetadata_OptionsAccumulate(t *testing.T) {
+func TestRead_OptionsAccumulate(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createTestEPUB(t, path, "My Test Book")
 
-	m, err := ReadMetadata(path, WithMaxCoverSize(1<<30), WithMaxCoverSize(16))
+	m, err := Read(path, WithMaxResourceSize(1<<30), WithMaxResourceSize(16))
 	if err != nil {
-		t.Fatalf("ReadMetadata() error: %v", err)
+		t.Fatalf("Read() error: %v", err)
 	}
-	if m.Cover == nil {
+	if m.Metadata.Cover == nil {
 		t.Fatal("Cover = nil, want non-nil")
 	}
-	if _, err := m.Cover.Data(); err == nil {
+	if _, err := m.Metadata.Cover.Data(); err == nil {
 		t.Fatal("Cover.Data() expected error for oversized cover, got nil")
 	}
 }
 
-func TestReadMetadata_MobiRecordSizeOption(t *testing.T) {
+func TestRead_MobiRecordSizeOption(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.mobi")
 	if err := os.WriteFile(path, buildMinimalMOBI(), 0644); err != nil {
 		t.Fatalf("failed to write MOBI file: %v", err)
 	}
 
-	if _, err := ReadMetadata(path, WithMaxRecordSize(10)); err == nil {
-		t.Fatal("ReadMetadata() expected error with reduced MaxRecordSize, got nil")
+	if _, err := Read(path, WithMaxRecordSize(10)); err == nil {
+		t.Fatal("Read() expected error with reduced MaxRecordSize, got nil")
 	}
 
-	m, err := ReadMetadata(path, WithMaxRecordSize(100*1024*1024))
+	m, err := Read(path, WithMaxRecordSize(100*1024*1024))
 	if err != nil {
-		t.Fatalf("ReadMetadata() with default MaxRecordSize error: %v", err)
+		t.Fatalf("Read() with default MaxRecordSize error: %v", err)
 	}
 	if m.FileType != model.MOBI {
 		t.Errorf("FileType = %v, want %v", m.FileType, model.MOBI)
 	}
 }
 
-func TestReadMetadataFromBlob_ConfigOverride(t *testing.T) {
+func TestReadFromBlob_ConfigOverride(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.epub")
 	createTestEPUB(t, path, "My Test Book")
 
-	m, err := ReadMetadataFromBlob(model.NewPathBlob(path), WithMaxCoverSize(16))
+	m, err := ReadFromBlob(model.NewPathBlob(path), WithMaxResourceSize(16))
 	if err != nil {
-		t.Fatalf("ReadMetadataFromBlob() error: %v", err)
+		t.Fatalf("ReadFromBlob() error: %v", err)
 	}
-	if m.Cover == nil {
+	if m.Metadata.Cover == nil {
 		t.Fatal("Cover = nil, want non-nil")
 	}
-	if _, err := m.Cover.Data(); err == nil {
+	if _, err := m.Metadata.Cover.Data(); err == nil {
 		t.Fatal("Cover.Data() expected error for oversized cover, got nil")
 	}
 }

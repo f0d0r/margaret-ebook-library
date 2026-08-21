@@ -97,9 +97,7 @@ func (r *EpubReader) hasValidEpubHeader(b model.Blob) bool {
 	return string(buf[mimetypeStart:mimetypeEnd]) == "application/epub+zip"
 }
 
-// ReadMetadata reads ebook metadata from a random-access source. It
-// never modifies the source's position and does not take ownership of it.
-func (r *EpubReader) ReadMetadata(b model.Blob) (*model.Metadata, error) {
+func (r *EpubReader) Read(b model.Blob) (*model.Ebook, error) {
 	zr, err := openZip(b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open epub: %w", err)
@@ -114,15 +112,60 @@ func (r *EpubReader) ReadMetadata(b model.Blob) (*model.Metadata, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read opf file: %w", err)
 	}
+	content := r.readContent(zr, p)
 
-	return &model.Metadata{
-		Title:       r.opfReader.Title(p),
-		Authors:     r.opfReader.Authors(p),
-		Description: r.opfReader.Description(p),
-		Languages:   r.opfReader.Languages(p),
-		Cover:       r.cover(zr, p),
-		FileType:    model.EPUB,
+	return &model.Ebook{
+		Metadata: model.Metadata{
+			Title:       r.opfReader.Title(p),
+			Authors:     r.opfReader.Authors(p),
+			Description: r.opfReader.Description(p),
+			Languages:   r.opfReader.Languages(p),
+			Cover:       r.cover(zr, p),
+		},
+		Content:  content,
+		FileType: model.EPUB,
+		Version:  p.Version,
 	}, nil
+}
+
+// readContent returns the book's content documents in spine reading order.
+// Items whose href resolves to a file missing from the ZIP archive, or whose
+// idref is not present in the manifest, are silently skipped to tolerate
+// malformed e-books.
+func (r *EpubReader) readContent(zr *zip.Reader, p Package) []model.Resource {
+	resources := make([]model.Resource, 0, len(p.Spine.ItemRefs))
+	for _, itemRef := range p.Spine.ItemRefs {
+		if itemRef.Linear == "no" {
+			continue
+		}
+		item := r.opfReader.ItemById(p, itemRef.IdRef)
+		if item == nil {
+			continue
+		}
+
+		// A relative href is interpreted relative to the OPF package document.
+		resolved := p.ResolvePath(item.Href)
+		file := findFileInZip(zr, resolved)
+		if file == nil {
+			continue
+		}
+		resources = append(resources, r.resource(*item, file))
+	}
+	return resources
+}
+
+// resource builds a lazily-opened Resource from a manifest item and its
+// matching ZIP entry.
+func (r *EpubReader) resource(item Item, file *zip.File) model.Resource {
+	return model.Resource{
+		Id:        item.ID,
+		Name:      path.Base(file.Name),
+		MediaType: item.MediaType,
+		Size:      int64(file.UncompressedSize64),
+		Open: func() (io.ReadCloser, error) {
+			return r.openZipFile(file)
+		},
+	}
 }
 
 // openZip builds a zip.Reader from the blob.
@@ -158,25 +201,19 @@ func (r *EpubReader) cover(zr *zip.Reader, p Package) *model.Resource {
 	if coverFile == nil {
 		return nil
 	}
-	return &model.Resource{
-		Id:        coverItem.ID,
-		Name:      path.Base(coverFile.Name),
-		MediaType: coverItem.MediaType,
-		Size:      int64(coverFile.UncompressedSize64),
-		Open: func() (io.ReadCloser, error) {
-			return r.openZipFile(coverFile)
-		},
-	}
+	res := r.resource(*coverItem, coverFile)
+	return &res
 }
 
 // openZipFile opens a zip entry as a streaming reader, refusing entries that
-// would decompress to more than the configured max cover size. The returned
-// reader reports an error instead of silently truncating if the decompressed
-// stream exceeds the limit, protecting against zip-bomb style e-books.
+// would decompress to more than the configured max resource size. The
+// returned reader reports an error instead of silently truncating if the
+// decompressed stream exceeds the limit, protecting against zip-bomb style
+// e-books.
 func (r *EpubReader) openZipFile(f *zip.File) (io.ReadCloser, error) {
-	maxSize := r.cfg.MaxCoverSize
+	maxSize := r.cfg.MaxResourceSize
 	if maxSize <= 0 {
-		maxSize = model.DefaultConfig().MaxCoverSize
+		maxSize = model.DefaultConfig().MaxResourceSize
 	}
 	if f.UncompressedSize64 > uint64(maxSize) {
 		return nil, fmt.Errorf("%w: %q declares %d bytes (limit %d)", errs.ErrLimitExceeded, f.Name, f.UncompressedSize64, maxSize)

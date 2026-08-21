@@ -197,7 +197,7 @@ func TestMobiReaderCover(t *testing.T) {
 				{},
 				{
 					Offset: 0,
-					Length: 50*1024*1024 + 1,
+					Length: 100*1024*1024 + 1,
 				},
 			},
 		}
@@ -209,7 +209,7 @@ func TestMobiReaderCover(t *testing.T) {
 
 	t.Run("config override rejects cover", func(t *testing.T) {
 		cfg := model.DefaultConfig()
-		cfg.MaxCoverSize = 4
+		cfg.MaxResourceSize = 4
 		cfgReader := NewMobiReader(cfg)
 
 		mobi := &Mobi{

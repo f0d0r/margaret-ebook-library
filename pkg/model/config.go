@@ -4,9 +4,10 @@ package model
 // A zero value means "use the default"; clients that need different limits
 // can build a Config from DefaultConfig and override individual fields.
 type Config struct {
-	// MaxCoverSize bounds how many bytes may be decompressed for a cover
-	// image in any format, protecting against zip-bomb style e-books.
-	MaxCoverSize int64
+	// MaxResourceSize bounds how many bytes may be decompressed for a single
+	// resource (a cover image, a content document, etc.) in any format,
+	// protecting against zip-bomb style e-books.
+	MaxResourceSize int64
 
 	// MaxRecordSize bounds the size of a single MOBI (PDB) record.
 	MaxRecordSize int64
@@ -18,8 +19,8 @@ type Config struct {
 // DefaultConfig returns the library-wide default safety limits.
 func DefaultConfig() Config {
 	return Config{
-		MaxCoverSize:   50 * 1024 * 1024,  // 50 MB
-		MaxRecordSize:  100 * 1024 * 1024, // 100 MB
-		MaxExthRecords: 256,
+		MaxResourceSize: 100 * 1024 * 1024, // 100 MB
+		MaxRecordSize:   100 * 1024 * 1024, // 100 MB
+		MaxExthRecords:  256,
 	}
 }

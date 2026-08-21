@@ -259,7 +259,7 @@ func TestReadZipFileRejectsOversizedEntry(t *testing.T) {
 		t.Fatalf("CreateHeader() error: %v", err)
 	}
 	chunk := make([]byte, 1024*1024)
-	if _, err := fw.Write(bytes.Repeat(chunk, 51)); err != nil { // 51 MB of zeros
+	if _, err := fw.Write(bytes.Repeat(chunk, 101)); err != nil { // 101 MB of zeros
 		t.Fatalf("Write() error: %v", err)
 	}
 	if err := w.Close(); err != nil {
@@ -302,11 +302,11 @@ func TestReadZipFile_ConfigOverrideRejectsEntry(t *testing.T) {
 	}
 
 	cfg := model.DefaultConfig()
-	cfg.MaxCoverSize = 1
+	cfg.MaxResourceSize = 1
 	reader := NewEpubReader(cfg)
 
 	if rc, err := reader.openZipFile(zr.File[0]); err == nil {
-		t.Fatalf("openZipFile() expected error with reduced MaxCoverSize, got nil")
+		t.Fatalf("openZipFile() expected error with reduced MaxResourceSize, got nil")
 	} else if rc != nil {
 		_ = rc.Close()
 	}
@@ -344,5 +344,89 @@ func TestReadZipFileReadsNormalEntry(t *testing.T) {
 	}
 	if string(data) != string(imgData) {
 		t.Errorf("openZipFile() returned %d bytes, want %d", len(data), len(imgData))
+	}
+}
+
+func TestReadContent(t *testing.T) {
+	tmpDir := t.TempDir()
+	epubPath := filepath.Join(tmpDir, "content.epub")
+
+	opfContent := `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+  </metadata>
+  <manifest>
+    <item id="ch1" media-type="application/xhtml+xml" href="chapters/ch1.xhtml" />
+    <item id="ch2" media-type="application/xhtml+xml" href="ch2.xhtml" />
+    <item id="ch3" media-type="application/xhtml+xml" href="ch3.xhtml" />
+    <item id="ch4" media-type="application/xhtml+xml" href="ch4.xhtml" />
+  </manifest>
+  <spine>
+    <itemref idref="ch1" />
+    <itemref idref="ch2" linear="no" />
+    <itemref idref="ch3" />
+    <itemref idref="missing-item" />
+    <itemref idref="ch4" />
+  </spine>
+</package>`
+
+	createTestZIP(t, epubPath, []testFile{
+		{name: "mimetype", content: "application/epub+zip", method: zip.Store},
+		{name: "META-INF/container.xml", content: createContainerXML("OEBPS/content.opf"), method: zip.Deflate},
+		{name: "OEBPS/content.opf", content: opfContent, method: zip.Deflate},
+		{name: "OEBPS/chapters/ch1.xhtml", content: "<html><body>Chapter 1</body></html>", method: zip.Deflate},
+		{name: "OEBPS/ch2.xhtml", content: "<html><body>Chapter 2</body></html>", method: zip.Deflate},
+		{name: "OEBPS/ch4.xhtml", content: "<html><body>Chapter 4</body></html>", method: zip.Deflate},
+	})
+
+	ebook, err := NewEpubReader(model.DefaultConfig()).Read(model.NewPathBlob(epubPath))
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+
+	if ebook.FileType != model.EPUB {
+		t.Errorf("FileType = %q, want %q", ebook.FileType, model.EPUB)
+	}
+	if ebook.Version != "3.0" {
+		t.Errorf("Version = %q, want %q", ebook.Version, "3.0")
+	}
+	if ebook.Metadata.Title != "Test Book" {
+		t.Errorf("Title = %q, want %q", ebook.Metadata.Title, "Test Book")
+	}
+
+	if len(ebook.Content) != 2 {
+		t.Fatalf("len(Content) = %d, want 2", len(ebook.Content))
+	}
+
+	ch1 := ebook.Content[0]
+	if ch1.Id != "ch1" {
+		t.Errorf("Content[0].Id = %q, want %q", ch1.Id, "ch1")
+	}
+	if ch1.Name != "ch1.xhtml" {
+		t.Errorf("Content[0].Name = %q, want %q", ch1.Name, "ch1.xhtml")
+	}
+	if ch1.MediaType != "application/xhtml+xml" {
+		t.Errorf("Content[0].MediaType = %q, want %q", ch1.MediaType, "application/xhtml+xml")
+	}
+	wantCh1 := len("<html><body>Chapter 1</body></html>")
+	if ch1.Size != int64(wantCh1) {
+		t.Errorf("Content[0].Size = %d, want %d", ch1.Size, wantCh1)
+	}
+	rc, err := ch1.Open()
+	if err != nil {
+		t.Fatalf("Content[0].Open() error: %v", err)
+	}
+	data, err := io.ReadAll(rc)
+	_ = rc.Close()
+	if err != nil {
+		t.Fatalf("ReadAll() error: %v", err)
+	}
+	if string(data) != "<html><body>Chapter 1</body></html>" {
+		t.Errorf("Content[0] data = %q, want chapter 1 content", string(data))
+	}
+
+	if ch4 := ebook.Content[1]; ch4.Id != "ch4" {
+		t.Errorf("Content[1].Id = %q, want %q (spine order preserved)", ch4.Id, "ch4")
 	}
 }

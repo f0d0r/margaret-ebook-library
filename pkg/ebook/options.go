@@ -3,18 +3,19 @@ package ebook
 import "github.com/f0d0r/margaret-ebook-library/pkg/model"
 
 type options struct {
-	maxCoverSize   int64
-	maxRecordSize  int64
-	maxExthRecords int
+	maxResourceSize int64
+	maxRecordSize   int64
+	maxExthRecords  int
 }
 
-// Option configures a metadata read.
+// Option configures an ebook read.
 type Option func(*options)
 
-// WithMaxCoverSize sets the maximum decompressed cover size in bytes.
-func WithMaxCoverSize(size int64) Option {
+// WithMaxResourceSize sets the maximum decompressed size in bytes of a single
+// resource (a cover image, a content document, etc.).
+func WithMaxResourceSize(size int64) Option {
 	return func(o *options) {
-		o.maxCoverSize = size
+		o.maxResourceSize = size
 	}
 }
 
@@ -38,16 +39,16 @@ func WithMaxExthRecords(n int) Option {
 func resolveOptions(opts []Option) model.Config {
 	d := model.DefaultConfig()
 	o := options{
-		maxCoverSize:   d.MaxCoverSize,
-		maxRecordSize:  d.MaxRecordSize,
-		maxExthRecords: d.MaxExthRecords,
+		maxResourceSize: d.MaxResourceSize,
+		maxRecordSize:   d.MaxRecordSize,
+		maxExthRecords:  d.MaxExthRecords,
 	}
 	for _, opt := range opts {
 		opt(&o)
 	}
 	return model.Config{
-		MaxCoverSize:   o.maxCoverSize,
-		MaxRecordSize:  o.maxRecordSize,
-		MaxExthRecords: o.maxExthRecords,
+		MaxResourceSize: o.maxResourceSize,
+		MaxRecordSize:   o.maxRecordSize,
+		MaxExthRecords:  o.maxExthRecords,
 	}
 }

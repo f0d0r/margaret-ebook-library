@@ -5,6 +5,17 @@ import (
 	"io"
 )
 
+type Ebook struct {
+	Metadata Metadata
+	Content  []Resource
+	FileType FileType
+
+	// Version is the format-specific version declared by the e-book: the OPF
+	// package version (e.g. "3.0") for EPUB, the MOBI header version (e.g.
+	// "6", "8", or "6/8" for dual MOBI/KF8 files) for MOBI.
+	Version string
+}
+
 // Metadata represents the extracted core information of an e-book.
 // It normalized data across different e-book formats like EPUB, MOBI, etc.
 type Metadata struct {
@@ -22,9 +33,6 @@ type Metadata struct {
 
 	// Cover is the cover image of the book.
 	Cover *Resource
-
-	// FileType indicates the original format from which this metadata was parsed.
-	FileType FileType
 }
 
 // Resource represents an embedded file of an e-book (currently the cover

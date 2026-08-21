@@ -216,6 +216,48 @@ func TestMobiTitle(t *testing.T) {
 	}
 }
 
+func TestMobiVersion(t *testing.T) {
+	tests := []struct {
+		name string
+		mobi *Mobi
+		want string
+	}{
+		{
+			name: "MOBI6 header version",
+			mobi: &Mobi{MobiVersion: 6},
+			want: "6",
+		},
+		{
+			name: "KF8 header version",
+			mobi: &Mobi{MobiVersion: 8},
+			want: "8",
+		},
+		{
+			name: "dual MOBI/KF8 reports both",
+			mobi: &Mobi{MobiVersion: 6, KF8: &Mobi{MobiVersion: 8}},
+			want: "6/8",
+		},
+		{
+			name: "outer version missing falls back to KF8",
+			mobi: &Mobi{KF8: &Mobi{MobiVersion: 8}},
+			want: "8",
+		},
+		{
+			name: "no version declared",
+			mobi: &Mobi{},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.mobi.Version(); got != tt.want {
+				t.Errorf("Version() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMobiAuthors(t *testing.T) {
 	tests := []struct {
 		name string

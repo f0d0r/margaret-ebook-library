@@ -6,5 +6,5 @@ import (
 
 type Reader interface {
 	Supports(b model.Blob) bool
-	ReadMetadata(b model.Blob) (*model.Metadata, error)
+	Read(b model.Blob) (*model.Ebook, error)
 }
