@@ -7,20 +7,22 @@ import (
 	"io"
 	"path"
 
+	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	"github.com/f0d0r/margaret-ebook-library/internal/resource"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
 	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
 	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
 type EpubReader struct {
-	cfg       model.Config
+	cfg       config.Config
 	ocfReader OcfReader
 	opfReader OpfReader
 }
 
 // NewEpubReader creates a new EPUB reader instance with the given
 // safety limits.
-func NewEpubReader(cfg model.Config) *EpubReader {
+func NewEpubReader(cfg config.Config) *EpubReader {
 	return &EpubReader{
 		cfg:       cfg,
 		ocfReader: NewOcfReader(),
@@ -112,7 +114,7 @@ func (r *EpubReader) Read(b model.Blob) (*model.Ebook, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read opf file: %w", err)
 	}
-	content := r.readContent(zr, p)
+	resources, readingOrder, cover := r.readResources(zr, p)
 
 	return &model.Ebook{
 		Metadata: model.Metadata{
@@ -120,48 +122,93 @@ func (r *EpubReader) Read(b model.Blob) (*model.Ebook, error) {
 			Authors:     r.opfReader.Authors(p),
 			Description: r.opfReader.Description(p),
 			Languages:   r.opfReader.Languages(p),
-			Cover:       r.cover(zr, p),
 		},
-		Content:  content,
-		FileType: model.EPUB,
-		Version:  p.Version,
+		Resources: resource.NewResourceSet(resources, readingOrder, cover),
+		FileType:  model.EPUB,
+		Version:   p.Version,
 	}, nil
 }
 
-// readContent returns the book's content documents in spine reading order.
-// Items whose href resolves to a file missing from the ZIP archive, or whose
-// idref is not present in the manifest, are silently skipped to tolerate
-// malformed e-books.
-func (r *EpubReader) readContent(zr *zip.Reader, p Package) []model.Resource {
-	resources := make([]model.Resource, 0, len(p.Spine.ItemRefs))
-	for _, itemRef := range p.Spine.ItemRefs {
-		if itemRef.Linear == "no" {
-			continue
-		}
-		item := r.opfReader.ItemById(p, itemRef.IdRef)
-		if item == nil {
-			continue
-		}
-
-		// A relative href is interpreted relative to the OPF package document.
+// readResources returns all manifest resources, spine reading order with Linear flag, and cover.
+func (r *EpubReader) readResources(zr *zip.Reader, p Package) ([]*model.Resource, []model.ReadingOrderItem, *model.Resource) {
+	// All: manifest order, only entries present in ZIP.
+	resolvedToResource := make(map[string]*model.Resource, len(p.Manifest.Items))
+	all := make([]*model.Resource, 0, len(p.Manifest.Items))
+	for _, item := range p.Manifest.Items {
 		resolved := p.ResolvePath(item.Href)
 		file := findFileInZip(zr, resolved)
 		if file == nil {
 			continue
 		}
-		resources = append(resources, r.resource(*item, file))
+		res := r.resource(item, file)
+		res.ResolvedHref = util.CleanHref(res.ResolvedHref)
+		ptr := new(model.Resource)
+		*ptr = res
+		all = append(all, ptr)
+		resolvedToResource[util.CleanHref(resolved)] = ptr
 	}
-	return resources
+
+	// ReadingOrder: spine order, including linear="no" with flag, reusing pointers from all when possible.
+	readingOrder := make([]model.ReadingOrderItem, 0, len(p.Spine.ItemRefs))
+	for _, itemRef := range p.Spine.ItemRefs {
+		item := r.opfReader.ItemById(p, itemRef.IdRef)
+		if item == nil {
+			continue
+		}
+		resolved := p.ResolvePath(item.Href)
+		file := findFileInZip(zr, resolved)
+		if file == nil {
+			continue
+		}
+		key := util.CleanHref(resolved)
+		var resPtr *model.Resource
+		if existing, ok := resolvedToResource[key]; ok {
+			resPtr = existing
+		} else {
+			res := r.resource(*item, file)
+			res.ResolvedHref = util.CleanHref(res.ResolvedHref)
+			ptr := new(model.Resource)
+			*ptr = res
+			resPtr = ptr
+		}
+		linear := itemRef.Linear != "no"
+		readingOrder = append(readingOrder, model.ReadingOrderItem{Resource: resPtr, Linear: linear})
+	}
+
+	// Cover is derived from all: determine cover item first, then look it up in the already built map.
+	// No second Resource creation when the cover is already in all (common case).
+	var cover *model.Resource
+	if item := r.coverItem(p); item != nil {
+		coverKey := util.CleanHref(p.ResolvePath(item.Href))
+		if existing, ok := resolvedToResource[coverKey]; ok {
+			cover = existing
+		} else {
+			// Rare: cover declared but not in all (e.g. missing from manifest or ZIP miss during all phase).
+			if file := findFileInZip(zr, p.ResolvePath(item.Href)); file != nil {
+				res := r.resource(*item, file)
+				ptr := new(model.Resource)
+				*ptr = res
+				all = append(all, ptr)
+				resolvedToResource[coverKey] = ptr
+				cover = ptr
+			}
+		}
+	}
+	return all, readingOrder, cover
 }
 
 // resource builds a lazily-opened Resource from a manifest item and its
 // matching ZIP entry.
 func (r *EpubReader) resource(item Item, file *zip.File) model.Resource {
+	resolved := util.CleanHref(file.Name)
 	return model.Resource{
-		Id:        item.ID,
-		Name:      path.Base(file.Name),
-		MediaType: item.MediaType,
-		Size:      int64(file.UncompressedSize64),
+		Id:           item.ID,
+		Name:         path.Base(file.Name),
+		Href:         item.Href,
+		ResolvedHref: resolved,
+		Properties:   item.Properties,
+		MediaType:    item.MediaType,
+		Size:         int64(file.UncompressedSize64),
 		Open: func() (io.ReadCloser, error) {
 			return r.openZipFile(file)
 		},
@@ -177,32 +224,17 @@ func openZip(b model.Blob) (*zip.Reader, error) {
 	return zip.NewReader(b, size)
 }
 
-// cover resolves the cover image of an EPUB from the OPF package and returns
-// a Resource whose Open closure reads the cover lazily from the already-open
-// zip.Reader. The caller must keep the underlying blob usable until the Open
-// closure has been consumed.
-func (r *EpubReader) cover(zr *zip.Reader, p Package) *model.Resource {
+// coverItem returns the manifest item that represents the cover image, if any.
+// Priority: first item with properties="cover-image", then <meta name="cover"> reference.
+func (r *EpubReader) coverItem(p Package) *Item {
 	coverItems := r.opfReader.ItemsByProperty(p, "cover-image")
-	var coverItem *Item
 	if len(coverItems) > 0 {
-		coverItem = &coverItems[0]
-	} else {
-		coverMeta := r.opfReader.MetaByName(p, "cover")
-		if coverMeta != nil {
-			coverItem = r.opfReader.ItemById(p, coverMeta.Content)
-		}
+		return &coverItems[0]
 	}
-	if coverItem == nil {
-		return nil
+	if meta := r.opfReader.MetaByName(p, "cover"); meta != nil {
+		return r.opfReader.ItemById(p, meta.Content)
 	}
-	coverPath := p.ResolvePath(coverItem.Href)
-
-	coverFile := findFileInZip(zr, coverPath)
-	if coverFile == nil {
-		return nil
-	}
-	res := r.resource(*coverItem, coverFile)
-	return &res
+	return nil
 }
 
 // openZipFile opens a zip entry as a streaming reader, refusing entries that
@@ -213,7 +245,7 @@ func (r *EpubReader) cover(zr *zip.Reader, p Package) *model.Resource {
 func (r *EpubReader) openZipFile(f *zip.File) (io.ReadCloser, error) {
 	maxSize := r.cfg.MaxResourceSize
 	if maxSize <= 0 {
-		maxSize = model.DefaultConfig().MaxResourceSize
+		maxSize = config.DefaultConfig().MaxResourceSize
 	}
 	if f.UncompressedSize64 > uint64(maxSize) {
 		return nil, fmt.Errorf("%w: %q declares %d bytes (limit %d)", errs.ErrLimitExceeded, f.Name, f.UncompressedSize64, maxSize)

@@ -177,10 +177,11 @@ func TestRead_DefaultConfigReadsCover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read() error: %v", err)
 	}
-	if m.Metadata.Cover == nil {
+	cover, ok := m.Resources.CoverImage()
+	if !ok || cover == nil {
 		t.Fatal("Cover = nil, want non-nil")
 	}
-	if _, err := m.Metadata.Cover.Data(); err != nil {
+	if _, err := cover.Data(); err != nil {
 		t.Fatalf("Cover.Data() error: %v", err)
 	}
 }
@@ -194,14 +195,15 @@ func TestRead_CoverOpenStreams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read() error: %v", err)
 	}
-	if m.Metadata.Cover == nil {
+	cover, ok := m.Resources.CoverImage()
+	if !ok || cover == nil {
 		t.Fatal("Cover = nil, want non-nil")
 	}
-	if m.Metadata.Cover.Open == nil {
+	if cover.Open == nil {
 		t.Fatal("Cover.Open = nil, want non-nil")
 	}
 
-	rc, err := m.Metadata.Cover.Open()
+	rc, err := cover.Open()
 	if err != nil {
 		t.Fatalf("Cover.Open() error: %v", err)
 	}
@@ -211,8 +213,8 @@ func TestRead_CoverOpenStreams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadAll() error: %v", err)
 	}
-	if int64(len(data)) != m.Metadata.Cover.Size {
-		t.Errorf("streamed %d bytes, want Cover.Size %d", len(data), m.Metadata.Cover.Size)
+	if int64(len(data)) != cover.Size {
+		t.Errorf("streamed %d bytes, want Cover.Size %d", len(data), cover.Size)
 	}
 }
 
@@ -225,10 +227,11 @@ func TestRead_ConfigOverrideRejectsOversizedCover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read() error: %v", err)
 	}
-	if m.Metadata.Cover == nil {
+	cover, ok := m.Resources.CoverImage()
+	if !ok || cover == nil {
 		t.Fatal("Cover = nil, want non-nil")
 	}
-	if _, err := m.Metadata.Cover.Data(); err == nil {
+	if _, err := cover.Data(); err == nil {
 		t.Fatal("Cover.Data() expected error for oversized cover, got nil")
 	}
 }
@@ -242,10 +245,11 @@ func TestRead_OptionsAccumulate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read() error: %v", err)
 	}
-	if m.Metadata.Cover == nil {
+	cover, ok := m.Resources.CoverImage()
+	if !ok || cover == nil {
 		t.Fatal("Cover = nil, want non-nil")
 	}
-	if _, err := m.Metadata.Cover.Data(); err == nil {
+	if _, err := cover.Data(); err == nil {
 		t.Fatal("Cover.Data() expected error for oversized cover, got nil")
 	}
 }
@@ -279,10 +283,11 @@ func TestReadFromBlob_ConfigOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFromBlob() error: %v", err)
 	}
-	if m.Metadata.Cover == nil {
+	cover, ok := m.Resources.CoverImage()
+	if !ok || cover == nil {
 		t.Fatal("Cover = nil, want non-nil")
 	}
-	if _, err := m.Metadata.Cover.Data(); err == nil {
+	if _, err := cover.Data(); err == nil {
 		t.Fatal("Cover.Data() expected error for oversized cover, got nil")
 	}
 }

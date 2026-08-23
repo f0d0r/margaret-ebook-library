@@ -45,14 +45,15 @@ if err != nil {
 }
 ```
 
-The caller retains ownership of the file and must keep it open until the
-returned ebook (including any cover and content data) has been consumed.
+The caller retains ownership of the file and must keep it open until
+all resource data (including the cover) has been consumed.
 
 ### Reading an ebook from a blob
 
 Blobs are random-access sources, so the same API works for local files,
 ebook entries inside an archive, or remote sources. The source position is
-never modified and the caller keeps ownership.
+never modified and the caller keeps ownership. The caller must keep the blob
+usable until all resource data (including the cover) has been consumed.
 
 ```go
 ebook, err := ebook.ReadFromBlob(model.NewPathBlob("books/my-book.epub"))
@@ -72,15 +73,15 @@ fmt.Println("Description:", metadata.Description)
 fmt.Println("FileType:", ebook.FileType)
 fmt.Println("Version:", ebook.Version)
 
-if metadata.Cover != nil {
-    rc, err := metadata.Cover.Open()
+if cover, ok := ebook.Resources.CoverImage(); ok {
+    rc, err := cover.Open()
     if err != nil {
         log.Fatal(err)
     }
     defer rc.Close()
 
     // Stream the cover, e.g. write it to a file:
-    f, err := os.Create(metadata.Cover.Name)
+    f, err := os.Create(cover.Name)
     if err != nil {
         log.Fatal(err)
     }
@@ -96,11 +97,15 @@ if metadata.Cover != nil {
 To load the whole cover into memory instead, use the convenience method:
 
 ```go
-data, err := ebook.Metadata.Cover.Data() // reads the whole cover into a []byte
+cover, ok := ebook.Resources.CoverImage()
+if !ok {
+    log.Fatal("no cover")
+}
+data, err := cover.Data() // reads the whole cover into a []byte
 if err != nil {
     log.Fatal(err)
 }
-fmt.Printf("Cover %q (%s): %d bytes\n", ebook.Metadata.Cover.Name, ebook.Metadata.Cover.MediaType, len(data))
+fmt.Printf("Cover %q (%s): %d bytes\n", cover.Name, cover.MediaType, len(data))
 ```
 
 ### Overriding the safety limits
@@ -129,6 +134,41 @@ ebook, err := ebook.Read(
 )
 if err != nil {
     log.Fatal(err)
+}
+```
+
+### Working with resources
+
+```go
+// All manifest resources (images, stylesheets, etc.) in manifest order:
+for _, r := range ebook.Resources.All() {
+    fmt.Println(r.Id, r.ResolvedHref, r.MediaType, r.Href, r.Properties)
+    // Stream lazily without loading everything into memory:
+    rc, err := r.Open()
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer rc.Close()
+    // or: data, err := r.Data()
+}
+
+// Spine reading order, including linear="no" items with Linear flag:
+for _, it := range ebook.Resources.ReadingOrder() {
+    fmt.Println(it.Resource.ResolvedHref, "linear=", it.Linear)
+}
+
+// Lookup by manifest ID or resolved href (path.Clean applied):
+if r, ok := ebook.Resources.GetByID("cover"); ok {
+    fmt.Println("cover:", r.ResolvedHref)
+}
+if r, ok := ebook.Resources.GetByHref("OEBPS/images/cover.jpg"); ok {
+    fmt.Println("found:", r.Id)
+}
+
+// Cover via registry:
+if cover, ok := ebook.Resources.CoverImage(); ok {
+    data, _ := cover.Data() // convenience wrapper around Open()
+    _ = data
 }
 ```
 

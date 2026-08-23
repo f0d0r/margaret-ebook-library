@@ -178,7 +178,7 @@ func TestMobiReaderCover(t *testing.T) {
 		}
 	})
 
-	t.Run("oversized cover record returns nil", func(t *testing.T) {
+	t.Run("oversized cover record returns Open error", func(t *testing.T) {
 		mobi := &Mobi{
 			EXTH: &Exth{
 				Records: map[uint32][][]byte{
@@ -198,12 +198,18 @@ func TestMobiReaderCover(t *testing.T) {
 				{
 					Offset: 0,
 					Length: 100*1024*1024 + 1,
+					DataSlice: func(n uint32) ([]byte, error) {
+						return []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46}, nil
+					},
 				},
 			},
 		}
 		result := reader.cover(model.NewPathBlob("/fake/path"), pdbDb, mobi)
-		if result != nil {
-			t.Errorf("cover() = %v, want nil", result)
+		if result == nil {
+			t.Fatalf("cover() = nil, want resource with Open error")
+		}
+		if _, err := result.Open(); err == nil {
+			t.Errorf("Open() = nil, want ErrLimitExceeded")
 		}
 	})
 
@@ -231,12 +237,18 @@ func TestMobiReaderCover(t *testing.T) {
 				{
 					Offset: 0,
 					Length: 16,
+					DataSlice: func(n uint32) ([]byte, error) {
+						return []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46}, nil
+					},
 				},
 			},
 		}
 		result := cfgReader.cover(model.NewPathBlob("/fake/path"), pdbDb, mobi)
-		if result != nil {
-			t.Errorf("cover() = %v, want nil", result)
+		if result == nil {
+			t.Fatalf("cover() = nil, want resource with Open error")
+		}
+		if _, err := result.Open(); err == nil {
+			t.Errorf("Open() = nil, want ErrLimitExceeded")
 		}
 	})
 

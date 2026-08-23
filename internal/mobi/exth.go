@@ -25,9 +25,11 @@ type Exth struct {
 	textEncoding TextEncodingType
 }
 
+var errInvalidOffset = errs.ErrInvalidOffset
+
 func ReadExth(offset uint32, data []byte, textEncoding TextEncodingType, maxExthRecords int) (*Exth, error) {
 	if offset+12 > uint32(len(data)) {
-		return nil, errs.ErrInvalidOffset
+		return nil, errInvalidOffset
 	}
 
 	exth := &Exth{

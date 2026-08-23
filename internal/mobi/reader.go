@@ -6,18 +6,20 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	"github.com/f0d0r/margaret-ebook-library/internal/resource"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
 	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
 	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
 type MobiReader struct {
-	cfg model.Config
+	cfg config.Config
 }
 
 // NewMobiReader creates a new MOBI reader instance with the given
 // safety limits.
-func NewMobiReader(cfg model.Config) *MobiReader {
+func NewMobiReader(cfg config.Config) *MobiReader {
 	return &MobiReader{cfg: cfg}
 }
 
@@ -40,7 +42,7 @@ func (r *MobiReader) Supports(b model.Blob) bool {
 func (r *MobiReader) Read(b model.Blob) (*model.Ebook, error) {
 	maxRecordSize := r.cfg.MaxRecordSize
 	if maxRecordSize <= 0 {
-		maxRecordSize = model.DefaultConfig().MaxRecordSize
+		maxRecordSize = config.DefaultConfig().MaxRecordSize
 	}
 	pdbDb, err := ReadPdbDb(b, maxRecordSize)
 	if err != nil {
@@ -49,7 +51,7 @@ func (r *MobiReader) Read(b model.Blob) (*model.Ebook, error) {
 
 	maxExthRecords := r.cfg.MaxExthRecords
 	if maxExthRecords <= 0 {
-		maxExthRecords = model.DefaultConfig().MaxExthRecords
+		maxExthRecords = config.DefaultConfig().MaxExthRecords
 	}
 	mobi, err := ReadMobi(pdbDb, maxExthRecords)
 	if err != nil {
@@ -61,17 +63,29 @@ func (r *MobiReader) Read(b model.Blob) (*model.Ebook, error) {
 		languages = []string{mobi.Language()}
 	}
 
+	cover := r.cover(b, pdbDb, mobi)
+	content := r.content(pdbDb, mobi)
+	maxResourceSize := r.cfg.MaxResourceSize
+	if maxResourceSize <= 0 {
+		maxResourceSize = config.DefaultConfig().MaxResourceSize
+	}
+	if maxRecordSize <= 0 {
+		maxRecordSize = config.DefaultConfig().MaxRecordSize
+	}
+
+	// Build All + ReadingOrder for ResourceSet (cover alias handled internally)
+	all, readingOrder, coverAliased := r.buildMobiResources(b, pdbDb, mobi, cover, content, maxResourceSize, maxRecordSize)
+
 	return &model.Ebook{
 		Metadata: model.Metadata{
 			Title:       mobi.Title(),
 			Authors:     mobi.Authors(),
 			Description: mobi.Description(),
 			Languages:   languages,
-			Cover:       r.cover(b, pdbDb, mobi),
 		},
-		FileType: model.MOBI,
-		Version:  mobi.Version(),
-		Content:  r.content(pdbDb, mobi),
+		Resources: resource.NewResourceSet(all, readingOrder, coverAliased),
+		FileType:  model.MOBI,
+		Version:   mobi.Version(),
 	}, nil
 }
 
@@ -82,35 +96,132 @@ func (r *MobiReader) cover(b model.Blob, pdbDb *PdbDb, mobi *Mobi) *model.Resour
 	}
 	coverRecord := pdbDb.PdbRecords[coverIdx]
 	coverLength := coverRecord.Length
+	if coverLength == 0 {
+		return nil
+	}
 	maxCoverSize := r.cfg.MaxResourceSize
 	if maxCoverSize <= 0 {
-		maxCoverSize = model.DefaultConfig().MaxResourceSize
+		maxCoverSize = config.DefaultConfig().MaxResourceSize
 	}
-	if coverLength == 0 || uint64(coverLength) > uint64(maxCoverSize) {
-		return nil
-	}
-	magicData, err := coverRecord.DataSlice(8)
-	if err != nil {
-		return nil
-	}
-	media := util.DetectImageMedia(magicData)
-	if media == nil {
-		return nil
-	}
-	coverOffset := coverRecord.Offset
 	maxRecordSize := r.cfg.MaxRecordSize
 	if maxRecordSize <= 0 {
-		maxRecordSize = model.DefaultConfig().MaxRecordSize
+		maxRecordSize = config.DefaultConfig().MaxRecordSize
 	}
+	coverOffset := coverRecord.Offset
+	// Try to detect media; for oversized records DataSlice will fail due to limit check, so fallback to direct read.
+	magicData, err := coverRecord.DataSlice(8)
+	var media *util.Media
+	if err == nil {
+		media = util.DetectImageMedia(magicData)
+	}
+	if media == nil {
+		if coverLength > uint32(maxCoverSize) || coverLength > uint32(maxRecordSize) {
+			// Oversized: try direct read without limit for magic detection
+			buf := make([]byte, 8)
+			if n, rerr := b.ReadAt(buf, int64(coverOffset)); rerr == nil || rerr == io.EOF {
+				media = util.DetectImageMedia(buf[:n])
+			}
+			if media == nil {
+				media = &util.Media{Type: "application/octet-stream", Extension: "bin"}
+			}
+		} else {
+			return nil
+		}
+	}
+	href := "cover." + media.Extension
+	mediaType := media.Type
 	return &model.Resource{
-		Name:      "cover." + media.Extension,
-		MediaType: media.Type,
-		Size:      int64(coverLength),
+		Id:           "cover",
+		Name:         href,
+		Href:         href,
+		ResolvedHref: href,
+		MediaType:    mediaType,
+		Properties:   "cover-image",
+		Size:         int64(coverLength),
 		Open: func() (io.ReadCloser, error) {
+			if maxCoverSize > 0 && int64(coverLength) > maxCoverSize {
+				return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", errs.ErrLimitExceeded, href, coverLength, maxCoverSize)
+			}
+			if maxRecordSize > 0 && int64(coverLength) > maxRecordSize {
+				return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxRecordSize %d", errs.ErrLimitExceeded, href, coverLength, maxRecordSize)
+			}
 			sr := io.NewSectionReader(b, int64(coverOffset), int64(coverLength))
-			return io.NopCloser(util.LimitReader(sr, maxRecordSize)), nil
+			limit := maxCoverSize
+			if maxRecordSize > 0 && (limit <= 0 || maxRecordSize < limit) {
+				limit = maxRecordSize
+			}
+			if limit > 0 {
+				return io.NopCloser(util.LimitReader(sr, limit)), nil
+			}
+			return io.NopCloser(sr), nil
 		},
 	}
+}
+
+func (r *MobiReader) buildMobiResources(b model.Blob, pdbDb *PdbDb, mobi *Mobi, cover *model.Resource, content []model.Resource, maxResourceSize, maxRecordSize int64) ([]*model.Resource, []model.ReadingOrderItem, *model.Resource) {
+	// Content pointers (for reading order)
+	var contentPtrs []*model.Resource
+	for i := range content {
+		c := content[i]
+		if c.Href == "" {
+			c.Href = c.Name
+		}
+		if c.ResolvedHref == "" {
+			c.ResolvedHref = util.CleanHref(c.Name)
+		} else {
+			c.ResolvedHref = util.CleanHref(c.ResolvedHref)
+		}
+		c.Href = util.CleanHref(c.Href)
+		if c.Id == "" {
+			c.Id = c.Name
+		}
+		ptr := new(model.Resource)
+		*ptr = c
+		contentPtrs = append(contentPtrs, ptr)
+	}
+
+	readingOrder := buildMobiReadingOrder(contentPtrs)
+
+	images := imageResources(b, pdbDb, mobi, maxResourceSize, maxRecordSize)
+
+	// Deduplicate cover vs images by PDB record index — ResolvedHref differs (cover.jpg vs images/00042.jpg).
+	coverIdx := mobi.CoverRecordIdx()
+	if cover != nil && coverIdx != 0 {
+		imagesByRecord := make(map[uint32]*model.Resource, len(images))
+		for _, im := range images {
+			imagesByRecord[im.recordIndex] = im.resource
+		}
+		if img, ok := imagesByRecord[coverIdx]; ok {
+			cover = img
+		}
+	}
+
+	// All: reading order first, then images not already in reading order + cover if not in images.
+	// Deduplicate by canonical ResolvedHref.
+	seen := make(map[string]bool)
+	all := make([]*model.Resource, 0, len(contentPtrs)+len(images)+1)
+	for _, ptr := range contentPtrs {
+		key := util.CleanHref(ptr.ResolvedHref)
+		if !seen[key] {
+			seen[key] = true
+			all = append(all, ptr)
+		}
+	}
+	for _, im := range images {
+		key := util.CleanHref(im.resource.ResolvedHref)
+		if !seen[key] {
+			seen[key] = true
+			all = append(all, im.resource)
+		}
+	}
+	if cover != nil {
+		key := util.CleanHref(cover.ResolvedHref)
+		if !seen[key] {
+			seen[key] = true
+			all = append(all, cover)
+		}
+	}
+	return all, readingOrder, cover
 }
 
 // content returns the book's text as HTML resources.
@@ -118,7 +229,7 @@ func (r *MobiReader) cover(b model.Blob, pdbDb *PdbDb, mobi *Mobi) *model.Resour
 func (r *MobiReader) content(pdbDb *PdbDb, mobi *Mobi) []model.Resource {
 	maxResourceSize := r.cfg.MaxResourceSize
 	if maxResourceSize <= 0 {
-		maxResourceSize = model.DefaultConfig().MaxResourceSize
+		maxResourceSize = config.DefaultConfig().MaxResourceSize
 	}
 
 	// Try MOBI8 path first

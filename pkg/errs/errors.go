@@ -9,6 +9,7 @@ var (
 
 	// ErrInvalidOffset is returned when the application encounters an invalid
 	// offset into the data.
+	// Deprecated: internal use only, will be unexported in a future version.
 	ErrInvalidOffset = errors.New("invalid offset")
 
 	// ErrLimitExceeded is returned by [LimitReader] when the underlying reader
