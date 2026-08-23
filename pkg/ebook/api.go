@@ -13,7 +13,7 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
-// Read reads an ebook (metadata and content) from the specified file path.
+// Read reads an ebook (metadata and resources) from the specified file path.
 //
 // It trims leading and trailing whitespace from the provided path and rejects
 // empty paths with [errs.ErrUnsupportedFormat]. It selects the appropriate
@@ -33,7 +33,7 @@ func Read(path string, opts ...Option) (model.Ebook, error) {
 	return read(model.NewPathBlob(path), path, opts)
 }
 
-// ReadFromBlob reads an ebook (metadata and content) from a random-access
+// ReadFromBlob reads an ebook (metadata and resources) from a random-access
 // source such as a local file, an e-book entry inside an archive, or a remote
 // source.
 //
@@ -44,8 +44,8 @@ func Read(path string, opts ...Option) (model.Ebook, error) {
 // An optional [Option] can be passed to override the library-wide safety
 // limits; when omitted, the defaults of [model.DefaultConfig] are used.
 //
-// The caller retains ownership of the blob and must keep it usable until the
-// returned ebook (including any cover and content data) has been consumed.
+// The caller retains ownership of the blob and must keep it usable until
+// all resource data (including the cover) has been consumed.
 // The file position of the source is never modified.
 //
 // If no suitable reader is found for the format, it returns an error wrapping
@@ -54,12 +54,12 @@ func ReadFromBlob(b model.Blob, opts ...Option) (model.Ebook, error) {
 	return read(b, "", opts)
 }
 
-// ReadFromFile reads an ebook (metadata and content) from an already-open
+// ReadFromFile reads an ebook (metadata and resources) from an already-open
 // file.
 //
 // It is a convenience wrapper around [ReadFromBlob]. The caller retains
-// ownership of the file and must keep it open until the returned ebook
-// (including any cover and content data) has been consumed.
+// ownership of the file and must keep it open until all resource data
+// (including the cover) has been consumed.
 //
 // An optional [Option] can be passed to override the library-wide safety
 // limits; when omitted, the defaults of [model.DefaultConfig] are used.

@@ -31,27 +31,35 @@ func main() {
 	fmt.Printf("File Type: %s\n", book.FileType)
 	fmt.Printf("Version: %s\n", book.Version)
 
-	if bookMeta.Cover != nil {
-		fmt.Printf("Cover: %s (%d bytes) media type: %s\n", bookMeta.Cover.Name, bookMeta.Cover.Size, bookMeta.Cover.MediaType)
+	if book.Resources != nil {
+		if cover, ok := book.Resources.CoverImage(); ok {
+			fmt.Printf("Cover: %s (%d bytes) media type: %s href: %s\n", cover.Name, cover.Size, cover.MediaType, cover.ResolvedHref)
+		}
 	}
 
-	fmt.Printf("\nContent (%d resources):\n", len(book.Content))
-	for i, res := range book.Content {
-		fmt.Printf("\n[%d] %s (%s, %s, %d bytes)\n", i, res.Name, res.Id, res.MediaType, res.Size)
-
-		if isTextMediaType(res.MediaType) {
-			rc, err := res.Open()
-			if err != nil {
-				fmt.Printf("  error opening: %v\n", err)
-				continue
+	if book.Resources != nil {
+		fmt.Printf("\nResources: %d total, %d in reading order\n", book.Resources.Len(), len(book.Resources.ReadingOrder()))
+		fmt.Printf("All resources (%d):\n", len(book.Resources.All()))
+		for i, res := range book.Resources.All() {
+			fmt.Printf("  [%d] %s (%s, %s, %d bytes) href=%s resolved=%s\n", i, res.Name, res.Id, res.MediaType, res.Size, res.Href, res.ResolvedHref)
+		}
+		fmt.Printf("\nReadingOrder (%d):\n", len(book.Resources.ReadingOrder()))
+		for i, it := range book.Resources.ReadingOrder() {
+			fmt.Printf("\n[%d] %s (%s, %s, %d bytes) linear=%v href=%s\n", i, it.Resource.Name, it.Resource.Id, it.Resource.MediaType, it.Resource.Size, it.Linear, it.Resource.ResolvedHref)
+			if isTextMediaType(it.Resource.MediaType) {
+				rc, err := it.Resource.Open()
+				if err != nil {
+					fmt.Printf("  error opening: %v\n", err)
+					continue
+				}
+				data, err := io.ReadAll(rc)
+				_ = rc.Close()
+				if err != nil {
+					fmt.Printf("  error reading: %v\n", err)
+					continue
+				}
+				fmt.Printf("  %s\n", data)
 			}
-			data, err := io.ReadAll(rc)
-			_ = rc.Close()
-			if err != nil {
-				fmt.Printf("  error reading: %v\n", err)
-				continue
-			}
-			fmt.Printf("  %s\n", data)
 		}
 	}
 }

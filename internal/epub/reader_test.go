@@ -122,8 +122,8 @@ func TestGetCover(t *testing.T) {
 				t.Fatalf("failed to read opf: %v", err)
 			}
 
-			// Get the cover
-			cover := reader.cover(zr, pkg)
+			// Cover is derived from all: build all resources first, then select cover from the map.
+			all, _, cover := reader.readResources(zr, pkg)
 
 			if tt.shouldFindCover {
 				if cover == nil {
@@ -144,6 +144,17 @@ func TestGetCover(t *testing.T) {
 				}
 				if cover.Open == nil {
 					t.Errorf("expected Open function to be set")
+				}
+				// Verify cover is the same instance as in all (no duplicate Resource creation).
+				foundInAll := false
+				for _, r := range all {
+					if r == cover {
+						foundInAll = true
+						break
+					}
+				}
+				if !foundInAll {
+					t.Errorf("cover %q not found in all resources; duplicate creation?", cover.Id)
 				}
 			} else {
 				if cover != nil {
@@ -395,27 +406,39 @@ func TestReadContent(t *testing.T) {
 		t.Errorf("Title = %q, want %q", ebook.Metadata.Title, "Test Book")
 	}
 
-	if len(ebook.Content) != 2 {
-		t.Fatalf("len(Content) = %d, want 2", len(ebook.Content))
+	// Content is now via Resources.ReadingOrder(); linear="no" items are included with Linear=false.
+	ro := ebook.Resources.ReadingOrder()
+	if len(ro) != 3 {
+		t.Fatalf("len(ReadingOrder) = %d, want 3", len(ro))
+	}
+	// ro[0] = ch1 linear=true, ro[1] = ch2 linear=false, ro[2] = ch4 linear=true
+	if ro[0].Resource.Id != "ch1" || !ro[0].Linear {
+		t.Errorf("ReadingOrder[0] = %+v, want ch1 linear=true", ro[0])
+	}
+	if ro[1].Resource.Id != "ch2" || ro[1].Linear {
+		t.Errorf("ReadingOrder[1] = %+v, want ch2 linear=false", ro[1])
+	}
+	if ro[2].Resource.Id != "ch4" || !ro[2].Linear {
+		t.Errorf("ReadingOrder[2] = %+v, want ch4 linear=true", ro[2])
 	}
 
-	ch1 := ebook.Content[0]
+	ch1 := ro[0].Resource
 	if ch1.Id != "ch1" {
-		t.Errorf("Content[0].Id = %q, want %q", ch1.Id, "ch1")
+		t.Errorf("ReadingOrder[0].Id = %q, want %q", ch1.Id, "ch1")
 	}
 	if ch1.Name != "ch1.xhtml" {
-		t.Errorf("Content[0].Name = %q, want %q", ch1.Name, "ch1.xhtml")
+		t.Errorf("ReadingOrder[0].Name = %q, want %q", ch1.Name, "ch1.xhtml")
 	}
 	if ch1.MediaType != "application/xhtml+xml" {
-		t.Errorf("Content[0].MediaType = %q, want %q", ch1.MediaType, "application/xhtml+xml")
+		t.Errorf("ReadingOrder[0].MediaType = %q, want %q", ch1.MediaType, "application/xhtml+xml")
 	}
 	wantCh1 := len("<html><body>Chapter 1</body></html>")
 	if ch1.Size != int64(wantCh1) {
-		t.Errorf("Content[0].Size = %d, want %d", ch1.Size, wantCh1)
+		t.Errorf("ReadingOrder[0].Size = %d, want %d", ch1.Size, wantCh1)
 	}
 	rc, err := ch1.Open()
 	if err != nil {
-		t.Fatalf("Content[0].Open() error: %v", err)
+		t.Fatalf("ReadingOrder[0].Open() error: %v", err)
 	}
 	data, err := io.ReadAll(rc)
 	_ = rc.Close()
@@ -423,10 +446,14 @@ func TestReadContent(t *testing.T) {
 		t.Fatalf("ReadAll() error: %v", err)
 	}
 	if string(data) != "<html><body>Chapter 1</body></html>" {
-		t.Errorf("Content[0] data = %q, want chapter 1 content", string(data))
+		t.Errorf("ReadingOrder[0] data = %q, want chapter 1 content", string(data))
 	}
 
-	if ch4 := ebook.Content[1]; ch4.Id != "ch4" {
-		t.Errorf("Content[1].Id = %q, want %q (spine order preserved)", ch4.Id, "ch4")
+	if ch4 := ro[2].Resource; ch4.Id != "ch4" {
+		t.Errorf("ReadingOrder[2].Id = %q, want %q (spine order preserved)", ch4.Id, "ch4")
+	}
+	// All() should contain manifest items present in ZIP (ch1,ch2,ch4)
+	if len(ebook.Resources.All()) != 3 {
+		t.Errorf("len(All) = %d, want 3", len(ebook.Resources.All()))
 	}
 }

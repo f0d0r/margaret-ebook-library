@@ -64,15 +64,16 @@ func createBenchEPUB(b *testing.B, path string, nEntries int) {
 	}
 }
 
-// consumeCover reads the cover data of the metadata, if any, so that the
+// consumeCover reads the cover data, if any, so that the
 // benchmarks exercise the lazy cover loading path (including the underlying
 // zip central-directory access) rather than skipping it.
-func consumeCover(b *testing.B, m model.Metadata) {
+func consumeCover(b *testing.B, m model.Ebook) {
 	b.Helper()
-	if m.Cover == nil {
+	cover, ok := m.Resources.CoverImage()
+	if !ok || cover == nil {
 		return
 	}
-	if _, err := m.Cover.Data(); err != nil {
+	if _, err := cover.Data(); err != nil {
 		b.Fatalf("cover data error: %v", err)
 	}
 }
@@ -89,7 +90,7 @@ func BenchmarkRead(b *testing.B) {
 			if err != nil {
 				b.Fatalf("Read() error: %v", err)
 			}
-			consumeCover(b, ebook.Metadata)
+			consumeCover(b, ebook)
 		}
 	})
 }
@@ -110,7 +111,7 @@ func BenchmarkReadFromFile(b *testing.B) {
 			if err != nil {
 				b.Fatalf("ReadFromFile() error: %v", err)
 			}
-			consumeCover(b, ebook.Metadata)
+			consumeCover(b, ebook)
 			_ = f.Close()
 		}
 	})
@@ -128,7 +129,7 @@ func BenchmarkReadFromPathBlob(b *testing.B) {
 			if err != nil {
 				b.Fatalf("ReadFromBlob() error: %v", err)
 			}
-			consumeCover(b, ebook.Metadata)
+			consumeCover(b, ebook)
 		}
 	})
 }

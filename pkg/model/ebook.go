@@ -6,9 +6,9 @@ import (
 )
 
 type Ebook struct {
-	Metadata Metadata
-	Content  []Resource
-	FileType FileType
+	Metadata  Metadata
+	Resources *ResourceSet
+	FileType  FileType
 
 	// Version is the format-specific version declared by the e-book: the OPF
 	// package version (e.g. "3.0") for EPUB, the MOBI header version (e.g.
@@ -17,7 +17,7 @@ type Ebook struct {
 }
 
 // Metadata represents the extracted core information of an e-book.
-// It normalized data across different e-book formats like EPUB, MOBI, etc.
+// It normalizes data across different e-book formats like EPUB, MOBI, etc.
 type Metadata struct {
 	// Title is the main title of the e-book.
 	Title string
@@ -30,18 +30,19 @@ type Metadata struct {
 
 	// Languages is the language(s) of the book.
 	Languages []string
-
-	// Cover is the cover image of the book.
-	Cover *Resource
 }
 
-// Resource represents an embedded file of an e-book (currently the cover
-// image). Its content is exposed lazily through Open so callers can stream it
-// without materializing the whole file in memory.
+// Resource represents an embedded file of an e-book (e.g. a chapter,
+// image, stylesheet, or the cover image). Its content is exposed lazily
+// through Open so callers can stream it without materializing the whole
+// file in memory.
 type Resource struct {
-	Id        string
-	Name      string
-	MediaType string
+	Id           string
+	Name         string
+	MediaType    string
+	Href         string
+	ResolvedHref string
+	Properties   string
 
 	// Size is the declared uncompressed size of the resource in bytes.
 	Size int64
