@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/epub"
 	"github.com/f0d0r/margaret-ebook-library/internal/mobi"
-	"github.com/f0d0r/margaret-ebook-library/book"
 )
 
 func TestRegistry_ReaderForBlob(t *testing.T) {

@@ -280,7 +280,9 @@ Registering is thread-safe via `Registry.Register`.
 ### Hashing a book
 
 ```go
-hash, err := ebook.CalculateFileHash("books/my-book.epub")
+import "github.com/f0d0r/margaret-ebook-library/tools"
+
+hash, err := tools.CalculateFileHash("books/my-book.epub")
 if err != nil {
     log.Fatal(err)
 }
@@ -290,5 +292,53 @@ fmt.Println(hash) // hex-encoded sha256
 Or from a blob:
 
 ```go
-hash, err := ebook.CalculateFileHashFromBlob(ebook.NewPathBlob("books/my-book.epub"))
+hash, err := tools.CalculateFileHashFromBlob(ebook.NewPathBlob("books/my-book.epub"))
+```
+
+### Content fingerprinting (MinHash / SimHash)
+
+Fingerprints are computed over the normalized plain-text stream and are streaming-friendly — they implement `io.Writer` so they can be attached with `io.TeeReader`/`io.MultiWriter` in a single pass:
+
+```go
+import (
+    "context"
+    "io"
+
+    "github.com/f0d0r/margaret-ebook-library/mediatype"
+    "github.com/f0d0r/margaret-ebook-library/tools"
+)
+
+ctx := context.Background()
+
+// One-shot helper (injects "\n" between chapters):
+fp, err := tools.FingerprintContent(ctx, book,
+    tools.WithMinHash(tools.MinHashConfig{NumHashes: 128, ShingleSize: 5}),
+    tools.WithSimHash(),
+)
+fmt.Println(fp.MinHash, fp.SimHash)
+fmt.Println(tools.Jaccard(fp.MinHash, other.MinHash))
+fmt.Println(tools.Hamming(fp.SimHash, other.SimHash))
+
+// Streaming while copying plain text elsewhere:
+rc, handle, err := tools.OpenReadingOrderWithFingerprint(ctx, book.Resources(), mediatype.PlainText,
+    tools.WithMinHash(tools.MinHashConfig{NumHashes: 128, ShingleSize: 5}),
+    tools.WithSimHash(),
+)
+defer rc.Close()
+io.Copy(io.Discard, rc) // or dst file
+fp = handle.Result()
+```
+
+`MinHasher` and `SimHasher` also implement `io.Writer` directly:
+
+```go
+mh := tools.NewMinHasher(tools.WithShingleSize(5), tools.WithNumHashes(128))
+sh := tools.NewSimHasher()
+
+// Fan-out while streaming plain text (single pass):
+rc, _ := book.Resources().OpenReadingOrderAs(ctx, mediatype.PlainText)
+defer rc.Close()
+tee := io.TeeReader(rc, io.MultiWriter(mh, sh))
+io.Copy(io.Discard, tee)
+fmt.Println(mh.Signature(), sh.Sum64())
 ```

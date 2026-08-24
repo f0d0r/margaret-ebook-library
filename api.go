@@ -1,10 +1,7 @@
 package ebook
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
@@ -121,37 +118,3 @@ func read(b Blob, name string, opts []Option) (Book, error) {
 // limits used internally to configure the format readers.
 // Deprecated: use Option instead.
 type Config = config.Config
-
-// CalculateFileHash calculates the sha256 hash of the file at the specified path.
-func CalculateFileHash(path string) (string, error) {
-	return CalculateFileHashFromBlob(NewPathBlob(path))
-}
-
-// CalculateFileHashFromBlob calculates the sha256 hash of a random-access
-// source by reading it in chunks, so it works for local files as well as
-// archive entries and remote sources without materializing a temporary file.
-// It never modifies the source's position.
-func CalculateFileHashFromBlob(b Blob) (string, error) {
-	size, err := b.Size()
-	if err != nil {
-		return "", fmt.Errorf("failed to get file size: %w", err)
-	}
-
-	h := sha256.New()
-	buf := make([]byte, 32*1024)
-	for off := int64(0); off < size; {
-		n, err := b.ReadAt(buf, off)
-		if n > 0 {
-			_, _ = h.Write(buf[:n])
-		}
-		off += int64(n)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", fmt.Errorf("failed to read: %w", err)
-		}
-	}
-
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
