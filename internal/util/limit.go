@@ -3,7 +3,7 @@ package util
 import (
 	"io"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
+	"github.com/f0d0r/margaret-ebook-library/book"
 )
 
 // LimitReader returns a reader that yields at most max bytes from r and
@@ -23,7 +23,7 @@ func (l *limitReader) Read(p []byte) (int, error) {
 	if l.remaining <= 0 {
 		var probe [1]byte
 		if n, _ := l.r.Read(probe[:]); n > 0 {
-			return 0, errs.ErrLimitExceeded
+			return 0, book.ErrLimitExceeded
 		}
 		return 0, io.EOF
 	}

@@ -20,9 +20,6 @@ const (
 
 // Normalize lowercases the MIME type, strips parameters (e.g. "; charset=utf-8"),
 // and trims surrounding whitespace. Empty input returns "".
-// Also exposed as internal/util.NormalizeMediaType for internal callers
-// (internal/util delegates to this implementation to keep a single source of truth;
-// pkg cannot import internal, so the canonical implementation stays here).
 func Normalize(m string) string {
 	m = strings.TrimSpace(m)
 	if m == "" {

@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
+	"github.com/f0d0r/margaret-ebook-library/book"
 )
 
 func TestLimitReaderExactSize(t *testing.T) {
@@ -40,7 +40,7 @@ func TestLimitReaderExceeded(t *testing.T) {
 	lr := LimitReader(bytes.NewReader(src), 16)
 
 	_, err := io.ReadAll(lr)
-	if !errors.Is(err, errs.ErrLimitExceeded) {
+	if !errors.Is(err, book.ErrLimitExceeded) {
 		t.Fatalf("ReadAll() error = %v, want ErrLimitExceeded", err)
 	}
 }
@@ -61,7 +61,7 @@ func TestLimitReaderZeroLimitNonEmpty(t *testing.T) {
 	lr := LimitReader(bytes.NewReader([]byte("x")), 0)
 
 	_, err := io.ReadAll(lr)
-	if !errors.Is(err, errs.ErrLimitExceeded) {
+	if !errors.Is(err, book.ErrLimitExceeded) {
 		t.Fatalf("ReadAll() error = %v, want ErrLimitExceeded", err)
 	}
 }

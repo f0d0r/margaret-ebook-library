@@ -3,7 +3,7 @@ package converter
 import (
 	"sync"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/mediatype"
+	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
 type edge struct {
@@ -55,8 +55,6 @@ func (r *Registry) Find(from, to string) (Transformer, bool) {
 }
 
 // FindPath returns the shortest transformer chain from->to via BFS.
-// For now the graph is small; BFS is cheap and handles future multi-hop
-// conversions (e.g. x-mobipocket-html -> xhtml -> plain).
 func (r *Registry) FindPath(from, to string) ([]Transformer, bool) {
 	from = mediatype.Normalize(from)
 	to = mediatype.Normalize(to)

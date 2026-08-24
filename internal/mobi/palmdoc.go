@@ -1,6 +1,6 @@
 package mobi
 
-import "github.com/f0d0r/margaret-ebook-library/pkg/errs"
+import "github.com/f0d0r/margaret-ebook-library/book"
 
 // DecompressPalmDoc decompresses a block compressed with PalmDOC (LZ77)
 // compression, as used for the text records of a MOBI file. It mirrors the
@@ -9,7 +9,7 @@ import "github.com/f0d0r/margaret-ebook-library/pkg/errs"
 // so far) are silently skipped rather than reported as errors.
 //
 // remain is the remaining budget for decompressed bytes (maxSize - len(out) from
-// the caller). If remain >=0, decompression fails with errs.ErrLimitExceeded
+// the caller). If remain >=0, decompression fails with book.ErrLimitExceeded
 // when the output would exceed the remaining budget. Pass remain <0 for unlimited.
 func DecompressPalmDoc(in []byte, remain int64) ([]byte, error) {
 	capHint := len(in) * 2
@@ -29,20 +29,20 @@ func DecompressPalmDoc(in []byte, remain int64) ([]byte, error) {
 				c = len(in) - p
 			}
 			if remain >= 0 && int64(len(out)+c) > remain {
-				return nil, errs.ErrLimitExceeded
+				return nil, book.ErrLimitExceeded
 			}
 			out = append(out, in[p:p+c]...)
 			p += c
 		case c < 128:
 			// Literal byte.
 			if remain >= 0 && int64(len(out)+1) > remain {
-				return nil, errs.ErrLimitExceeded
+				return nil, book.ErrLimitExceeded
 			}
 			out = append(out, byte(c))
 		case c >= 192:
 			// Literal space plus the byte with bit 0x80 cleared.
 			if remain >= 0 && int64(len(out)+2) > remain {
-				return nil, errs.ErrLimitExceeded
+				return nil, book.ErrLimitExceeded
 			}
 			out = append(out, ' ', byte(c^128))
 		default:
@@ -62,14 +62,14 @@ func DecompressPalmDoc(in []byte, remain int64) ([]byte, error) {
 			if m > n {
 				// No overlap between source and destination ranges.
 				if remain >= 0 && int64(len(out)+n) > remain {
-					return nil, errs.ErrLimitExceeded
+					return nil, book.ErrLimitExceeded
 				}
 				out = append(out, out[len(out)-m:len(out)-m+n]...)
 				continue
 			}
 			if m == 0 {
 				if remain >= 0 && int64(len(out)+n) > remain {
-					return nil, errs.ErrLimitExceeded
+					return nil, book.ErrLimitExceeded
 				}
 				out = append(out, make([]byte, n)...)
 				continue
@@ -77,7 +77,7 @@ func DecompressPalmDoc(in []byte, remain int64) ([]byte, error) {
 			// Overlapping copy: byte at distance m, re-evaluated as the
 			// output grows, repeated n times.
 			if remain >= 0 && int64(len(out)+n) > remain {
-				return nil, errs.ErrLimitExceeded
+				return nil, book.ErrLimitExceeded
 			}
 			for range n {
 				out = append(out, out[len(out)-m])

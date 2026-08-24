@@ -4,8 +4,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/internal/config"
 )
 
 func TestReadExth(t *testing.T) {
@@ -23,7 +22,7 @@ func TestReadExth(t *testing.T) {
 			name:    "Invalid offset",
 			offset:  1000,
 			data:    make([]byte, 50),
-			wantErr: errs.ErrInvalidOffset,
+			wantErr: errInvalidOffset,
 		},
 		{
 			name:          "Valid EXTH header with no records",
@@ -62,7 +61,7 @@ func TestReadExth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ReadExth(tt.offset, tt.data, tt.textEncoding, model.DefaultConfig().MaxExthRecords)
+			got, err := ReadExth(tt.offset, tt.data, tt.textEncoding, config.DefaultConfig().MaxExthRecords)
 
 			if tt.wantErr != nil {
 				if err != tt.wantErr {
@@ -296,7 +295,7 @@ func TestExthRecordMap(t *testing.T) {
 		102: "value3",
 	})
 
-	exth, err := ReadExth(0, data, UTF8, model.DefaultConfig().MaxExthRecords)
+	exth, err := ReadExth(0, data, UTF8, config.DefaultConfig().MaxExthRecords)
 	if err != nil {
 		t.Fatalf("ReadExth() error: %v", err)
 	}

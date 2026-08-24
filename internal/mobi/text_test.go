@@ -6,8 +6,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/config"
 )
 
 func TestExtractTextNone(t *testing.T) {
@@ -173,7 +173,7 @@ func TestExtractTextLimitExceeded(t *testing.T) {
 		TextRecordCount: 1,
 	}
 	_, err := extractText(pdbDb, mobi, 5)
-	if !errors.Is(err, errs.ErrLimitExceeded) {
+	if !errors.Is(err, book.ErrLimitExceeded) {
 		t.Errorf("extractText() error = %v, want ErrLimitExceeded", err)
 	}
 }
@@ -193,7 +193,7 @@ func TestExtractTextUnknownCompression(t *testing.T) {
 }
 
 func TestMobiReaderContent(t *testing.T) {
-	reader := NewMobiReader(model.DefaultConfig())
+	reader := NewMobiReader(config.DefaultConfig())
 
 	t.Run("no text records returns nil", func(t *testing.T) {
 		pdbDb := &PdbDb{PdbRecords: []PdbRecord{createMockPdbRecord(make([]byte, 100))}}

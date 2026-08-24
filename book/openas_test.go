@@ -1,4 +1,4 @@
-package model
+package book
 
 import (
 	"bytes"
@@ -8,14 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/converter"
-	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
-	"github.com/f0d0r/margaret-ebook-library/pkg/mediatype"
+	"github.com/f0d0r/margaret-ebook-library/converter"
+	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
 func mustReadAll(t *testing.T, rc io.ReadCloser) string {
 	t.Helper()
-	defer rc.Close()
+	defer func () { _ = rc.Close() }()
 	b, err := io.ReadAll(rc)
 	if err != nil {
 		t.Fatalf("ReadAll failed: %v", err)
@@ -23,7 +22,6 @@ func mustReadAll(t *testing.T, rc io.ReadCloser) string {
 	return string(b)
 }
 
-// upperTransformer is a test helper that upper-cases bytes for BFS chain tests.
 type upperTransformer struct{ from, to string }
 
 func (u *upperTransformer) From() string { return u.from }
@@ -120,7 +118,7 @@ func TestResource_OpenAs_NoTransformer(t *testing.T) {
 		return io.NopCloser(bytes.NewReader([]byte{1, 2})), nil
 	}}
 	_, err := r.OpenAs(ctx, mediatype.PlainText)
-	if !errors.Is(err, errs.ErrNoTransformer) {
+	if !errors.Is(err, ErrNoTransformer) {
 		t.Fatalf("should be ErrNoTransformer, got %v", err)
 	}
 	if err.Error() == "" || !strings.Contains(err.Error(), "image/jpeg") {
@@ -134,14 +132,14 @@ func TestResource_OpenAs_UnsupportedMediaType(t *testing.T) {
 		return io.NopCloser(strings.NewReader("x")), nil
 	}}
 	_, err := r.OpenAs(ctx, mediatype.PlainText)
-	if !errors.Is(err, errs.ErrUnsupportedMediaType) {
+	if !errors.Is(err, ErrUnsupportedMediaType) {
 		t.Fatalf("empty from should be ErrUnsupportedMediaType, got %v", err)
 	}
 	r2 := &Resource{MediaType: mediatype.XHTML, Open: func() (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader("x")), nil
 	}}
 	_, err = r2.OpenAs(ctx, "")
-	if !errors.Is(err, errs.ErrUnsupportedMediaType) {
+	if !errors.Is(err, ErrUnsupportedMediaType) {
 		t.Fatalf("empty target should be ErrUnsupportedMediaType, got %v", err)
 	}
 }
@@ -170,7 +168,6 @@ func TestResource_OpenAs_OpenErrorPropagates(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "open fail") {
 		t.Fatalf("should propagate Open error, got %v", err)
 	}
-	// also for transformed path
 	r2 := &Resource{MediaType: mediatype.XHTML, Open: func() (io.ReadCloser, error) {
 		return nil, errors.New("open fail2")
 	}}
@@ -189,7 +186,6 @@ func TestResource_OpenAs_ClosePropagation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenAs failed: %v", err)
 	}
-	// reading should work
 	if got := mustReadAll(t, rc); got != "hi" {
 		t.Fatalf("got %q, want %q", got, "hi")
 	}
@@ -223,10 +219,9 @@ func TestResource_OpenAsWithRegistry_Isolation(t *testing.T) {
 		return io.NopCloser(strings.NewReader("<p>x</p>")), nil
 	}}
 	_, err := r.OpenAsWithRegistry(ctx, custom, mediatype.PlainText)
-	if !errors.Is(err, errs.ErrNoTransformer) {
+	if !errors.Is(err, ErrNoTransformer) {
 		t.Fatalf("isolated registry should give ErrNoTransformer, got %v", err)
 	}
-	// DefaultRegistry still works
 	rc, err := r.OpenAs(ctx, mediatype.PlainText)
 	if err != nil {
 		t.Fatalf("default should still work, got %v", err)
@@ -288,7 +283,7 @@ func TestResource_OpenAs_StreamingSmallBuffer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenAs failed: %v", err)
 	}
-	defer rc.Close()
+	defer func () { _ = rc.Close() }()
 	buf := make([]byte, 3)
 	var out bytes.Buffer
 	for {

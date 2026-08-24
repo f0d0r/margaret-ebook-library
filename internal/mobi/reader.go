@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
-	"github.com/f0d0r/margaret-ebook-library/internal/resource"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
-	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
 type MobiReader struct {
@@ -23,7 +21,7 @@ func NewMobiReader(cfg config.Config) *MobiReader {
 	return &MobiReader{cfg: cfg}
 }
 
-func (r *MobiReader) Supports(b model.Blob) bool {
+func (r *MobiReader) Supports(b book.Blob) bool {
 	// The "BOOKMOBI" identifier starts at byte 60 and ends at byte 67.
 	// Therefore reading exactly 68 bytes is sufficient.
 	buf := make([]byte, 68)
@@ -39,7 +37,7 @@ func (r *MobiReader) Supports(b model.Blob) bool {
 	return string(buf[60:68]) == "BOOKMOBI"
 }
 
-func (r *MobiReader) Read(b model.Blob) (*model.Ebook, error) {
+func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 	maxRecordSize := r.cfg.MaxRecordSize
 	if maxRecordSize <= 0 {
 		maxRecordSize = config.DefaultConfig().MaxRecordSize
@@ -53,18 +51,18 @@ func (r *MobiReader) Read(b model.Blob) (*model.Ebook, error) {
 	if maxExthRecords <= 0 {
 		maxExthRecords = config.DefaultConfig().MaxExthRecords
 	}
-	mobi, err := ReadMobi(pdbDb, maxExthRecords)
+	mobiDoc, err := ReadMobi(pdbDb, maxExthRecords)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read MOBI file: %w", err)
 	}
 
 	var languages []string
-	if mobi.Language() != "" {
-		languages = []string{mobi.Language()}
+	if mobiDoc.Language() != "" {
+		languages = []string{mobiDoc.Language()}
 	}
 
-	cover := r.cover(b, pdbDb, mobi)
-	content := r.content(pdbDb, mobi)
+	cover := r.cover(b, pdbDb, mobiDoc)
+	content := r.content(pdbDb, mobiDoc)
 	maxResourceSize := r.cfg.MaxResourceSize
 	if maxResourceSize <= 0 {
 		maxResourceSize = config.DefaultConfig().MaxResourceSize
@@ -74,23 +72,23 @@ func (r *MobiReader) Read(b model.Blob) (*model.Ebook, error) {
 	}
 
 	// Build All + ReadingOrder for ResourceSet (cover alias handled internally)
-	all, readingOrder, coverAliased := r.buildMobiResources(b, pdbDb, mobi, cover, content, maxResourceSize, maxRecordSize)
+	all, readingOrder, coverAliased := r.buildMobiResources(b, pdbDb, mobiDoc, cover, content, maxResourceSize, maxRecordSize)
 
-	return &model.Ebook{
-		Metadata: model.Metadata{
-			Title:       mobi.Title(),
-			Authors:     mobi.Authors(),
-			Description: mobi.Description(),
+	return &mobiBook{
+		metadata: book.Metadata{
+			Title:       mobiDoc.Title(),
+			Authors:     mobiDoc.Authors(),
+			Description: mobiDoc.Description(),
 			Languages:   languages,
 		},
-		Resources: resource.NewResourceSet(all, readingOrder, coverAliased),
-		FileType:  model.MOBI,
-		Version:   mobi.Version(),
+		resources: book.NewResourceSet(all, readingOrder, coverAliased),
+		version:   mobiDoc.Version(),
+		mobiDoc:   mobiDoc,
 	}, nil
 }
 
-func (r *MobiReader) cover(b model.Blob, pdbDb *PdbDb, mobi *Mobi) *model.Resource {
-	coverIdx := mobi.CoverRecordIdx()
+func (r *MobiReader) cover(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi) *book.Resource {
+	coverIdx := mobiDoc.CoverRecordIdx()
 	if coverIdx == 0 || int(coverIdx) >= len(pdbDb.PdbRecords) {
 		return nil
 	}
@@ -130,7 +128,7 @@ func (r *MobiReader) cover(b model.Blob, pdbDb *PdbDb, mobi *Mobi) *model.Resour
 	}
 	href := "cover." + media.Extension
 	mediaType := media.Type
-	return &model.Resource{
+	return &book.Resource{
 		Id:           "cover",
 		Name:         href,
 		Href:         href,
@@ -140,10 +138,10 @@ func (r *MobiReader) cover(b model.Blob, pdbDb *PdbDb, mobi *Mobi) *model.Resour
 		Size:         int64(coverLength),
 		Open: func() (io.ReadCloser, error) {
 			if maxCoverSize > 0 && int64(coverLength) > maxCoverSize {
-				return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", errs.ErrLimitExceeded, href, coverLength, maxCoverSize)
+				return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, href, coverLength, maxCoverSize)
 			}
 			if maxRecordSize > 0 && int64(coverLength) > maxRecordSize {
-				return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxRecordSize %d", errs.ErrLimitExceeded, href, coverLength, maxRecordSize)
+				return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxRecordSize %d", book.ErrLimitExceeded, href, coverLength, maxRecordSize)
 			}
 			sr := io.NewSectionReader(b, int64(coverOffset), int64(coverLength))
 			limit := maxCoverSize
@@ -158,9 +156,9 @@ func (r *MobiReader) cover(b model.Blob, pdbDb *PdbDb, mobi *Mobi) *model.Resour
 	}
 }
 
-func (r *MobiReader) buildMobiResources(b model.Blob, pdbDb *PdbDb, mobi *Mobi, cover *model.Resource, content []model.Resource, maxResourceSize, maxRecordSize int64) ([]*model.Resource, []model.ReadingOrderItem, *model.Resource) {
+func (r *MobiReader) buildMobiResources(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi, cover *book.Resource, content []book.Resource, maxResourceSize, maxRecordSize int64) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource) {
 	// Content pointers (for reading order)
-	var contentPtrs []*model.Resource
+	var contentPtrs []*book.Resource
 	for i := range content {
 		c := content[i]
 		if c.Href == "" {
@@ -175,19 +173,19 @@ func (r *MobiReader) buildMobiResources(b model.Blob, pdbDb *PdbDb, mobi *Mobi, 
 		if c.Id == "" {
 			c.Id = c.Name
 		}
-		ptr := new(model.Resource)
+		ptr := new(book.Resource)
 		*ptr = c
 		contentPtrs = append(contentPtrs, ptr)
 	}
 
 	readingOrder := buildMobiReadingOrder(contentPtrs)
 
-	images := imageResources(b, pdbDb, mobi, maxResourceSize, maxRecordSize)
+	images := imageResources(b, pdbDb, mobiDoc, maxResourceSize, maxRecordSize)
 
 	// Deduplicate cover vs images by PDB record index — ResolvedHref differs (cover.jpg vs images/00042.jpg).
-	coverIdx := mobi.CoverRecordIdx()
+	coverIdx := mobiDoc.CoverRecordIdx()
 	if cover != nil && coverIdx != 0 {
-		imagesByRecord := make(map[uint32]*model.Resource, len(images))
+		imagesByRecord := make(map[uint32]*book.Resource, len(images))
 		for _, im := range images {
 			imagesByRecord[im.recordIndex] = im.resource
 		}
@@ -199,7 +197,7 @@ func (r *MobiReader) buildMobiResources(b model.Blob, pdbDb *PdbDb, mobi *Mobi, 
 	// All: reading order first, then images not already in reading order + cover if not in images.
 	// Deduplicate by canonical ResolvedHref.
 	seen := make(map[string]bool)
-	all := make([]*model.Resource, 0, len(contentPtrs)+len(images)+1)
+	all := make([]*book.Resource, 0, len(contentPtrs)+len(images)+1)
 	for _, ptr := range contentPtrs {
 		key := util.CleanHref(ptr.ResolvedHref)
 		if !seen[key] {
@@ -226,21 +224,21 @@ func (r *MobiReader) buildMobiResources(b model.Blob, pdbDb *PdbDb, mobi *Mobi, 
 
 // content returns the book's text as HTML resources.
 // For MOBI6 it is a single index.html; for MOBI8/KF8 it is multiple part files in correct order.
-func (r *MobiReader) content(pdbDb *PdbDb, mobi *Mobi) []model.Resource {
+func (r *MobiReader) content(pdbDb *PdbDb, mobiDoc *Mobi) []book.Resource {
 	maxResourceSize := r.cfg.MaxResourceSize
 	if maxResourceSize <= 0 {
 		maxResourceSize = config.DefaultConfig().MaxResourceSize
 	}
 
 	// Try MOBI8 path first
-	if isMobi8(mobi) {
-		resources, err := r.contentMobi8(pdbDb, mobi, maxResourceSize)
+	if isMobi8(mobiDoc) {
+		resources, err := r.contentMobi8(pdbDb, mobiDoc, maxResourceSize)
 		if err != nil {
 			// Per-resource limit exceeded: return a single resource that
 			// fails on Open with ErrLimitExceeded so the error is explicit
 			// to the caller (instead of silently falling back to MOBI6).
-			if errors.Is(err, errs.ErrLimitExceeded) {
-				return []model.Resource{{
+			if errors.Is(err, book.ErrLimitExceeded) {
+				return []book.Resource{{
 					Name:      "part0000.html",
 					MediaType: "application/x-mobipocket-html",
 					Size:      0,
@@ -256,15 +254,15 @@ func (r *MobiReader) content(pdbDb *PdbDb, mobi *Mobi) []model.Resource {
 		// fallback to MOBI6 if MOBI8 parsing failed
 	}
 
-	if mobi.TextRecordCount == 0 || int(mobi.FirstTextRecord) >= len(pdbDb.PdbRecords) {
+	if mobiDoc.TextRecordCount == 0 || int(mobiDoc.FirstTextRecord) >= len(pdbDb.PdbRecords) {
 		return nil
 	}
-	return []model.Resource{{
+	return []book.Resource{{
 		Name:      "index.html",
 		MediaType: "application/x-mobipocket-html",
-		Size:      int64(mobi.TextLength),
+		Size:      int64(mobiDoc.TextLength),
 		Open: func() (io.ReadCloser, error) {
-			data, err := extractText(pdbDb, mobi, maxResourceSize)
+			data, err := extractText(pdbDb, mobiDoc, maxResourceSize)
 			if err != nil {
 				return nil, err
 			}
@@ -273,27 +271,21 @@ func (r *MobiReader) content(pdbDb *PdbDb, mobi *Mobi) []model.Resource {
 	}}
 }
 
-func isMobi8(mobi *Mobi) bool {
-	if mobi.KF8 != nil {
+func isMobi8(mobiDoc *Mobi) bool {
+	if mobiDoc.KF8 != nil {
 		return true
 	}
-	if mobi.MobiVersion == 8 && mobi.SkelIdx != NullIndex {
+	if mobiDoc.MobiVersion == 8 && mobiDoc.SkelIdx != NullIndex {
 		return true
 	}
-	if mobi.MobiVersion == 8 && mobi.DivIdx != NullIndex {
+	if mobiDoc.MobiVersion == 8 && mobiDoc.DivIdx != NullIndex {
 		return true
 	}
 	return false
 }
 
-func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobi *Mobi, maxResourceSize int64) ([]model.Resource, error) {
-	// rawML is the whole decompressed KF8 HTML before splitting; limiting it
-	// as a single resource would reject books where each part is under the
-	// limit but the sum is not (e.g. 2x60 MB with 100 MB limit). MaxResourceSize
-	// is per Resource, so rawML is decompressed without a limit and the
-	// per-part check below enforces the documented semantics. The transient
-	// rawML allocation is noted explicitly.
-	rawML, kf8, offset, err := extractMobi8Raw(pdbDb, mobi, -1)
+func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobiDoc *Mobi, maxResourceSize int64) ([]book.Resource, error) {
+	rawML, kf8, offset, err := extractMobi8Raw(pdbDb, mobiDoc, -1)
 	if err != nil || len(rawML) == 0 {
 		return nil, err
 	}
@@ -301,8 +293,6 @@ func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobi *Mobi, maxResourceSize int6
 	if err != nil {
 		return nil, err
 	}
-	// For joint files, indices are KF8-relative. Slice to KF8 start so that
-	// readMobi8Indices can use them directly (mimics calibre's kf8_sections = sections[offset-1:]).
 	kf8Sections := sections
 	if offset > 1 && offset-1 < len(sections) {
 		kf8Sections = sections[offset-1:]
@@ -313,13 +303,11 @@ func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobi *Mobi, maxResourceSize int6
 	}
 	flowTable, files, elems, err := readMobi8Indices(kf8Sections, kf8, codec)
 	if err != nil {
-		// If indices fail, return rawML as single part (still better than MOBI6 fallback)
 		if len(rawML) > 0 {
-			// Enforce per-resource limit even on fallback part.
 			if maxResourceSize > 0 && int64(len(rawML)) > maxResourceSize {
-				return nil, fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", errs.ErrLimitExceeded, "part0000.html", len(rawML), maxResourceSize)
+				return nil, fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, "part0000.html", len(rawML), maxResourceSize)
 			}
-			return []model.Resource{{
+			return []book.Resource{{
 				Name:      "part0000.html",
 				MediaType: "application/x-mobipocket-html",
 				Size:      int64(len(rawML)),
@@ -336,35 +324,32 @@ func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobi *Mobi, maxResourceSize int6
 		return nil, err
 	}
 
-	// Enforce MaxResourceSize per Resource (documented semantics): any single
-	// part exceeding the limit fails the KF8 content with ErrLimitExceeded
-	// instead of silently returning oversized parts or checking the total sum.
 	for i, p := range parts {
 		if maxResourceSize > 0 && int64(len(p)) > maxResourceSize {
 			name := partInfos[i].Filename
 			if name == "" {
 				name = fmt.Sprintf("part%04d.html", i)
 			}
-			return nil, fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", errs.ErrLimitExceeded, name, len(p), maxResourceSize)
+			return nil, fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, name, len(p), maxResourceSize)
 		}
 	}
 
-	resources := make([]model.Resource, 0, len(parts))
+	resources := make([]book.Resource, 0, len(parts))
 	for i, part := range parts {
-		p := part // capture
+		p := part
 		info := partInfos[i]
 		name := info.Filename
 		if name == "" {
 			name = fmt.Sprintf("part%04d.html", i)
 		}
 		size := int64(len(p))
-		resources = append(resources, model.Resource{
+		resources = append(resources, book.Resource{
 			Name:      name,
 			MediaType: "application/x-mobipocket-html",
 			Size:      size,
 			Open: func() (io.ReadCloser, error) {
 				if maxResourceSize > 0 && int64(len(p)) > maxResourceSize {
-					return nil, fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", errs.ErrLimitExceeded, name, len(p), maxResourceSize)
+					return nil, fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, name, len(p), maxResourceSize)
 				}
 				return io.NopCloser(bytes.NewReader(p)), nil
 			},

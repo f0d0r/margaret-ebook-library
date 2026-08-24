@@ -2,7 +2,6 @@ package ebook
 
 import (
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
 )
 
 type options struct {
@@ -39,7 +38,7 @@ func WithMaxExthRecords(n int) Option {
 // resolveOptions returns the effective configuration for the given options,
 // falling back to the defaults of [config.DefaultConfig] for fields that are
 // not overridden.
-func resolveOptions(opts []Option) model.Config {
+func resolveOptions(opts []Option) config.Config {
 	d := config.DefaultConfig()
 	o := options{
 		maxResourceSize: d.MaxResourceSize,
@@ -49,7 +48,7 @@ func resolveOptions(opts []Option) model.Config {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	return model.Config{
+	return config.Config{
 		MaxResourceSize: o.maxResourceSize,
 		MaxRecordSize:   o.maxRecordSize,
 		MaxExthRecords:  o.maxExthRecords,

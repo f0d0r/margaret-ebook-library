@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
+	"github.com/f0d0r/margaret-ebook-library/book"
 )
 
 // huffDict holds the primary lookup entry for the top byte of a code.
@@ -112,7 +112,7 @@ func (h *HuffCdicReader) LoadCdic(cdic []byte) error {
 
 // Unpack decompresses a single HUFF/CDIC compressed record.
 // remain is the remaining budget for decompressed bytes. If remain >=0,
-// decompression fails with errs.ErrLimitExceeded when the output would exceed
+// decompression fails with book.ErrLimitExceeded when the output would exceed
 // the remaining budget. Pass remain <0 for unlimited.
 func (h *HuffCdicReader) Unpack(data []byte, remain int64) ([]byte, error) {
 	return h.unpack(data, remain, 0)
@@ -196,7 +196,7 @@ func (h *HuffCdicReader) unpack(data []byte, remain int64, depth int) ([]byte, e
 			h.dictionary[r] = entry
 		}
 		if remain >= 0 && int64(len(out)+len(entry.slice)) > remain {
-			return nil, errs.ErrLimitExceeded
+			return nil, book.ErrLimitExceeded
 		}
 		out = append(out, entry.slice...)
 	}

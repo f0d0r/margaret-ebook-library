@@ -1,6 +1,7 @@
-package model
+package book
 
 import (
+	"bytes"
 	"io"
 	"os"
 )
@@ -28,6 +29,16 @@ func NewFileBlob(f *os.File) (Blob, error) {
 // access, so no file handle is retained after the Blob is created.
 func NewPathBlob(path string) Blob {
 	return pathBlob{path: path}
+}
+
+// NewBytesBlob adapts an in-memory byte slice to a Blob.
+func NewBytesBlob(data []byte) Blob {
+	return bytesBlob{data: data}
+}
+
+// NewReaderAtBlob adapts an io.ReaderAt and declared size to a Blob.
+func NewReaderAtBlob(r io.ReaderAt, size int64) Blob {
+	return readerAtBlob{r: r, size: size}
 }
 
 type fileBlob struct {
@@ -67,4 +78,29 @@ func (b pathBlob) Size() (int64, error) {
 		return 0, err
 	}
 	return info.Size(), nil
+}
+
+type bytesBlob struct {
+	data []byte
+}
+
+func (b bytesBlob) ReadAt(p []byte, off int64) (int, error) {
+	return bytes.NewReader(b.data).ReadAt(p, off)
+}
+
+func (b bytesBlob) Size() (int64, error) {
+	return int64(len(b.data)), nil
+}
+
+type readerAtBlob struct {
+	r    io.ReaderAt
+	size int64
+}
+
+func (b readerAtBlob) ReadAt(p []byte, off int64) (int, error) {
+	return b.r.ReadAt(p, off)
+}
+
+func (b readerAtBlob) Size() (int64, error) {
+	return b.size, nil
 }

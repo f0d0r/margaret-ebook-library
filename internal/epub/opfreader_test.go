@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/config"
 )
 
 func TestReadTitle(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader(model.DefaultConfig())
+	reader := NewEpubReader(config.DefaultConfig())
 
 	tests := []struct {
 		name          string
@@ -68,7 +69,7 @@ func TestReadTitle(t *testing.T) {
 			epubPath := filepath.Join(tmpDir, tt.name+".epub")
 			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
 
-			ebook, err := reader.Read(model.NewPathBlob(epubPath))
+			ebook, err := reader.Read(book.NewPathBlob(epubPath))
 
 			if tt.shouldError && err == nil {
 				t.Errorf("expected error but got none")
@@ -81,7 +82,7 @@ func TestReadTitle(t *testing.T) {
 			if err != nil {
 				return
 			}
-			metadata := ebook.Metadata
+			metadata := ebook.Metadata()
 
 			if metadata.Title != tt.expectedTitle {
 				t.Errorf("got title %q, want %q", metadata.Title, tt.expectedTitle)
@@ -92,7 +93,7 @@ func TestReadTitle(t *testing.T) {
 
 func TestReadAuthors(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader(model.DefaultConfig())
+	reader := NewEpubReader(config.DefaultConfig())
 
 	tests := []struct {
 		name            string
@@ -180,7 +181,7 @@ func TestReadAuthors(t *testing.T) {
 			epubPath := filepath.Join(tmpDir, tt.name+".epub")
 			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
 
-			ebook, err := reader.Read(model.NewPathBlob(epubPath))
+			ebook, err := reader.Read(book.NewPathBlob(epubPath))
 
 			if tt.shouldError && err == nil {
 				t.Errorf("expected error but got none")
@@ -193,7 +194,7 @@ func TestReadAuthors(t *testing.T) {
 			if err != nil {
 				return
 			}
-			metadata := ebook.Metadata
+			metadata := ebook.Metadata()
 
 			if len(metadata.Authors) != len(tt.expectedAuthors) {
 				t.Errorf("got %d authors, want %d. Got: %v, Want: %v",
@@ -212,7 +213,7 @@ func TestReadAuthors(t *testing.T) {
 
 func TestReadDescription(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader(model.DefaultConfig())
+	reader := NewEpubReader(config.DefaultConfig())
 
 	tests := []struct {
 		name                string
@@ -293,7 +294,7 @@ func TestReadDescription(t *testing.T) {
 			epubPath := filepath.Join(tmpDir, tt.name+".epub")
 			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
 
-			ebook, err := reader.Read(model.NewPathBlob(epubPath))
+			ebook, err := reader.Read(book.NewPathBlob(epubPath))
 
 			if tt.shouldError && err == nil {
 				t.Errorf("expected error but got none")
@@ -306,7 +307,7 @@ func TestReadDescription(t *testing.T) {
 			if err != nil {
 				return
 			}
-			metadata := ebook.Metadata
+			metadata := ebook.Metadata()
 
 			if metadata.Description != tt.expectedDescription {
 				t.Errorf("got description %q, want %q", metadata.Description, tt.expectedDescription)
@@ -317,7 +318,7 @@ func TestReadDescription(t *testing.T) {
 
 func TestReadLanguages(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader(model.DefaultConfig())
+	reader := NewEpubReader(config.DefaultConfig())
 
 	tests := []struct {
 		name              string
@@ -410,7 +411,7 @@ func TestReadLanguages(t *testing.T) {
 			epubPath := filepath.Join(tmpDir, tt.name+".epub")
 			createValidTestEPUBWithContent(t, epubPath, tt.opfContent)
 
-			ebook, err := reader.Read(model.NewPathBlob(epubPath))
+			ebook, err := reader.Read(book.NewPathBlob(epubPath))
 
 			if tt.shouldError && err == nil {
 				t.Errorf("expected error but got none")
@@ -423,7 +424,7 @@ func TestReadLanguages(t *testing.T) {
 			if err != nil {
 				return
 			}
-			metadata := ebook.Metadata
+			metadata := ebook.Metadata()
 
 			if len(metadata.Languages) != len(tt.expectedLanguages) {
 				t.Errorf("got %d languages, want %d. Got: %v, Want: %v",

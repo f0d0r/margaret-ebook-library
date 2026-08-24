@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/f0d0r/margaret-ebook-library/actions/workflows/build.yml/badge.svg)](https://github.com/f0d0r/margaret-ebook-library/actions/workflows/build.yml)
 
-This project is a Go library for handling ebook files. It currently supports reading EPUB and MOBI formats.
+Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI or KF8/AZW3 — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB and MOBI reading.
 
 ## Getting Started
 
@@ -14,7 +14,17 @@ This project is a Go library for handling ebook files. It currently supports rea
 Import the library:
 
 ```go
-import "github.com/f0d0r/margaret-ebook-library/pkg/ebook"
+import ebook "github.com/f0d0r/margaret-ebook-library"
+```
+
+For advanced use (isolated registries, media-type constants) also import:
+
+```go
+import (
+    "github.com/f0d0r/margaret-ebook-library/book"
+    "github.com/f0d0r/margaret-ebook-library/converter"
+    "github.com/f0d0r/margaret-ebook-library/mediatype"
+)
 ```
 
 ### Reading an ebook from a file path
@@ -22,9 +32,9 @@ import "github.com/f0d0r/margaret-ebook-library/pkg/ebook"
 The simplest way is to pass the file path directly:
 
 ```go
-ebook, err := ebook.Read("books/my-book.epub")
+b, err := ebook.Read("books/my-book.epub")
 if err != nil {
-    // handle the error, e.g. with errors.Is(err, errs.ErrUnsupportedFormat)
+    // handle the error, e.g. with errors.Is(err, ebook.ErrUnsupportedFormat)
 }
 ```
 
@@ -39,7 +49,7 @@ if err != nil {
 }
 defer f.Close()
 
-ebook, err := ebook.ReadFromFile(f)
+b, err := ebook.ReadFromFile(f)
 if err != nil {
     log.Fatal(err)
 }
@@ -56,24 +66,25 @@ never modified and the caller keeps ownership. The caller must keep the blob
 usable until all resource data (including the cover) has been consumed.
 
 ```go
-ebook, err := ebook.ReadFromBlob(model.NewPathBlob("books/my-book.epub"))
+b, err := ebook.ReadFromBlob(ebook.NewPathBlob("books/my-book.epub"))
 if err != nil {
     log.Fatal(err)
 }
+// also available: ebook.NewBytesBlob(data), ebook.NewReaderAtBlob(r, size), book.NewFileBlob(f)
 ```
 
 ### Using the ebook
 
 ```go
-metadata := ebook.Metadata
-fmt.Println("Title:", metadata.Title)
-fmt.Println("Authors:", strings.Join(metadata.Authors, ", "))
-fmt.Println("Language:", metadata.Languages)
-fmt.Println("Description:", metadata.Description)
-fmt.Println("FileType:", ebook.FileType)
-fmt.Println("Version:", ebook.Version)
+meta := b.Metadata()
+fmt.Println("Title:", meta.Title)
+fmt.Println("Authors:", strings.Join(meta.Authors, ", "))
+fmt.Println("Language:", meta.Languages)
+fmt.Println("Description:", meta.Description)
+fmt.Println("FileType:", b.FileType())
+fmt.Println("Version:", b.Version())
 
-if cover, ok := ebook.Resources.CoverImage(); ok {
+if cover, ok := b.Resources().CoverImage(); ok {
     rc, err := cover.Open()
     if err != nil {
         log.Fatal(err)
@@ -97,7 +108,7 @@ if cover, ok := ebook.Resources.CoverImage(); ok {
 To load the whole cover into memory instead, use the convenience method:
 
 ```go
-cover, ok := ebook.Resources.CoverImage()
+cover, ok := b.Resources().CoverImage()
 if !ok {
     log.Fatal("no cover")
 }
@@ -115,7 +126,7 @@ size, 100 MB max single MOBI record, 256 max EXTH records). Override them
 with functional options:
 
 ```go
-ebook, err := ebook.Read(
+b, err := ebook.Read(
     "books/my-book.epub",
     ebook.WithMaxResourceSize(10*1024*1024), // 10 MB
 )
@@ -127,7 +138,7 @@ if err != nil {
 MOBI-specific limits can be adjusted the same way:
 
 ```go
-ebook, err := ebook.Read(
+b, err := ebook.Read(
     "books/my-book.mobi",
     ebook.WithMaxRecordSize(50*1024*1024), // max single PDB record
     ebook.WithMaxExthRecords(512),         // max EXTH records to parse
@@ -141,7 +152,7 @@ if err != nil {
 
 ```go
 // All manifest resources (images, stylesheets, etc.) in manifest order:
-for _, r := range ebook.Resources.All() {
+for _, r := range b.Resources().All() {
     fmt.Println(r.Id, r.ResolvedHref, r.MediaType, r.Href, r.Properties)
     // Stream lazily without loading everything into memory:
     rc, err := r.Open()
@@ -153,20 +164,20 @@ for _, r := range ebook.Resources.All() {
 }
 
 // Spine reading order, including linear="no" items with Linear flag:
-for _, it := range ebook.Resources.ReadingOrder() {
+for _, it := range b.Resources().ReadingOrder() {
     fmt.Println(it.Resource.ResolvedHref, "linear=", it.Linear)
 }
 
 // Lookup by manifest ID or resolved href (path.Clean applied):
-if r, ok := ebook.Resources.GetByID("cover"); ok {
+if r, ok := b.Resources().GetByID("cover"); ok {
     fmt.Println("cover:", r.ResolvedHref)
 }
-if r, ok := ebook.Resources.GetByHref("OEBPS/images/cover.jpg"); ok {
+if r, ok := b.Resources().GetByHref("OEBPS/images/cover.jpg"); ok {
     fmt.Println("found:", r.Id)
 }
 
-// Cover via registry:
-if cover, ok := ebook.Resources.CoverImage(); ok {
+// Cover:
+if cover, ok := b.Resources().CoverImage(); ok {
     data, _ := cover.Data() // convenience wrapper around Open()
     _ = data
 }
@@ -184,9 +195,7 @@ import (
     "errors"
     "io"
 
-    "github.com/f0d0r/margaret-ebook-library/pkg/errs"
-    "github.com/f0d0r/margaret-ebook-library/pkg/mediatype"
-    "github.com/f0d0r/margaret-ebook-library/pkg/model"
+    "github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
 ctx := context.Background()
@@ -194,10 +203,10 @@ ctx := context.Background()
 // Single resource: XHTML/HTML/MobiHTML -> plain text
 // MediaType can include charset params; they are normalized (case-insensitive,
 // "; charset=..." stripped).
-for _, r := range ebook.Resources.All() {
+for _, r := range b.Resources().All() {
     rc, err := r.OpenAs(ctx, mediatype.PlainText)
     if err != nil {
-        if errors.Is(err, errs.ErrNoTransformer) {
+        if errors.Is(err, ebook.ErrNoTransformer) {
             // no converter for e.g. image/jpeg -> text/plain
             continue
         }
@@ -212,10 +221,10 @@ for _, r := range ebook.Resources.All() {
 }
 
 // Convenience: read fully converted
-data, err := ebook.Resources.All()[0].DataAs(ctx, mediatype.PlainText)
+data, err := b.Resources().All()[0].DataAs(ctx, mediatype.PlainText)
 
 // Whole book as one plain-text stream (linear spine only, lazy concatenation):
-rc, err := ebook.Resources.OpenReadingOrderAs(ctx, mediatype.PlainText)
+rc, err := b.Resources().OpenReadingOrderAs(ctx, mediatype.PlainText)
 if err != nil {
     log.Fatal(err)
 }
@@ -227,8 +236,8 @@ if err != nil {
 fmt.Println(string(plain))
 ```
 
-Constants are compile-time safe: `model.MediaTypePlainText`, `model.MediaTypeXHTML`,
-`model.MediaTypeHTML`, `model.MediaTypeMobiHTML`, etc. (aliases of `pkg/mediatype`).
+Constants are compile-time safe: `mediatype.PlainText`, `mediatype.XHTML`,
+`mediatype.HTML`, `mediatype.MobiHTML`, etc.
 
 #### Custom transformers and isolated registries
 
@@ -247,12 +256,12 @@ type Transformer interface {
 streaming via `html.Tokenizer`). For tests or custom DI, use an isolated registry:
 
 ```go
-import "github.com/f0d0r/margaret-ebook-library/pkg/converter"
+import "github.com/f0d0r/margaret-ebook-library/converter"
 
 reg := converter.NewRegistry(myTransformer)
 rc, err := resource.OpenAsWithRegistry(ctx, reg, mediatype.PlainText)
 if err != nil {
-    if errors.Is(err, errs.ErrNoTransformer) {
+    if errors.Is(err, ebook.ErrNoTransformer) {
         // no path from resource.MediaType to target
     }
 }
@@ -276,4 +285,10 @@ if err != nil {
     log.Fatal(err)
 }
 fmt.Println(hash) // hex-encoded sha256
+```
+
+Or from a blob:
+
+```go
+hash, err := ebook.CalculateFileHashFromBlob(ebook.NewPathBlob("books/my-book.epub"))
 ```

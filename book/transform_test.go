@@ -1,4 +1,4 @@
-package model
+package book
 
 import (
 	"bytes"
@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/converter"
-	"github.com/f0d0r/margaret-ebook-library/pkg/mediatype"
+	"github.com/f0d0r/margaret-ebook-library/converter"
+	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
 func TestResourceSet_OpenReadingOrderAs_Basic(t *testing.T) {
@@ -38,7 +38,6 @@ func TestResourceSet_OpenReadingOrderAs_Basic(t *testing.T) {
 	if got := string(b); got != "FirstSecond" {
 		t.Fatalf("got %q, want %q", got, "FirstSecond")
 	}
-	// ensure non-linear skipped even with direct read
 	if strings.Contains(string(b), "Skip") {
 		t.Fatalf("should not contain non-linear")
 	}
@@ -57,7 +56,6 @@ func TestResourceSet_OpenReadingOrderAs_Empty(t *testing.T) {
 		t.Fatalf("empty should give empty, got %q", string(b))
 	}
 
-	// nil ResourceSet
 	var nilRS *ResourceSet
 	_, err = nilRS.OpenReadingOrderAs(ctx, mediatype.PlainText)
 	if err == nil {
@@ -100,7 +98,6 @@ func TestResourceSet_OpenReadingOrderAs_LazyAndSmallBuffer(t *testing.T) {
 	}
 	defer rc.Close()
 
-	// reading with 1-byte buffer stresses multiReadCloser switching
 	buf := make([]byte, 1)
 	var out bytes.Buffer
 	for {
@@ -130,7 +127,6 @@ func TestResourceSet_OpenReadingOrderAs_CloseIdempotent(t *testing.T) {
 	}}
 	rs := NewResourceSet([]*Resource{ra}, []ReadingOrderItem{{Resource: ra, Linear: true}}, nil)
 	rc, _ := rs.OpenReadingOrderAs(ctx, mediatype.PlainText)
-	// read partially then close twice
 	buf := make([]byte, 10)
 	_, _ = rc.Read(buf)
 	if err := rc.Close(); err != nil {
@@ -168,11 +164,8 @@ func TestResourceSet_OpenReadingOrderAs_NoTransformerPropagates(t *testing.T) {
 	if err == nil {
 		t.Fatalf("Read should propagate ErrNoTransformer")
 	}
-	if !errors.Is(err, errors.Unwrap(err)) && !strings.Contains(err.Error(), "no transformer") {
-		// fallback check
-		if !strings.Contains(err.Error(), "no transformer") {
-			t.Fatalf("should be no transformer, got %v", err)
-		}
+	if !errors.Is(err, ErrNoTransformer) && !strings.Contains(err.Error(), "no transformer") {
+		t.Fatalf("should be no transformer, got %v", err)
 	}
 }
 
