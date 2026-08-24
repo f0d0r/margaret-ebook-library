@@ -3,12 +3,12 @@ package ebook
 import (
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/internal/config"
 )
 
 func TestResolveOptionsDefaults(t *testing.T) {
 	cfg := resolveOptions(nil)
-	want := model.DefaultConfig()
+	want := config.DefaultConfig()
 
 	if cfg != want {
 		t.Errorf("resolveOptions(nil) = %+v, want %+v", cfg, want)
@@ -35,7 +35,7 @@ func TestResolveOptionsOverrides(t *testing.T) {
 
 func TestResolveOptionsPartialOverride(t *testing.T) {
 	cfg := resolveOptions([]Option{WithMaxExthRecords(5)})
-	d := model.DefaultConfig()
+	d := config.DefaultConfig()
 
 	if cfg.MaxResourceSize != d.MaxResourceSize {
 		t.Errorf("MaxResourceSize = %d, want default %d", cfg.MaxResourceSize, d.MaxResourceSize)

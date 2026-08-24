@@ -8,7 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/config"
 )
 
 func TestMobiReaderLoadRecord(t *testing.T) {
@@ -34,7 +35,7 @@ func TestMobiReaderLoadRecord(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data, err := readRecordData(model.NewPathBlob(path), tt.offset, tt.length, model.DefaultConfig().MaxRecordSize)
+			data, err := readRecordData(book.NewPathBlob(path), tt.offset, tt.length, config.DefaultConfig().MaxRecordSize)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("readRecordData() expected error, got nil")
@@ -53,11 +54,11 @@ func TestMobiReaderLoadRecord(t *testing.T) {
 
 func TestMobiReaderCover(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewMobiReader(model.DefaultConfig())
+	reader := NewMobiReader(config.DefaultConfig())
 
 	t.Run("CoverRecordIdx returns 0", func(t *testing.T) {
 		mobi := &Mobi{}
-		result := reader.cover(model.NewPathBlob("/fake/path"), &PdbDb{}, mobi)
+		result := reader.cover(book.NewPathBlob("/fake/path"), &PdbDb{}, mobi)
 		if result != nil {
 			t.Errorf("cover() = %v, want nil", result)
 		}
@@ -79,7 +80,7 @@ func TestMobiReaderCover(t *testing.T) {
 		}
 		pdbDb := &PdbDb{PdbRecords: make([]PdbRecord, 5)}
 		// coverIdx = 10 + 5 = 15, len(PdbRecords) = 5 → out of bounds
-		result := reader.cover(model.NewPathBlob("/fake/path"), pdbDb, mobi)
+		result := reader.cover(book.NewPathBlob("/fake/path"), pdbDb, mobi)
 		if result != nil {
 			t.Errorf("cover() = %v, want nil", result)
 		}
@@ -111,7 +112,7 @@ func TestMobiReaderCover(t *testing.T) {
 				},
 			},
 		}
-		result := reader.cover(model.NewPathBlob("/fake/path"), pdbDb, mobi)
+		result := reader.cover(book.NewPathBlob("/fake/path"), pdbDb, mobi)
 		if result != nil {
 			t.Errorf("cover() = %v, want nil", result)
 		}
@@ -143,7 +144,7 @@ func TestMobiReaderCover(t *testing.T) {
 				},
 			},
 		}
-		result := reader.cover(model.NewPathBlob("/fake/path"), pdbDb, mobi)
+		result := reader.cover(book.NewPathBlob("/fake/path"), pdbDb, mobi)
 		if result != nil {
 			t.Errorf("cover() = %v, want nil", result)
 		}
@@ -172,7 +173,7 @@ func TestMobiReaderCover(t *testing.T) {
 				},
 			},
 		}
-		result := reader.cover(model.NewPathBlob("/fake/path"), pdbDb, mobi)
+		result := reader.cover(book.NewPathBlob("/fake/path"), pdbDb, mobi)
 		if result != nil {
 			t.Errorf("cover() = %v, want nil", result)
 		}
@@ -204,7 +205,7 @@ func TestMobiReaderCover(t *testing.T) {
 				},
 			},
 		}
-		result := reader.cover(model.NewPathBlob("/fake/path"), pdbDb, mobi)
+		result := reader.cover(book.NewPathBlob("/fake/path"), pdbDb, mobi)
 		if result == nil {
 			t.Fatalf("cover() = nil, want resource with Open error")
 		}
@@ -214,7 +215,7 @@ func TestMobiReaderCover(t *testing.T) {
 	})
 
 	t.Run("config override rejects cover", func(t *testing.T) {
-		cfg := model.DefaultConfig()
+		cfg := config.DefaultConfig()
 		cfg.MaxResourceSize = 4
 		cfgReader := NewMobiReader(cfg)
 
@@ -243,7 +244,7 @@ func TestMobiReaderCover(t *testing.T) {
 				},
 			},
 		}
-		result := cfgReader.cover(model.NewPathBlob("/fake/path"), pdbDb, mobi)
+		result := cfgReader.cover(book.NewPathBlob("/fake/path"), pdbDb, mobi)
 		if result == nil {
 			t.Fatalf("cover() = nil, want resource with Open error")
 		}
@@ -291,7 +292,7 @@ func TestMobiReaderCover(t *testing.T) {
 				},
 			},
 		}
-		result := reader.cover(model.NewPathBlob(imgPath), pdbDb, mobi)
+		result := reader.cover(book.NewPathBlob(imgPath), pdbDb, mobi)
 		if result == nil {
 			t.Fatalf("cover() = nil, want Resource")
 		}
@@ -360,7 +361,7 @@ func TestMobiReaderCover(t *testing.T) {
 				},
 			},
 		}
-		result := reader.cover(model.NewPathBlob(imgPath), pdbDb, mobi)
+		result := reader.cover(book.NewPathBlob(imgPath), pdbDb, mobi)
 		if result == nil {
 			t.Fatalf("cover() = nil, want Resource")
 		}
@@ -375,7 +376,7 @@ func TestMobiReaderCover(t *testing.T) {
 
 func TestMobiReaderSupportsPreservesPosition(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewMobiReader(model.DefaultConfig())
+	reader := NewMobiReader(config.DefaultConfig())
 
 	validPath := filepath.Join(tmpDir, "valid.mobi")
 	validData := make([]byte, 60)
@@ -394,7 +395,7 @@ func TestMobiReaderSupportsPreservesPosition(t *testing.T) {
 		t.Fatalf("failed to seek: %v", err)
 	}
 
-	b, err := model.NewFileBlob(f)
+	b, err := book.NewFileBlob(f)
 	if err != nil {
 		t.Fatalf("NewFileBlob() error: %v", err)
 	}
@@ -413,7 +414,7 @@ func TestMobiReaderSupportsPreservesPosition(t *testing.T) {
 
 func TestMobiReaderSupports(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewMobiReader(model.DefaultConfig())
+	reader := NewMobiReader(config.DefaultConfig())
 
 	validPath := filepath.Join(tmpDir, "valid.mobi")
 	validData := make([]byte, 60)
@@ -422,7 +423,7 @@ func TestMobiReaderSupports(t *testing.T) {
 		t.Fatalf("failed to write valid MOBI file: %v", err)
 	}
 
-	if !reader.Supports(model.NewPathBlob(validPath)) {
+	if !reader.Supports(book.NewPathBlob(validPath)) {
 		t.Error("Supports() = false for valid MOBI path blob, want true")
 	}
 }

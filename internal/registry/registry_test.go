@@ -10,8 +10,7 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/internal/epub"
 	"github.com/f0d0r/margaret-ebook-library/internal/mobi"
-	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/book"
 )
 
 func TestRegistry_ReaderForBlob(t *testing.T) {
@@ -33,7 +32,7 @@ func TestRegistry_ReaderForBlob(t *testing.T) {
 	r := New()
 
 	t.Run("EPUB blob returns EpubReader", func(t *testing.T) {
-		reader, err := r.ReaderForBlob(model.NewPathBlob(epubPath))
+		reader, err := r.ReaderForBlob(book.NewPathBlob(epubPath))
 		if err != nil {
 			t.Fatalf("ReaderForBlob() error: %v", err)
 		}
@@ -43,7 +42,7 @@ func TestRegistry_ReaderForBlob(t *testing.T) {
 	})
 
 	t.Run("MOBI blob returns MobiReader", func(t *testing.T) {
-		reader, err := r.ReaderForBlob(model.NewPathBlob(mobiPath))
+		reader, err := r.ReaderForBlob(book.NewPathBlob(mobiPath))
 		if err != nil {
 			t.Fatalf("ReaderForBlob() error: %v", err)
 		}
@@ -53,8 +52,8 @@ func TestRegistry_ReaderForBlob(t *testing.T) {
 	})
 
 	t.Run("Unsupported blob returns ErrUnsupportedFormat", func(t *testing.T) {
-		_, err := r.ReaderForBlob(model.NewPathBlob(unsupportedPath))
-		if !errors.Is(err, errs.ErrUnsupportedFormat) {
+		_, err := r.ReaderForBlob(book.NewPathBlob(unsupportedPath))
+		if !errors.Is(err, book.ErrUnsupportedFormat) {
 			t.Errorf("ReaderForBlob() error = %v, want ErrUnsupportedFormat", err)
 		}
 	})

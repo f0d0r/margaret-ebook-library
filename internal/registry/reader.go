@@ -1,10 +1,10 @@
 package registry
 
 import (
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/book"
 )
 
 type Reader interface {
-	Supports(b model.Blob) bool
-	Read(b model.Blob) (*model.Ebook, error)
+	Supports(b book.Blob) bool
+	Read(b book.Blob) (book.Book, error)
 }

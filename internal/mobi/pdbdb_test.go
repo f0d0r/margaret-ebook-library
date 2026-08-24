@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/config"
 )
 
 func TestParseAttributes(t *testing.T) {
@@ -294,7 +295,7 @@ func TestReadPdbDbValidFile(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
+	pdb, err := ReadPdbDb(blobForFile(t, f), config.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -316,14 +317,14 @@ func TestReadPdbDbValidFile(t *testing.T) {
 func TestReadPdbDbNonExistentFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	_, err := ReadPdbDb(model.NewPathBlob(filepath.Join(tmpDir, "missing.pdb")), model.DefaultConfig().MaxRecordSize)
+	_, err := ReadPdbDb(book.NewPathBlob(filepath.Join(tmpDir, "missing.pdb")), config.DefaultConfig().MaxRecordSize)
 	if err == nil {
 		t.Errorf("ReadPdbDb() expected error for non-existent file, got nil")
 	}
 }
 
 func TestReadPdbDbOversizedFile(t *testing.T) {
-	_, err := ReadPdbDb(oversizedBlob{}, model.DefaultConfig().MaxRecordSize)
+	_, err := ReadPdbDb(oversizedBlob{}, config.DefaultConfig().MaxRecordSize)
 	if err == nil {
 		t.Fatal("ReadPdbDb() expected error for oversized file, got nil")
 	}
@@ -357,7 +358,7 @@ func TestReadPdbDbTruncatedHeader(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	_, err = ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
+	_, err = ReadPdbDb(blobForFile(t, f), config.DefaultConfig().MaxRecordSize)
 	if err == nil {
 		t.Errorf("ReadPdbDb() expected error for truncated header, got nil")
 	}
@@ -385,7 +386,7 @@ func TestReadPdbDbAttributes(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
+	pdb, err := ReadPdbDb(blobForFile(t, f), config.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -422,7 +423,7 @@ func TestReadPdbDbDates(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
+	pdb, err := ReadPdbDb(blobForFile(t, f), config.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -454,7 +455,7 @@ func TestLazyReadRecord(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)), model.DefaultConfig().MaxRecordSize)
+	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)), config.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("readRecordData() error: %v", err)
 	}
@@ -486,7 +487,7 @@ func TestReadRecordData(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)), model.DefaultConfig().MaxRecordSize)
+	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)), config.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("readRecordData() error: %v", err)
 	}
@@ -511,7 +512,7 @@ func TestPdbRecordGetData(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
+	pdb, err := ReadPdbDb(blobForFile(t, f), config.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -554,7 +555,7 @@ func TestReadPdbDbFileVersion(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
+	pdb, err := ReadPdbDb(blobForFile(t, f), config.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -581,7 +582,7 @@ func TestReadPdbDbMultipleRecords(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	pdb, err := ReadPdbDb(blobForFile(t, f), model.DefaultConfig().MaxRecordSize)
+	pdb, err := ReadPdbDb(blobForFile(t, f), config.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -621,9 +622,9 @@ func TestReadPdbDbMultipleRecords(t *testing.T) {
 
 // Helper functions
 
-func blobForFile(t *testing.T, f *os.File) model.Blob {
+func blobForFile(t *testing.T, f *os.File) book.Blob {
 	t.Helper()
-	b, err := model.NewFileBlob(f)
+	b, err := book.NewFileBlob(f)
 	if err != nil {
 		t.Fatalf("NewFileBlob() error: %v", err)
 	}

@@ -1,6 +1,6 @@
-package model
+package book
 
-// FileType represents a supported e-book file format extension or type.
+// FileType represents a supported e-book file format.
 type FileType string
 
 const (

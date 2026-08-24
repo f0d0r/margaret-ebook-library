@@ -6,16 +6,16 @@ import (
 	"io"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/config"
 )
 
 func TestImageResources_CoverAliasIdentity(t *testing.T) {
 	// Create PdbDb with 3 records: 0 header, 1 text, 2 image
-	// Use Blob via memBlob helper (implement model.Blob)
+	// Use Blob via memBlob helper (implement book.Blob)
 	data := makeTestMobiBlobWithImage(t, 2, []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46})
 	b := newMemBlob(data)
-	cfg := model.DefaultConfig()
+	cfg := config.DefaultConfig()
 	r := NewMobiReader(cfg)
 	// Manually craft Mobi with FirstImageRecord=2, LastContentRecord=2, CoverOffset=0
 	exth := &Exth{Records: map[uint32][][]byte{}}
@@ -49,11 +49,11 @@ func TestImageResources_CoverAliasIdentity(t *testing.T) {
 	if coverRes == nil {
 		t.Fatalf("cover should not be nil")
 	}
-	content := []model.Resource{{Name: "index.html", Id: "index", Href: "index.html", ResolvedHref: "index.html", MediaType: "application/x-mobipocket-html", Size: 10, Open: func() (io.ReadCloser, error) { return io.NopCloser(nil), nil }}}
+	content := []book.Resource{{Name: "index.html", Id: "index", Href: "index.html", ResolvedHref: "index.html", MediaType: "application/x-mobipocket-html", Size: 10, Open: func() (io.ReadCloser, error) { return io.NopCloser(nil), nil }}}
 	maxRes := cfg.MaxResourceSize
 	maxRec := cfg.MaxRecordSize
 	all, ro, coverAliased := r.buildMobiResources(b, pdbDb, mobi, coverRes, content, maxRes, maxRec)
-	rs := model.NewResourceSet(all, ro, coverAliased)
+	rs := book.NewResourceSet(all, ro, coverAliased)
 	// After build, cover should be aliased to image resource
 	coverViaRS, ok := rs.CoverImage()
 	if !ok || coverViaRS == nil {
@@ -88,7 +88,7 @@ func TestImageResources_NonImageSkipped(t *testing.T) {
 	// Record with non-image magic should be skipped
 	data := makeTestMobiBlobWithImage(t, 2, []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07})
 	b := newMemBlob(data)
-	cfg := model.DefaultConfig()
+	cfg := config.DefaultConfig()
 	mobi := &Mobi{FirstImageRecord: 2, LastContentRecord: 2, recordCount: 3}
 	pdbDb, err := ReadPdbDb(b, cfg.MaxRecordSize)
 	if err != nil {
@@ -105,7 +105,7 @@ func TestImageResources_MaxLimits(t *testing.T) {
 	jpegHeader := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C}
 	data := makeTestMobiBlobWithImage(t, 2, jpegHeader)
 	b := newMemBlob(data)
-	cfg := model.DefaultConfig()
+	cfg := config.DefaultConfig()
 	mobi := &Mobi{FirstImageRecord: 2, LastContentRecord: 2, recordCount: 3}
 	pdbDb, _ := ReadPdbDb(b, cfg.MaxRecordSize)
 
@@ -115,7 +115,7 @@ func TestImageResources_MaxLimits(t *testing.T) {
 		t.Fatalf("image should be included even if oversized, got %d", len(images))
 	}
 	_, err := images[0].resource.Open()
-	if !errors.Is(err, errs.ErrLimitExceeded) {
+	if !errors.Is(err, book.ErrLimitExceeded) {
 		t.Errorf("Open with MaxResourceSize exceeded should return ErrLimitExceeded, got %v", err)
 	}
 
@@ -125,7 +125,7 @@ func TestImageResources_MaxLimits(t *testing.T) {
 		t.Fatalf("image should be included even if record oversized")
 	}
 	_, err = images2[0].resource.Open()
-	if !errors.Is(err, errs.ErrLimitExceeded) {
+	if !errors.Is(err, book.ErrLimitExceeded) {
 		t.Errorf("Open with MaxRecordSize exceeded should return ErrLimitExceeded, got %v", err)
 	}
 
@@ -147,7 +147,7 @@ type memBlob struct {
 	data []byte
 }
 
-func newMemBlob(data []byte) model.Blob { return memBlob{data: data} }
+func newMemBlob(data []byte) book.Blob { return memBlob{data: data} }
 func (m memBlob) ReadAt(p []byte, off int64) (int, error) {
 	if off >= int64(len(m.data)) {
 		return 0, io.EOF

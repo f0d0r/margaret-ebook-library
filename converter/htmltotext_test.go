@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/mediatype"
+	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
 func readAll(t *testing.T, rc io.ReadCloser) string {

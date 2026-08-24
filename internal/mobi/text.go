@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
+	"github.com/f0d0r/margaret-ebook-library/book"
 )
 
 // extractText returns the raw HTML markup of a MOBI6 (KF7) book, obtained by
@@ -93,7 +93,7 @@ func extractTextWithOffset(pdbDb *PdbDb, mobi *Mobi, offset int, maxSize int64) 
 		}
 
 		if maxSize > 0 && int64(len(out)+len(dec)) > maxSize {
-			return nil, errs.ErrLimitExceeded
+			return nil, book.ErrLimitExceeded
 		}
 		out = append(out, dec...)
 	}

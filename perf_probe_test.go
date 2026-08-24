@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/book"
 )
 
 // createBenchEPUB writes a valid EPUB with nEntries additional content files
@@ -67,9 +67,9 @@ func createBenchEPUB(b *testing.B, path string, nEntries int) {
 // consumeCover reads the cover data, if any, so that the
 // benchmarks exercise the lazy cover loading path (including the underlying
 // zip central-directory access) rather than skipping it.
-func consumeCover(b *testing.B, m model.Ebook) {
+func consumeCover(b *testing.B, m book.Book) {
 	b.Helper()
-	cover, ok := m.Resources.CoverImage()
+	cover, ok := m.Resources().CoverImage()
 	if !ok || cover == nil {
 		return
 	}
@@ -125,7 +125,7 @@ func BenchmarkReadFromPathBlob(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			ebook, err := ReadFromBlob(model.NewPathBlob(path))
+			ebook, err := ReadFromBlob(book.NewPathBlob(path))
 			if err != nil {
 				b.Fatalf("ReadFromBlob() error: %v", err)
 			}
@@ -231,7 +231,7 @@ func BenchmarkReadMOBIFromPathBlob(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			if _, err := ReadFromBlob(model.NewPathBlob(path)); err != nil {
+			if _, err := ReadFromBlob(book.NewPathBlob(path)); err != nil {
 				b.Fatalf("ReadFromBlob() error: %v", err)
 			}
 		}

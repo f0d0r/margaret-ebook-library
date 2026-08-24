@@ -26,10 +26,10 @@ help:
 # Library (only library packages) build
 # -----------------------------------------------------------------
 # The `./...` recursively finds all packages, but we exclude `cmd/`
-# with `grep -v '^./cmd'` because it only contains the CLI.
+# because it only contains the CLI.
 lib:
 	@echo "📦 Library (module) build..."
-	@go list ./... | grep -v '^./cmd' | xargs -n1 go build -v
+	@go list ./... | grep -v '/cmd' | xargs -n1 go build -v
 
 # -----------------------------------------------------------------
 # Binary (CLI) build – the binary is placed in the bin/ directory

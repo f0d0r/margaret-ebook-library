@@ -1,6 +1,6 @@
 package converter
 
-import "github.com/f0d0r/margaret-ebook-library/pkg/mediatype"
+import "github.com/f0d0r/margaret-ebook-library/mediatype"
 
 // DefaultRegistry is the global registry pre-populated with built-in
 // transformers. Resource.OpenAs uses it automatically.

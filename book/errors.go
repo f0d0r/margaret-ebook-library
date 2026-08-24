@@ -1,4 +1,4 @@
-package errs
+package book
 
 import "errors"
 
@@ -7,14 +7,8 @@ var (
 	// format that it does not recognize or know how to parse.
 	ErrUnsupportedFormat = errors.New("unsupported format")
 
-	// ErrInvalidOffset is returned when the application encounters an invalid
-	// offset into the data.
-	// Deprecated: internal use only, will be unexported in a future version.
-	ErrInvalidOffset = errors.New("invalid offset")
-
-	// ErrLimitExceeded is returned by [LimitReader] when the underlying reader
-	// produces more data than the configured maximum, instead of silently
-	// truncating the stream.
+	// ErrLimitExceeded is returned when the underlying reader produces more data
+	// than the configured safety maximum, protecting against zip-bomb style e-books.
 	ErrLimitExceeded = errors.New("resource exceeds configured size limit")
 
 	// ErrNoTransformer is returned when no Transformer is registered for a

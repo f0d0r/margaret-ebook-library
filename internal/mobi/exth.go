@@ -2,9 +2,8 @@ package mobi
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
-
-	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
 )
 
 const (
@@ -25,7 +24,7 @@ type Exth struct {
 	textEncoding TextEncodingType
 }
 
-var errInvalidOffset = errs.ErrInvalidOffset
+var errInvalidOffset = errors.New("invalid offset")
 
 func ReadExth(offset uint32, data []byte, textEncoding TextEncodingType, maxExthRecords int) (*Exth, error) {
 	if offset+12 > uint32(len(data)) {

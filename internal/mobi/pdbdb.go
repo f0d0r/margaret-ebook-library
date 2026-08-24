@@ -8,7 +8,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/book"
 )
 
 const PDB_HEADER_SIZE = 78
@@ -77,7 +77,7 @@ type PdbDb struct {
 	PdbRecords         []PdbRecord
 }
 
-func ReadPdbDb(b model.Blob, maxRecordSize int64) (*PdbDb, error) {
+func ReadPdbDb(b book.Blob, maxRecordSize int64) (*PdbDb, error) {
 	fileSize, err := b.Size()
 	if err != nil {
 		return nil, fmt.Errorf("get file size: %w", err)
@@ -179,7 +179,7 @@ func parseRecordInfo(raw []byte) (*PdbRecord, error) {
 	}, nil
 }
 
-func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b model.Blob, maxRecordSize int64) ([]PdbRecord, error) {
+func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b book.Blob, maxRecordSize int64) ([]PdbRecord, error) {
 	pdbRecords := make([]PdbRecord, numberOfRecords)
 
 	// The record info table is contiguous: one 8-byte entry per record,
@@ -235,7 +235,7 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b model.Blob, maxR
 	return pdbRecords, nil
 }
 
-func readRecordData(b model.Blob, offset uint32, length uint32, maxRecordSize int64) ([]byte, error) {
+func readRecordData(b book.Blob, offset uint32, length uint32, maxRecordSize int64) ([]byte, error) {
 	if uint64(length) > uint64(maxRecordSize) {
 		return nil, fmt.Errorf("record length %d exceeds maximum %d", length, maxRecordSize)
 	}

@@ -8,12 +8,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/model"
+	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/config"
 )
 
 func TestGetCover(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader(model.DefaultConfig())
+	reader := NewEpubReader(config.DefaultConfig())
 
 	tests := []struct {
 		name              string
@@ -102,7 +103,7 @@ func TestGetCover(t *testing.T) {
 			createTestZIP(t, epubPath, tt.epubContent)
 
 			// Parse the EPUB to get the OPF Package
-			b := model.NewPathBlob(epubPath)
+			b := book.NewPathBlob(epubPath)
 			size, err := b.Size()
 			if err != nil {
 				t.Fatalf("failed to stat epub: %v", err)
@@ -218,7 +219,7 @@ func createOPFWithBothCovers(coverImageID, coverMetaID string) string {
 
 func TestEpubReaderSupportsPreservesPosition(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader(model.DefaultConfig())
+	reader := NewEpubReader(config.DefaultConfig())
 
 	validPath := filepath.Join(tmpDir, "valid.epub")
 	createValidTestEPUB(t, validPath, "My Test Book")
@@ -233,7 +234,7 @@ func TestEpubReaderSupportsPreservesPosition(t *testing.T) {
 		t.Fatalf("failed to seek: %v", err)
 	}
 
-	b, err := model.NewFileBlob(f)
+	b, err := book.NewFileBlob(f)
 	if err != nil {
 		t.Fatalf("NewFileBlob() error: %v", err)
 	}
@@ -252,12 +253,12 @@ func TestEpubReaderSupportsPreservesPosition(t *testing.T) {
 
 func TestEpubReaderSupports(t *testing.T) {
 	tmpDir := t.TempDir()
-	reader := NewEpubReader(model.DefaultConfig())
+	reader := NewEpubReader(config.DefaultConfig())
 
 	validPath := filepath.Join(tmpDir, "valid.epub")
 	createValidTestEPUB(t, validPath, "My Test Book")
 
-	if !reader.Supports(model.NewPathBlob(validPath)) {
+	if !reader.Supports(book.NewPathBlob(validPath)) {
 		t.Error("Supports() = false for valid EPUB path blob, want true")
 	}
 }
@@ -285,7 +286,7 @@ func TestReadZipFileRejectsOversizedEntry(t *testing.T) {
 		t.Fatalf("got %d files, want 1", len(zr.File))
 	}
 
-	if rc, err := NewEpubReader(model.DefaultConfig()).openZipFile(zr.File[0]); err == nil {
+	if rc, err := NewEpubReader(config.DefaultConfig()).openZipFile(zr.File[0]); err == nil {
 		t.Fatalf("openZipFile() expected error for oversized entry, got nil")
 	} else if rc != nil {
 		_ = rc.Close()
@@ -312,7 +313,7 @@ func TestReadZipFile_ConfigOverrideRejectsEntry(t *testing.T) {
 		t.Fatalf("zip.NewReader() error: %v", err)
 	}
 
-	cfg := model.DefaultConfig()
+	cfg := config.DefaultConfig()
 	cfg.MaxResourceSize = 1
 	reader := NewEpubReader(cfg)
 
@@ -343,7 +344,7 @@ func TestReadZipFileReadsNormalEntry(t *testing.T) {
 		t.Fatalf("zip.NewReader() error: %v", err)
 	}
 
-	rc, err := NewEpubReader(model.DefaultConfig()).openZipFile(zr.File[0])
+	rc, err := NewEpubReader(config.DefaultConfig()).openZipFile(zr.File[0])
 	if err != nil {
 		t.Fatalf("openZipFile() unexpected error: %v", err)
 	}
@@ -391,27 +392,26 @@ func TestReadContent(t *testing.T) {
 		{name: "OEBPS/ch4.xhtml", content: "<html><body>Chapter 4</body></html>", method: zip.Deflate},
 	})
 
-	ebook, err := NewEpubReader(model.DefaultConfig()).Read(model.NewPathBlob(epubPath))
+	ebook, err := NewEpubReader(config.DefaultConfig()).Read(book.NewPathBlob(epubPath))
 	if err != nil {
 		t.Fatalf("Read() error: %v", err)
 	}
 
-	if ebook.FileType != model.EPUB {
-		t.Errorf("FileType = %q, want %q", ebook.FileType, model.EPUB)
+	if ebook.FileType() != book.EPUB {
+		t.Errorf("FileType = %q, want %q", ebook.FileType(), book.EPUB)
 	}
-	if ebook.Version != "3.0" {
-		t.Errorf("Version = %q, want %q", ebook.Version, "3.0")
+	if ebook.Version() != "3.0" {
+		t.Errorf("Version = %q, want %q", ebook.Version(), "3.0")
 	}
-	if ebook.Metadata.Title != "Test Book" {
-		t.Errorf("Title = %q, want %q", ebook.Metadata.Title, "Test Book")
+	if ebook.Metadata().Title != "Test Book" {
+		t.Errorf("Title = %q, want %q", ebook.Metadata().Title, "Test Book")
 	}
 
-	// Content is now via Resources.ReadingOrder(); linear="no" items are included with Linear=false.
-	ro := ebook.Resources.ReadingOrder()
+	// Content is now via Resources().ReadingOrder(); linear="no" items are included with Linear=false.
+	ro := ebook.Resources().ReadingOrder()
 	if len(ro) != 3 {
 		t.Fatalf("len(ReadingOrder) = %d, want 3", len(ro))
 	}
-	// ro[0] = ch1 linear=true, ro[1] = ch2 linear=false, ro[2] = ch4 linear=true
 	if ro[0].Resource.Id != "ch1" || !ro[0].Linear {
 		t.Errorf("ReadingOrder[0] = %+v, want ch1 linear=true", ro[0])
 	}
@@ -452,8 +452,7 @@ func TestReadContent(t *testing.T) {
 	if ch4 := ro[2].Resource; ch4.Id != "ch4" {
 		t.Errorf("ReadingOrder[2].Id = %q, want %q (spine order preserved)", ch4.Id, "ch4")
 	}
-	// All() should contain manifest items present in ZIP (ch1,ch2,ch4)
-	if len(ebook.Resources.All()) != 3 {
-		t.Errorf("len(All) = %d, want 3", len(ebook.Resources.All()))
+	if len(ebook.Resources().All()) != 3 {
+		t.Errorf("len(All) = %d, want 3", len(ebook.Resources().All()))
 	}
 }

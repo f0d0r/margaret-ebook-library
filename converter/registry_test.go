@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/f0d0r/margaret-ebook-library/pkg/mediatype"
+	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
 // dummyTransformer is a simple test transformer for registry tests.
@@ -25,7 +25,6 @@ func (d *dummyTransformer) Transform(_ context.Context, r io.Reader) (io.ReadClo
 			return nil, err
 		}
 		if c, ok := r.(io.Closer); ok {
-			// wrap to propagate close
 			return &readCloserWrapper{Reader: nr, Closer: c}, nil
 		}
 		return io.NopCloser(nr), nil
@@ -210,7 +209,6 @@ func TestRegisterAliases(t *testing.T) {
 }
 
 func TestRegisterAliases_Nil(t *testing.T) {
-	// should not panic
 	RegisterAliases(nil, nil, mediatype.PlainText, mediatype.XHTML)
 	RegisterAliases(NewRegistry(), nil, mediatype.PlainText, mediatype.XHTML)
 	factory := func(from, to string) Transformer { return &dummyTransformer{from: from, to: to} }
