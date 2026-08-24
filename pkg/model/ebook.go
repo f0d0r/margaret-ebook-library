@@ -1,8 +1,14 @@
 package model
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"io"
+
+	"github.com/f0d0r/margaret-ebook-library/pkg/converter"
+	"github.com/f0d0r/margaret-ebook-library/pkg/errs"
+	"github.com/f0d0r/margaret-ebook-library/pkg/mediatype"
 )
 
 type Ebook struct {
@@ -67,4 +73,90 @@ func (r *Resource) Data() ([]byte, error) {
 	}
 	defer func() { _ = rc.Close() }()
 	return io.ReadAll(rc)
+}
+
+// OpenAs opens the resource and converts its content to targetMIME if needed.
+// It uses the global converter.DefaultRegistry. If the resource's MediaType
+// already matches targetMIME (after normalization), it simply calls Open.
+func (r *Resource) OpenAs(ctx context.Context, targetMIME string) (io.ReadCloser, error) {
+	return r.openAsWithRegistry(ctx, nil, targetMIME)
+}
+
+// OpenAsWithRegistry is like OpenAs but uses the provided registry. If reg is
+// nil, the global DefaultRegistry is used. This allows isolated registries in
+// tests and custom DI setups.
+func (r *Resource) OpenAsWithRegistry(ctx context.Context, reg *converter.Registry, targetMIME string) (io.ReadCloser, error) {
+	return r.openAsWithRegistry(ctx, reg, targetMIME)
+}
+
+// DataAs reads the full resource content converted to targetMIME.
+func (r *Resource) DataAs(ctx context.Context, targetMIME string) ([]byte, error) {
+	rc, err := r.OpenAs(ctx, targetMIME)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }()
+	return io.ReadAll(rc)
+}
+
+// DataAsWithRegistry is like DataAs but uses the provided registry.
+func (r *Resource) DataAsWithRegistry(ctx context.Context, reg *converter.Registry, targetMIME string) ([]byte, error) {
+	rc, err := r.OpenAsWithRegistry(ctx, reg, targetMIME)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }()
+	return io.ReadAll(rc)
+}
+
+func (r *Resource) openAsWithRegistry(ctx context.Context, reg *converter.Registry, targetMIME string) (io.ReadCloser, error) {
+	if r == nil {
+		return nil, errors.New("resource is nil")
+	}
+	if r.Open == nil {
+		return nil, errors.New("resource is not openable")
+	}
+	to := mediatype.Normalize(targetMIME)
+	if to == "" {
+		return nil, fmt.Errorf("%w: target MIME is empty", errs.ErrUnsupportedMediaType)
+	}
+	from := mediatype.Normalize(r.MediaType)
+	if from == "" {
+		return nil, fmt.Errorf("%w: resource media type is empty", errs.ErrUnsupportedMediaType)
+	}
+	if from == to {
+		return r.Open()
+	}
+	if reg == nil {
+		reg = converter.DefaultRegistry
+	}
+	path, ok := reg.FindPath(from, to)
+	if !ok {
+		return nil, fmt.Errorf("%w: from %s to %s", errs.ErrNoTransformer, from, to)
+	}
+	if len(path) == 0 {
+		// Identity case already handled, but FindPath may return empty for identity.
+		return r.Open()
+	}
+	rc, err := r.Open()
+	if err != nil {
+		return nil, err
+	}
+	current := io.Reader(rc)
+	// Keep track of the current ReadCloser for cleanup on error.
+	currentRC := rc
+	for i, t := range path {
+		nextRC, err := t.Transform(ctx, current)
+		if err != nil {
+			_ = currentRC.Close()
+			return nil, fmt.Errorf("transform step %d (%s -> %s): %w", i, t.From(), t.To(), err)
+		}
+		// Next iteration will read from nextRC; currentRC will be closed when nextRC is closed
+		// via the transformer's closer chain, but if the transformer does not wrap the closer,
+		// we rely on the transformer to close it. The outermost RC is returned.
+		current = nextRC
+		currentRC = nextRC
+	}
+	// currentRC is the final transformed reader; it already chains closes.
+	return currentRC, nil
 }

@@ -16,4 +16,12 @@ var (
 	// produces more data than the configured maximum, instead of silently
 	// truncating the stream.
 	ErrLimitExceeded = errors.New("resource exceeds configured size limit")
+
+	// ErrNoTransformer is returned when no Transformer is registered for a
+	// requested MIME type conversion.
+	ErrNoTransformer = errors.New("no transformer")
+
+	// ErrUnsupportedMediaType is returned when a resource has an empty or
+	// otherwise unsupported media type for conversion.
+	ErrUnsupportedMediaType = errors.New("unsupported media type")
 )

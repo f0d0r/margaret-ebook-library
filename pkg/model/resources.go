@@ -1,9 +1,14 @@
 package model
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"io"
 
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	"github.com/f0d0r/margaret-ebook-library/pkg/converter"
+	"github.com/f0d0r/margaret-ebook-library/pkg/mediatype"
 )
 
 // ReadingOrderItem represents a single spine entry in reading order.
@@ -223,4 +228,102 @@ func (rs *ResourceSet) Len() int {
 		return 0
 	}
 	return len(rs.all)
+}
+
+// OpenReadingOrderAs returns a single ReadCloser that lazily concatenates all
+// linear reading-order resources converted to targetMIME. Only items with
+// Linear==true are included; non-linear items (e.g. EPUB spine linear="no")
+// are skipped. The stream is lazy: each chapter is opened and converted only
+// when the previous one is exhausted.
+func (rs *ResourceSet) OpenReadingOrderAs(ctx context.Context, targetMIME string) (io.ReadCloser, error) {
+	return rs.OpenReadingOrderAsWithRegistry(ctx, nil, targetMIME)
+}
+
+// OpenReadingOrderAsWithRegistry is like OpenReadingOrderAs but uses the
+// provided registry. If reg is nil, converter.DefaultRegistry is used.
+func (rs *ResourceSet) OpenReadingOrderAsWithRegistry(ctx context.Context, reg *converter.Registry, targetMIME string) (io.ReadCloser, error) {
+	if rs == nil {
+		return nil, fmt.Errorf("resource set is nil")
+	}
+	to := mediatype.Normalize(targetMIME)
+	if to == "" {
+		return nil, fmt.Errorf("target MIME is empty")
+	}
+	// Collect linear resources.
+	var linear []*Resource
+	for _, it := range rs.readingOrder {
+		if it.Linear && it.Resource != nil {
+			linear = append(linear, it.Resource)
+		}
+	}
+	if len(linear) == 0 {
+		return io.NopCloser(bytes.NewReader(nil)), nil
+	}
+	if reg == nil {
+		reg = converter.DefaultRegistry
+	}
+	return &multiReadCloser{
+		ctx:       ctx,
+		resources: linear,
+		reg:       reg,
+		target:    to,
+		index:     0,
+	}, nil
+}
+
+// multiReadCloser lazily opens each resource via OpenAsWithRegistry and
+// streams them sequentially.
+type multiReadCloser struct {
+	ctx       context.Context
+	resources []*Resource
+	reg       *converter.Registry
+	target    string
+	index     int
+	current   io.ReadCloser
+	closed    bool
+}
+
+func (m *multiReadCloser) Read(p []byte) (int, error) {
+	if m.closed {
+		return 0, io.ErrClosedPipe
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
+	for {
+		if m.current == nil {
+			if m.index >= len(m.resources) {
+				return 0, io.EOF
+			}
+			rc, err := m.resources[m.index].OpenAsWithRegistry(m.ctx, m.reg, m.target)
+			if err != nil {
+				return 0, err
+			}
+			m.current = rc
+		}
+		n, err := m.current.Read(p)
+		if err == io.EOF {
+			_ = m.current.Close()
+			m.current = nil
+			m.index++
+			if n > 0 {
+				return n, nil
+			}
+			continue
+		}
+		return n, err
+	}
+}
+
+func (m *multiReadCloser) Close() error {
+	if m.closed {
+		return nil
+	}
+	m.closed = true
+	if m.current != nil {
+		err := m.current.Close()
+		m.current = nil
+		return err
+	}
+	return nil
 }

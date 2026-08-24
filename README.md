@@ -172,6 +172,102 @@ if cover, ok := ebook.Resources.CoverImage(); ok {
 }
 ```
 
+### Converting resources (transformers)
+
+Resources are exposed lazily via `Open()`. Use `OpenAs` to convert on the fly
+between MIME types via a streaming `Transformer` registry. This is lazy as well:
+no data is buffered until you read.
+
+```go
+import (
+    "context"
+    "errors"
+    "io"
+
+    "github.com/f0d0r/margaret-ebook-library/pkg/errs"
+    "github.com/f0d0r/margaret-ebook-library/pkg/mediatype"
+    "github.com/f0d0r/margaret-ebook-library/pkg/model"
+)
+
+ctx := context.Background()
+
+// Single resource: XHTML/HTML/MobiHTML -> plain text
+// MediaType can include charset params; they are normalized (case-insensitive,
+// "; charset=..." stripped).
+for _, r := range ebook.Resources.All() {
+    rc, err := r.OpenAs(ctx, mediatype.PlainText)
+    if err != nil {
+        if errors.Is(err, errs.ErrNoTransformer) {
+            // no converter for e.g. image/jpeg -> text/plain
+            continue
+        }
+        log.Fatal(err)
+    }
+    text, err := io.ReadAll(rc)
+    rc.Close()
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(text)
+}
+
+// Convenience: read fully converted
+data, err := ebook.Resources.All()[0].DataAs(ctx, mediatype.PlainText)
+
+// Whole book as one plain-text stream (linear spine only, lazy concatenation):
+rc, err := ebook.Resources.OpenReadingOrderAs(ctx, mediatype.PlainText)
+if err != nil {
+    log.Fatal(err)
+}
+defer rc.Close()
+plain, err := io.ReadAll(rc) // search indexing, LLM input, TTS, CLI reading
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(string(plain))
+```
+
+Constants are compile-time safe: `model.MediaTypePlainText`, `model.MediaTypeXHTML`,
+`model.MediaTypeHTML`, `model.MediaTypeMobiHTML`, etc. (aliases of `pkg/mediatype`).
+
+#### Custom transformers and isolated registries
+
+`Transformer` is a single edge `From() -> To()` over MIME types:
+
+```go
+type Transformer interface {
+    From() string
+    To()   string
+    Transform(ctx context.Context, r io.Reader) (io.ReadCloser, error)
+}
+```
+
+`Resource.OpenAs` uses the global `converter.DefaultRegistry` (pre-populated with
+`application/xhtml+xml`, `text/html`, `application/x-mobipocket-html` -> `text/plain`
+streaming via `html.Tokenizer`). For tests or custom DI, use an isolated registry:
+
+```go
+import "github.com/f0d0r/margaret-ebook-library/pkg/converter"
+
+reg := converter.NewRegistry(myTransformer)
+rc, err := resource.OpenAsWithRegistry(ctx, reg, mediatype.PlainText)
+if err != nil {
+    if errors.Is(err, errs.ErrNoTransformer) {
+        // no path from resource.MediaType to target
+    }
+}
+
+// Share logic across multiple source types without per-converter slices:
+converter.RegisterAliases(reg, func(from, to string) converter.Transformer {
+    return myHTMLToTextTransformer{from: from, to: to}
+}, mediatype.PlainText, mediatype.XHTML, mediatype.HTML, mediatype.MobiHTML)
+
+// Multi-hop chaining is resolved via BFS shortest path:
+// if you register A->B and B->C, OpenAs(A, C) automatically chains B.
+```
+
+Registering is thread-safe via `Registry.Register`.
+
 ### Hashing a book
 
 ```go
