@@ -1,9 +1,18 @@
 package tools
 
 import (
+	"io"
 	"strings"
 	"testing"
 )
+
+func mustWrite(t *testing.T, w io.Writer, p []byte) {
+	t.Helper()
+	if _, err := w.Write(p); err != nil {
+		t.Fatalf("Write failed: %v", err)
+	}
+}
+
 
 func equalSigs(a, b []uint64) bool {
 	if len(a) != len(b) {
@@ -53,14 +62,14 @@ func TestMinHasher_Determinism_SmallVsLargeBuffer(t *testing.T) {
 func TestMinHasher_Normalization_WhitespaceCase(t *testing.T) {
 	mh1 := NewMinHasher(WithShingleSize(2), WithNumHashes(8))
 	mh2 := NewMinHasher(WithShingleSize(2), WithNumHashes(8))
-	mh1.Write([]byte("Hello   WORLD"))
-	mh2.Write([]byte("hello world"))
+	mustWrite(t, mh1, []byte("Hello   WORLD"))
+	mustWrite(t, mh2, []byte("hello world"))
 	if !equalSigs(mh1.Signature(), mh2.Signature()) {
 		t.Fatalf("whitespace/case normalization failed, Jaccard=%f", Jaccard(mh1.Signature(), mh2.Signature()))
 	}
 	// also test tabs/newlines
 	mh3 := NewMinHasher(WithShingleSize(2), WithNumHashes(8))
-	mh3.Write([]byte("hello\t\nworld"))
+	mustWrite(t, mh3, []byte("hello\t\nworld"))
 	if !equalSigs(mh2.Signature(), mh3.Signature()) {
 		t.Fatalf("tab/newline normalization failed")
 	}
@@ -70,8 +79,8 @@ func TestMinHasher_Normalization_NFKC(t *testing.T) {
 	// e + combining acute vs precomposed é
 	mh1 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
 	mh2 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
-	mh1.Write([]byte("e\xcc\x81")) // e + U+0301
-	mh2.Write([]byte("\xc3\xa9"))  // é U+00E9
+	mustWrite(t, mh1, []byte("e\xcc\x81"))
+	mustWrite(t, mh2, []byte("\xc3\xa9"))
 	if !equalSigs(mh1.Signature(), mh2.Signature()) {
 		t.Fatalf("NFKC normalization failed, Jaccard=%f", Jaccard(mh1.Signature(), mh2.Signature()))
 	}
@@ -79,8 +88,8 @@ func TestMinHasher_Normalization_NFKC(t *testing.T) {
 	mh3 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
 	mh4 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
 	// Fullwidth vs ascii (NFKC should normalize)
-	mh3.Write([]byte("hello")) // ascii
-	mh4.Write([]byte("hello")) // same, sanity
+	mustWrite(t, mh3, []byte("hello"))
+	mustWrite(t, mh4, []byte("hello"))
 	if !equalSigs(mh3.Signature(), mh4.Signature()) {
 		t.Fatalf("sanity failed")
 	}
@@ -90,9 +99,9 @@ func TestMinHasher_Normalization_NFKC_SplitAcrossWrites(t *testing.T) {
 	mh1 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
 	mh2 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
 	// Split e + combining across writes
-	mh1.Write([]byte("e"))
-	mh1.Write([]byte("\xcc\x81"))
-	mh2.Write([]byte("\xc3\xa9"))
+	mustWrite(t, mh1, []byte("e"))
+	mustWrite(t, mh1, []byte("\xcc\x81"))
+	mustWrite(t, mh2, []byte("\xc3\xa9"))
 	if !equalSigs(mh1.Signature(), mh2.Signature()) {
 		t.Fatalf("NFKC split across writes failed")
 	}
@@ -102,19 +111,19 @@ func TestMinHasher_UTF8_Split_MultiByte(t *testing.T) {
 	mh1 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
 	mh2 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
 	// "é" is 2 bytes \xc3\xa9, split into 1-byte writes
-	mh1.Write([]byte("\xc3"))
-	mh1.Write([]byte("\xa9"))
-	mh2.Write([]byte("\xc3\xa9"))
+	mustWrite(t, mh1, []byte("\xc3"))
+	mustWrite(t, mh1, []byte("\xa9"))
+	mustWrite(t, mh2, []byte("\xc3\xa9"))
 	if !equalSigs(mh1.Signature(), mh2.Signature()) {
 		t.Fatalf("UTF-8 1-byte split failed")
 	}
 	// Test 3-byte char € \xe2\x82\xac split
 	mh3 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
 	mh4 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
-	mh3.Write([]byte("\xe2"))
-	mh3.Write([]byte("\x82"))
-	mh3.Write([]byte("\xac"))
-	mh4.Write([]byte("\xe2\x82\xac"))
+	mustWrite(t, mh3, []byte("\xe2"))
+	mustWrite(t, mh3, []byte("\x82"))
+	mustWrite(t, mh3, []byte("\xac"))
+	mustWrite(t, mh4, []byte("\xe2\x82\xac"))
 	if !equalSigs(mh3.Signature(), mh4.Signature()) {
 		t.Fatalf("3-byte UTF-8 split failed")
 	}
@@ -122,7 +131,7 @@ func TestMinHasher_UTF8_Split_MultiByte(t *testing.T) {
 
 func TestMinHasher_ShortDoc_LessThanK(t *testing.T) {
 	mh := NewMinHasher(WithShingleSize(5))
-	mh.Write([]byte("hello world"))
+	mustWrite(t, mh, []byte("hello world"))
 	sig := mh.Signature()
 	if len(sig) != 128 {
 		t.Fatalf("sig len = %d, want 128", len(sig))
@@ -132,13 +141,13 @@ func TestMinHasher_ShortDoc_LessThanK(t *testing.T) {
 	}
 	// Same short doc should be identical
 	mh2 := NewMinHasher(WithShingleSize(5))
-	mh2.Write([]byte("hello world"))
+	mustWrite(t, mh2, []byte("hello world"))
 	if Jaccard(sig, mh2.Signature()) != 1.0 {
 		t.Fatalf("identical short doc Jaccard !=1")
 	}
 	// Single word
 	mh3 := NewMinHasher(WithShingleSize(5))
-	mh3.Write([]byte("hello"))
+	mustWrite(t, mh3, []byte("hello"))
 	if mh3.Signature()[0] == ^uint64(0) {
 		t.Fatalf("single word should be hashed")
 	}
@@ -158,15 +167,15 @@ func TestMinHasher_Empty(t *testing.T) {
 		t.Fatalf("empty vs empty Jaccard should be 1")
 	}
 	mh3 := NewMinHasher()
-	mh3.Write([]byte("hello world test"))
+	mustWrite(t, mh3, []byte("hello world test"))
 	if Jaccard(sig, mh3.Signature()) != 0.0 {
 		t.Fatalf("empty vs non-empty should be 0, got %f", Jaccard(sig, mh3.Signature()))
 	}
 	// Method Jaccard
 	mh4 := NewMinHasher()
-	mh4.Write([]byte("hello world test"))
+	mustWrite(t, mh4, []byte("hello world test"))
 	mh5 := NewMinHasher()
-	mh5.Write([]byte("hello world test"))
+	mustWrite(t, mh5, []byte("hello world test"))
 	if mh4.Jaccard(mh5) != 1.0 {
 		t.Fatalf("method Jaccard failed")
 	}
@@ -174,18 +183,18 @@ func TestMinHasher_Empty(t *testing.T) {
 
 func TestMinHasher_SingleWord_K1(t *testing.T) {
 	mh1 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
-	mh1.Write([]byte("hello world hello"))
+	mustWrite(t, mh1, []byte("hello world hello"))
 	s1 := mh1.Signature()
 	// With k=1, shingles are individual words: hello, world, hello (dedup to 2 unique)
 	// Ensure not empty and deterministic
 	mh2 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
-	mh2.Write([]byte("hello world hello"))
+	mustWrite(t, mh2, []byte("hello world hello"))
 	if !equalSigs(s1, mh2.Signature()) {
 		t.Fatalf("k=1 determinism failed")
 	}
 	// Different order should change Jaccard? For k=1, "hello world" vs "world hello" should be identical set
 	mh3 := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
-	mh3.Write([]byte("world hello"))
+	mustWrite(t, mh3, []byte("world hello"))
 	// Sets are {hello,world} both, so Jaccard 1
 	if Jaccard(s1, mh3.Signature()) != 1.0 {
 		t.Fatalf("k=1 set equality failed, got %f", Jaccard(s1, mh3.Signature()))
@@ -196,8 +205,8 @@ func TestMinHasher_Configurable_K(t *testing.T) {
 	text := "a b c d e f g h i j"
 	mh3 := NewMinHasher(WithShingleSize(3), WithNumHashes(16))
 	mh5 := NewMinHasher(WithShingleSize(5), WithNumHashes(16))
-	mh3.Write([]byte(text))
-	mh5.Write([]byte(text))
+	mustWrite(t, mh3, []byte(text))
+	mustWrite(t, mh5, []byte(text))
 	if equalSigs(mh3.Signature(), mh5.Signature()) {
 		t.Fatalf("different k should give different sig")
 	}
@@ -210,21 +219,21 @@ func TestMinHasher_Configurable_NumHashes_Seed(t *testing.T) {
 	text := "hello world this is a test"
 	mh8 := NewMinHasher(WithNumHashes(8), WithShingleSize(3))
 	mh128 := NewMinHasher(WithNumHashes(128), WithShingleSize(3))
-	mh8.Write([]byte(text))
-	mh128.Write([]byte(text))
+	mustWrite(t, mh8, []byte(text))
+	mustWrite(t, mh128, []byte(text))
 	if len(mh8.Signature()) != 8 || len(mh128.Signature()) != 128 {
 		t.Fatalf("numHashes mismatch")
 	}
 	// Same config, same text => identical
 	mhA := NewMinHasher(WithNumHashes(16), WithShingleSize(3), WithSeed(42))
 	mhB := NewMinHasher(WithNumHashes(16), WithShingleSize(3), WithSeed(42))
-	mhA.Write([]byte(text))
-	mhB.Write([]byte(text))
+	mustWrite(t, mhA, []byte(text))
+	mustWrite(t, mhB, []byte(text))
 	if !equalSigs(mhA.Signature(), mhB.Signature()) {
 		t.Fatalf("same seed should give same sig")
 	}
 	mhC := NewMinHasher(WithNumHashes(16), WithShingleSize(3), WithSeed(99))
-	mhC.Write([]byte(text))
+	mustWrite(t, mhC, []byte(text))
 	if equalSigs(mhA.Signature(), mhC.Signature()) {
 		t.Fatalf("different seed should give different sig")
 	}
@@ -245,9 +254,9 @@ func TestMinHasher_Jaccard_Identical_vs_Different(t *testing.T) {
 	b := NewMinHasher(WithNumHashes(32), WithShingleSize(3))
 	c := NewMinHasher(WithNumHashes(32), WithShingleSize(3))
 	text := "hello world this is a test of minhash jaccard implementation with some words"
-	a.Write([]byte(text))
-	b.Write([]byte(text))
-	c.Write([]byte("completely different content xyz 123 not overlapping at all vocab"))
+	mustWrite(t, a, []byte(text))
+	mustWrite(t, b, []byte(text))
+	mustWrite(t, c, []byte("completely different content xyz 123 not overlapping at all vocab"))
 	if Jaccard(a.Signature(), b.Signature()) != 1.0 {
 		t.Fatalf("identical should be 1, got %f", Jaccard(a.Signature(), b.Signature()))
 	}
@@ -256,7 +265,7 @@ func TestMinHasher_Jaccard_Identical_vs_Different(t *testing.T) {
 	}
 	// Near duplicate: one word changed
 	d := NewMinHasher(WithNumHashes(32), WithShingleSize(3))
-	d.Write([]byte("hello world this is a test of minhash jaccard implementation with some WORDS"))
+	mustWrite(t, d, []byte("hello world this is a test of minhash jaccard implementation with some WORDS"))
 	if j := Jaccard(a.Signature(), d.Signature()); j < 0.5 {
 		t.Fatalf("near duplicate should be high, got %f", j)
 	}
@@ -279,7 +288,7 @@ func TestMinHasher_Jaccard_LengthMismatch(t *testing.T) {
 
 func TestMinHasher_WriteAfterFinalized_Error(t *testing.T) {
 	mh := NewMinHasher()
-	mh.Write([]byte("hello world"))
+	mustWrite(t, mh, []byte("hello world"))
 	_ = mh.Signature()
 	if _, err := mh.Write([]byte("more")); err == nil {
 		t.Fatalf("expected error after finalized")
@@ -294,7 +303,7 @@ func TestMinHasher_WriteAfterFinalized_Error(t *testing.T) {
 
 func TestMinHasher_Signature_Idempotent(t *testing.T) {
 	mh := NewMinHasher(WithShingleSize(2))
-	mh.Write([]byte("a b c d e"))
+	mustWrite(t, mh, []byte("a b c d e"))
 	s1 := mh.Signature()
 	s2 := mh.Signature()
 	s3 := mh.Signature()
@@ -312,8 +321,8 @@ func TestMinHasher_ExactJaccard_vs_Estimate(t *testing.T) {
 	k := 3
 	mhA := NewMinHasher(WithShingleSize(k), WithNumHashes(256))
 	mhB := NewMinHasher(WithShingleSize(k), WithNumHashes(256))
-	mhA.Write([]byte(textA))
-	mhB.Write([]byte(textB))
+	mustWrite(t, mhA, []byte(textA))
+	mustWrite(t, mhB, []byte(textB))
 	est := Jaccard(mhA.Signature(), mhB.Signature())
 
 	// Exact: build shingles via naive strings.Fields(lower) — our processor also lowercases

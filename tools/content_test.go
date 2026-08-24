@@ -81,12 +81,12 @@ func TestFingerprintContent_DelimiterInjected(t *testing.T) {
 	// Also via FingerprintContent result should match direct hasher on same delimited string
 	fp, _ := FingerprintContent(ctx, b, WithMinHash(MinHashConfig{NumHashes: 8, ShingleSize: 1}), WithSimHash())
 	directMH := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
-	directMH.Write([]byte("First\nSecond"))
+	mustWrite(t, directMH, []byte("First\nSecond"))
 	if !equalSigs(fp.MinHash, directMH.Signature()) {
 		t.Fatalf("FingerprintContent MinHash mismatch vs direct")
 	}
 	directSH := NewSimHasher()
-	directSH.Write([]byte("First\nSecond"))
+	mustWrite(t, directSH, []byte("First\nSecond"))
 	if fp.SimHash != directSH.Sum64() {
 		t.Fatalf("SimHash mismatch")
 	}
@@ -105,7 +105,7 @@ func TestFingerprintContent_Delimiter_ThreeChapters_SmallBuffer(t *testing.T) {
 	for {
 		n, e := rc.Read(buf)
 		if n > 0 {
-			out.Write(buf[:n])
+			mustWrite(t, &out, buf[:n])
 		}
 		if e == io.EOF {
 			break
@@ -119,7 +119,7 @@ func TestFingerprintContent_Delimiter_ThreeChapters_SmallBuffer(t *testing.T) {
 	}
 	fp := handle.Result()
 	manual := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
-	manual.Write([]byte("First\nSecond\nThird"))
+	mustWrite(t, manual, []byte("First\nSecond\nThird"))
 	if !equalSigs(fp.MinHash, manual.Signature()) {
 		t.Fatalf("3-chapter Jaccard mismatch")
 	}
@@ -279,14 +279,14 @@ func TestFingerprintContent_OnlyNonLinear_Skipped(t *testing.T) {
 	b := &fakeBook{rs: rs}
 	fp, _ := FingerprintContent(ctx, b, WithMinHash(MinHashConfig{NumHashes: 8, ShingleSize: 1}))
 	manual := NewMinHasher(WithShingleSize(1), WithNumHashes(8))
-	manual.Write([]byte("KeepMe"))
+	mustWrite(t, manual, []byte("KeepMe"))
 	if !equalSigs(fp.MinHash, manual.Signature()) {
 		t.Fatalf("non-linear should be skipped")
 	}
 	// Sim likewise
 	fp2, _ := FingerprintContent(ctx, b, WithSimHash())
 	manualS := NewSimHasher()
-	manualS.Write([]byte("KeepMe"))
+	mustWrite(t, manualS, []byte("KeepMe"))
 	if fp2.SimHash != manualS.Sum64() {
 		t.Fatalf("sim non-linear skip failed")
 	}
@@ -465,7 +465,7 @@ func TestDelimitedMultiReadCloser_LazyOpen(t *testing.T) {
 	for {
 		n, e := rc.Read(buf)
 		if n > 0 {
-			out.Write(buf[:n])
+			mustWrite(t, &out, buf[:n])
 		}
 		if e == io.EOF {
 			break
