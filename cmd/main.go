@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/pkg/ebook"
+	"github.com/f0d0r/margaret-ebook-library/pkg/mediatype"
 )
 
 func main() {
@@ -44,33 +46,43 @@ func main() {
 			fmt.Printf("  [%d] %s (%s, %s, %d bytes) href=%s resolved=%s\n", i, res.Name, res.Id, res.MediaType, res.Size, res.Href, res.ResolvedHref)
 		}
 		fmt.Printf("\nReadingOrder (%d):\n", len(book.Resources.ReadingOrder()))
-		for i, it := range book.Resources.ReadingOrder() {
-			fmt.Printf("\n[%d] %s (%s, %s, %d bytes) linear=%v href=%s\n", i, it.Resource.Name, it.Resource.Id, it.Resource.MediaType, it.Resource.Size, it.Linear, it.Resource.ResolvedHref)
-			if isTextMediaType(it.Resource.MediaType) {
-				rc, err := it.Resource.Open()
-				if err != nil {
-					fmt.Printf("  error opening: %v\n", err)
-					continue
-				}
-				data, err := io.ReadAll(rc)
-				_ = rc.Close()
-				if err != nil {
-					fmt.Printf("  error reading: %v\n", err)
-					continue
-				}
-				fmt.Printf("  %s\n", data)
-			}
+		r, err := book.Resources.OpenReadingOrderAs(context.Background(), mediatype.PlainText)
+		if err != nil {
+			fmt.Printf("Error opening reading order as plain text: %v\n", err)
 		}
+		defer func() { _ = r.Close() }()
+		plainText, err := io.ReadAll(r)
+		if err != nil {
+			fmt.Printf("Error reading plain text from reading order: %v\n", err)
+		}
+		fmt.Println(string(plainText))
+		/*for i, it := range book.Resources.ReadingOrder() {
+		fmt.Printf("\n[%d] %s (%s, %s, %d bytes) linear=%v href=%s\n", i, it.Resource.Name, it.Resource.Id, it.Resource.MediaType, it.Resource.Size, it.Linear, it.Resource.ResolvedHref)
+		if isTextMediaType(it.Resource.MediaType) {
+			rc, err := it.Resource.Open()
+			if err != nil {
+				fmt.Printf("  error opening: %v\n", err)
+				continue
+			}
+			data, err := io.ReadAll(rc)
+			_ = rc.Close()
+			if err != nil {
+				fmt.Printf("  error reading: %v\n", err)
+				continue
+			}
+			fmt.Printf("  %s\n", data)
+		}
+		}*/
 	}
 }
 
 // isTextMediaType reports whether a media type is text-based and thus worth
 // printing to the console.
-func isTextMediaType(mediaType string) bool {
-	switch mediaType {
-	case "application/xhtml+xml", "application/x-mobipocket-html", "text/html", "text/plain", "text/xml",
-		"application/xml", "text/css", "text/javascript":
-		return true
-	}
-	return false
+/*func isTextMediaType(mediaType string) bool {
+switch mediaType {
+case "application/xhtml+xml", "application/x-mobipocket-html", "text/html", "text/plain", "text/xml",
+	"application/xml", "text/css", "text/javascript":
+	return true
 }
+return false
+}*/
