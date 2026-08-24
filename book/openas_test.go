@@ -14,7 +14,7 @@ import (
 
 func mustReadAll(t *testing.T, rc io.ReadCloser) string {
 	t.Helper()
-	defer func () { _ = rc.Close() }()
+	defer func() { _ = rc.Close() }()
 	b, err := io.ReadAll(rc)
 	if err != nil {
 		t.Fatalf("ReadAll failed: %v", err)
@@ -283,7 +283,7 @@ func TestResource_OpenAs_StreamingSmallBuffer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenAs failed: %v", err)
 	}
-	defer func () { _ = rc.Close() }()
+	defer func() { _ = rc.Close() }()
 	buf := make([]byte, 3)
 	var out bytes.Buffer
 	for {
