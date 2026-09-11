@@ -13,7 +13,7 @@ import (
 
 func readAll(t *testing.T, rc io.ReadCloser) string {
 	t.Helper()
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	b, err := io.ReadAll(rc)
 	if err != nil {
 		t.Fatalf("ReadAll failed: %v", err)
@@ -81,7 +81,7 @@ func TestHtmlToTextTransformer_Streaming_PartialBuffers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Transform failed: %v", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	// Read with 3-byte buffer repeatedly — tests buf remainder logic
 	buf := make([]byte, 3)
@@ -109,7 +109,7 @@ func TestHtmlToTextTransformer_Streaming_LargeToken(t *testing.T) {
 	input := "<p>" + long + "</p>"
 	tr, _ := DefaultRegistry.Find(mediatype.XHTML, mediatype.PlainText)
 	rc, _ := tr.Transform(context.Background(), strings.NewReader(input))
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	buf := make([]byte, 512)
 	var out bytes.Buffer
@@ -134,7 +134,7 @@ func TestHtmlToTextTransformer_Streaming_Unicode(t *testing.T) {
 	input := "<p>Hello 世界 🌍</p>"
 	tr, _ := DefaultRegistry.Find(mediatype.XHTML, mediatype.PlainText)
 	rc, _ := tr.Transform(context.Background(), strings.NewReader(input))
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	// 1-byte buffer to stress remainder handling with multi-byte runes
 	buf := make([]byte, 1)
@@ -161,7 +161,7 @@ func TestHtmlToTextTransformer_Streaming_MultipleTokens(t *testing.T) {
 	input := "<p>First</p><p>Second</p><p>Third</p>"
 	tr, _ := DefaultRegistry.Find(mediatype.XHTML, mediatype.PlainText)
 	rc, _ := tr.Transform(context.Background(), strings.NewReader(input))
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	// Buffer smaller than first token but larger than second — fill loop
 	buf := make([]byte, 4)
@@ -204,7 +204,7 @@ func TestHtmlToTextTransformer_Close_Propagates(t *testing.T) {
 func TestHtmlToTextTransformer_Read_AfterEOF(t *testing.T) {
 	tr, _ := DefaultRegistry.Find(mediatype.XHTML, mediatype.PlainText)
 	rc, _ := tr.Transform(context.Background(), strings.NewReader("<p>hi</p>"))
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	b, _ := io.ReadAll(rc)
 	if string(b) != "hi" {
@@ -225,7 +225,7 @@ func TestHtmlToTextTransformer_ContextCancel_BeforeRead(t *testing.T) {
 	cancel()
 	tr, _ := DefaultRegistry.Find(mediatype.XHTML, mediatype.PlainText)
 	rc, _ := tr.Transform(ctx, strings.NewReader("<p>hello</p>"))
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	buf := make([]byte, 10)
 	_, err := rc.Read(buf)
@@ -246,7 +246,7 @@ func TestHtmlToTextTransformer_ErrorsDontReturnZeroNilEOF(t *testing.T) {
 	// Ensure we don't return (0, nil) at EOF — would cause infinite loop in io.Copy
 	tr, _ := DefaultRegistry.Find(mediatype.XHTML, mediatype.PlainText)
 	rc, _ := tr.Transform(context.Background(), strings.NewReader(""))
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	buf := make([]byte, 10)
 	n, err := rc.Read(buf)
 	if n != 0 || !errors.Is(err, io.EOF) {

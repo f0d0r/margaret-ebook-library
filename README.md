@@ -2,7 +2,7 @@
 
 [![Build Status](https://github.com/f0d0r/margaret-ebook-library/actions/workflows/build.yml/badge.svg)](https://github.com/f0d0r/margaret-ebook-library/actions/workflows/build.yml)
 [![Go Reference](https://pkg.go.dev/badge/github.com/f0d0r/margaret-ebook-library.svg)](https://pkg.go.dev/github.com/f0d0r/margaret-ebook-library)
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.25-blue)](go.mod)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.26.8-blue)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI or KF8/AZW3 — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB and MOBI reading.
@@ -18,14 +18,22 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 
 ## Supported formats
 
-| Format               | Read | Write |
-| -------------------- | ---- | ----- |
-| EPUB (`.epub`)       | ✅   | —     |
-| MOBI / KF8 (`.mobi`, `.azw3`) | ✅ | — |
+| Format                        | Read          | Write |
+| ----------------------------- | ------------- | ----- |
+| EPUB (`.epub`)                 | ✅            | —     |
+| MOBI6 / PalmDOC (`.mobi`)     | ✅            | —     |
+| KF8 / MOBI8 (`.mobi`, `.azw3`) | ⚠️ experimental | —  |
+
+> **KF8 / MOBI8 status (0.1.0):** KF8 reading is experimental and best-effort.
+> The `index`/`cncx`/`fdst`/`mobi8` code paths have no fixture coverage yet,
+> and if MOBI8 parsing fails the reader silently falls back to the MOBI6
+> content of the file (`internal/mobi/reader.go`). The library contains no
+> `recover()` calls, so a malformed file that triggers a panic propagates it
+> to the caller. A full KF8 fixture suite is planned after 0.1.0.
 
 ## Requirements
 
-- Go 1.25 or later (see `go.mod`).
+- Go 1.26.8 or later (enforced via the `toolchain` directive in `go.mod`).
 
 ## Installation
 

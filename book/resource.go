@@ -29,12 +29,22 @@ import (
 // through Open so callers can stream it without materializing the whole
 // file in memory.
 type Resource struct {
-	Id           string
-	Name         string
-	MediaType    string
-	Href         string
+	// Id is the manifest identifier of the resource (e.g. the EPUB manifest
+	// item id, or "cover" for a synthesized cover image).
+	Id string
+	// Name is the file name of the resource as stored in the container.
+	Name string
+	// MediaType is the MIME type of the resource content
+	// (e.g. "application/xhtml+xml" or "image/jpeg").
+	MediaType string
+	// Href is the raw href of the resource as declared in the manifest.
+	Href string
+	// ResolvedHref is the canonicalized href used for lookup
+	// (see util.CleanHref). Query strings and fragments are ignored.
 	ResolvedHref string
-	Properties   string
+	// Properties carries format-specific flags (e.g. EPUB manifest
+	// properties, or "cover-image" for a cover).
+	Properties string
 
 	// Size is the declared uncompressed size of the resource in bytes.
 	Size int64

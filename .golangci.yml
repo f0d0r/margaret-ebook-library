@@ -1,0 +1,21 @@
+# golangci-lint configuration (v2 format).
+# The exact linter version is pinned in .github/workflows/build.yml —
+# keep the two in sync. A bare `golangci-lint run ./...` uses these settings.
+version: "2"
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

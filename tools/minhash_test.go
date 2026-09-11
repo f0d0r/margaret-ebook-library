@@ -13,7 +13,6 @@ func mustWrite(t *testing.T, w io.Writer, p []byte) {
 	}
 }
 
-
 func equalSigs(a, b []uint64) bool {
 	if len(a) != len(b) {
 		return false
