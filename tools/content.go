@@ -220,7 +220,7 @@ func isNilBook(b book.Book) bool {
 		return true
 	}
 	v := reflect.ValueOf(b)
-	if v.Kind() == reflect.Ptr && v.IsNil() {
+	if v.Kind() == reflect.Pointer && v.IsNil() {
 		return true
 	}
 	return false

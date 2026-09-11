@@ -113,7 +113,7 @@ func Jaccard(a, b []uint64) float64 {
 	return float64(matches) / float64(len(a))
 }
 
-// JaccardOf is a helper that computes Jaccard for two MinHashers after finalization.
+// Jaccard computes the estimated Jaccard similarity of two finalized MinHashers.
 func (m *MinHasher) Jaccard(other *MinHasher) float64 {
 	return Jaccard(m.Signature(), other.Signature())
 }

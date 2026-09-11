@@ -79,7 +79,7 @@ func Hamming(a, b uint64) int {
 	return bits.OnesCount64(a ^ b)
 }
 
-// HammingOf is a helper for SimHasher instances.
+// Hamming returns the Hamming distance between two finalized SimHashers.
 func (s *SimHasher) Hamming(other *SimHasher) int {
 	return Hamming(s.Sum64(), other.Sum64())
 }

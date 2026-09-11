@@ -96,7 +96,7 @@ func TestResourceSet_OpenReadingOrderAs_LazyAndSmallBuffer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed: %v", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 
 	buf := make([]byte, 1)
 	var out bytes.Buffer
@@ -158,7 +158,7 @@ func TestResourceSet_OpenReadingOrderAs_NoTransformerPropagates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenReadingOrderAs should not error immediately (lazy), got %v", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	buf := make([]byte, 10)
 	_, err = rc.Read(buf)
 	if err == nil {

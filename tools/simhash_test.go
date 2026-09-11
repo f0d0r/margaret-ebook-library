@@ -19,7 +19,7 @@ func TestSimHasher_Determinism_SmallVsLarge(t *testing.T) {
 	}
 	sh3 := NewSimHasher()
 	for i := 0; i < len(text); i++ {
-		mustWrite(t, sh3, []byte(text[i : i+1]))
+		mustWrite(t, sh3, []byte(text[i:i+1]))
 	}
 	if sh1.Sum64() != sh3.Sum64() {
 		t.Fatalf("1-byte vs large mismatch")

@@ -154,4 +154,3 @@ func TestNewResourceSet_CoverDuplicatesExisting(t *testing.T) {
 		t.Errorf("CoverImage with duplicate ID should be renamed, got %v", cov2)
 	}
 }
-

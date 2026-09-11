@@ -99,7 +99,7 @@ func TestFingerprintContent_Delimiter_ThreeChapters_SmallBuffer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed: %v", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	buf := make([]byte, 1)
 	var out bytes.Buffer
 	for {
@@ -340,7 +340,7 @@ func TestFingerprintContent_NoTransformer_Propagates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open should not error lazily, got %v", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	buf := make([]byte, 10)
 	_, err = rc.Read(buf)
 	if err == nil {
@@ -456,7 +456,7 @@ func TestDelimitedMultiReadCloser_LazyOpen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed: %v", err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	if opens != 0 {
 		t.Fatalf("should be lazy, opens=%d", opens)
 	}
