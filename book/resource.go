@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/f0d0r/margaret-ebook-library/converter"
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
 	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
@@ -169,7 +170,7 @@ type ResourceSet struct {
 // cover may be nil or point to one of the resources in all. Maps are built from all using Id and ResolvedHref.
 // GetByHref only indexes canonical ResolvedHref; query and fragment are ignored. Relative paths are not resolved.
 // Duplicate handling:
-//   - Duplicate ResolvedHref (cleanHref) in All(): first wins, All length decreases, second Id aliases to first resource.
+//   - Duplicate ResolvedHref (util.CleanHref) in All(): first wins, All length decreases, second Id aliases to first resource.
 //   - Duplicate Id with different ResolvedHref: second resource gets generated Id Id__dupN and remains in All().
 func NewResourceSet(all []*Resource, readingOrder []ReadingOrderItem, cover *Resource) *ResourceSet {
 	filteredAll := make([]*Resource, 0, len(all))
@@ -195,7 +196,7 @@ func NewResourceSet(all []*Resource, readingOrder []ReadingOrderItem, cover *Res
 	for _, orig := range filteredAll {
 		hrefKey := ""
 		if orig.ResolvedHref != "" {
-			hrefKey = cleanHref(orig.ResolvedHref)
+			hrefKey = util.CleanHref(orig.ResolvedHref)
 		}
 		// Duplicate href: alias Id to existing, skip duplicate from All (no data loss, same file).
 		if hrefKey != "" {
@@ -224,7 +225,7 @@ func NewResourceSet(all []*Resource, readingOrder []ReadingOrderItem, cover *Res
 				copyRes.Id = newID
 				r = &copyRes
 				if hrefKey != "" {
-					hrefKey = cleanHref(r.ResolvedHref)
+					hrefKey = util.CleanHref(r.ResolvedHref)
 				}
 			}
 		}
@@ -243,7 +244,7 @@ func NewResourceSet(all []*Resource, readingOrder []ReadingOrderItem, cover *Res
 	for _, it := range filteredRO {
 		res := it.Resource
 		if res.ResolvedHref != "" {
-			if deduped, ok := seenHref[cleanHref(res.ResolvedHref)]; ok {
+			if deduped, ok := seenHref[util.CleanHref(res.ResolvedHref)]; ok {
 				res = deduped
 			}
 		}
@@ -253,7 +254,7 @@ func NewResourceSet(all []*Resource, readingOrder []ReadingOrderItem, cover *Res
 	// Cover alias: if cover href duplicates an existing href, point to existing.
 	coverAliased := cover
 	if cover != nil && cover.ResolvedHref != "" {
-		if deduped, ok := seenHref[cleanHref(cover.ResolvedHref)]; ok {
+		if deduped, ok := seenHref[util.CleanHref(cover.ResolvedHref)]; ok {
 			coverAliased = deduped
 		} else {
 			if cover.Id != "" {
@@ -273,8 +274,8 @@ func NewResourceSet(all []*Resource, readingOrder []ReadingOrderItem, cover *Res
 					byID[cover.Id] = coverAliased
 				}
 			}
-			if _, exists := byHref[cleanHref(cover.ResolvedHref)]; !exists {
-				byHref[cleanHref(cover.ResolvedHref)] = coverAliased
+			if _, exists := byHref[util.CleanHref(cover.ResolvedHref)]; !exists {
+				byHref[util.CleanHref(cover.ResolvedHref)] = coverAliased
 			}
 		}
 	} else if cover != nil && cover.Id != "" {
@@ -301,12 +302,12 @@ func (rs *ResourceSet) GetByID(id string) (*Resource, bool) {
 	return r, ok
 }
 
-// GetByHref returns the resource with the given resolved href (canonicalized via cleanHref).
+// GetByHref returns the resource with the given resolved href (canonicalized via util.CleanHref).
 func (rs *ResourceSet) GetByHref(href string) (*Resource, bool) {
 	if rs == nil {
 		return nil, false
 	}
-	key := cleanHref(href)
+	key := util.CleanHref(href)
 	r, ok := rs.byHref[key]
 	return r, ok
 }

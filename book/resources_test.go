@@ -97,3 +97,61 @@ func TestResourceSet_CoverImage(t *testing.T) {
 		t.Fatalf("cover should be indexed by href")
 	}
 }
+
+func TestNewResourceSet_DuplicateHref(t *testing.T) {
+	r1 := &Resource{Id: "res1", ResolvedHref: "chapter1.html"}
+	r2 := &Resource{Id: "res2", ResolvedHref: "chapter1.html"} // duplicate href
+	ro := []ReadingOrderItem{{Resource: r2, Linear: true}}
+
+	rs := NewResourceSet([]*Resource{r1, r2}, ro, nil)
+
+	// First wins: All has length 1
+	if len(rs.All()) != 1 {
+		t.Fatalf("All() len = %d, want 1", len(rs.All()))
+	}
+	// Second Id aliases to first resource
+	found, ok := rs.GetByID("res2")
+	if !ok || found != r1 {
+		t.Errorf("GetByID(res2) should alias to res1, got %v", found)
+	}
+	// ReadingOrder points to deduped resource
+	if rs.ReadingOrder()[0].Resource != r1 {
+		t.Errorf("ReadingOrder resource should point to deduped r1")
+	}
+}
+
+func TestNewResourceSet_DuplicateID_DifferentHref(t *testing.T) {
+	r1 := &Resource{Id: "item", ResolvedHref: "ch1.html"}
+	r2 := &Resource{Id: "item", ResolvedHref: "ch2.html"} // same Id, different href
+
+	rs := NewResourceSet([]*Resource{r1, r2}, nil, nil)
+	if len(rs.All()) != 2 {
+		t.Fatalf("All() len = %d, want 2", len(rs.All()))
+	}
+
+	// r2 gets renamed ID "item__dup1"
+	r2Dup, ok := rs.GetByID("item__dup1")
+	if !ok || r2Dup.ResolvedHref != "ch2.html" {
+		t.Errorf("expected item__dup1 with ch2.html, got %v", r2Dup)
+	}
+}
+
+func TestNewResourceSet_CoverDuplicatesExisting(t *testing.T) {
+	r1 := &Resource{Id: "img1", ResolvedHref: "cover.jpg"}
+	cover := &Resource{Id: "cover_res", ResolvedHref: "cover.jpg"} // duplicate href
+
+	rs := NewResourceSet([]*Resource{r1}, nil, cover)
+	cov, ok := rs.CoverImage()
+	if !ok || cov != r1 {
+		t.Errorf("CoverImage should alias to r1, got %v", cov)
+	}
+
+	// Cover with same ID but different Href
+	coverSameID := &Resource{Id: "img1", ResolvedHref: "cover2.jpg"}
+	rs2 := NewResourceSet([]*Resource{r1}, nil, coverSameID)
+	cov2, ok := rs2.CoverImage()
+	if !ok || cov2.Id != "img1__dup1" {
+		t.Errorf("CoverImage with duplicate ID should be renamed, got %v", cov2)
+	}
+}
+

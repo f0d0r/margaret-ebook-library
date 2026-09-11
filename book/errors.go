@@ -1,6 +1,10 @@
 package book
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
+)
 
 var (
 	// ErrUnsupportedFormat is returned when the application encounters a file
@@ -9,7 +13,7 @@ var (
 
 	// ErrLimitExceeded is returned when the underlying reader produces more data
 	// than the configured safety maximum, protecting against zip-bomb style e-books.
-	ErrLimitExceeded = errors.New("resource exceeds configured size limit")
+	ErrLimitExceeded = util.ErrLimitExceeded
 
 	// ErrNoTransformer is returned when no Transformer is registered for a
 	// requested MIME type conversion.
