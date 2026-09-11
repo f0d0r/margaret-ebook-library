@@ -1,13 +1,66 @@
 # Margaret Ebook Library
 
 [![Build Status](https://github.com/f0d0r/margaret-ebook-library/actions/workflows/build.yml/badge.svg)](https://github.com/f0d0r/margaret-ebook-library/actions/workflows/build.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/f0d0r/margaret-ebook-library.svg)](https://pkg.go.dev/github.com/f0d0r/margaret-ebook-library)
+[![Go Version](https://img.shields.io/badge/go-%3E%3D1.25-blue)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI or KF8/AZW3 — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB and MOBI reading.
 
-## Getting Started
+## Features
 
-1. Clone this repository to your local machine.
-2. Run `go mod tidy` to download any dependencies.
+- Single stable `Book` abstraction over all supported formats
+- Normalized metadata (title, authors, description, languages)
+- Lazy streaming access to resources (no full in-memory load)
+- On-the-fly conversion of text resources to plain text (search indexing, LLM input, TTS)
+- Content fingerprinting (MinHash / SimHash) for deduplication and similarity
+- Conservative safety limits with functional-option overrides
+
+## Supported formats
+
+| Format               | Read | Write |
+| -------------------- | ---- | ----- |
+| EPUB (`.epub`)       | ✅   | —     |
+| MOBI / KF8 (`.mobi`, `.azw3`) | ✅ | — |
+
+## Requirements
+
+- Go 1.25 or later (see `go.mod`).
+
+## Installation
+
+```sh
+go get github.com/f0d0r/margaret-ebook-library@latest
+```
+
+Full API documentation: https://pkg.go.dev/github.com/f0d0r/margaret-ebook-library
+
+## Quickstart
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+
+	ebook "github.com/f0d0r/margaret-ebook-library"
+)
+
+func main() {
+	b, err := ebook.Read("books/my-book.epub")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	meta := b.Metadata()
+	fmt.Println("Title:", meta.Title)
+	fmt.Println("Authors:", meta.Authors)
+	fmt.Println("Languages:", meta.Languages)
+	fmt.Println("FileType:", b.FileType())
+	fmt.Println("Version:", b.Version())
+}
+```
 
 ## Usage
 
@@ -36,6 +89,16 @@ b, err := ebook.Read("books/my-book.epub")
 if err != nil {
     // handle the error, e.g. with errors.Is(err, ebook.ErrUnsupportedFormat)
 }
+```
+
+The snippet above assumes:
+
+```go
+import (
+	"errors"
+
+	ebook "github.com/f0d0r/margaret-ebook-library"
+)
 ```
 
 ### Reading an ebook from an already-open file
@@ -76,10 +139,22 @@ if err != nil {
 ### Using the ebook
 
 ```go
+import (
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"strings"
+
+	ebook "github.com/f0d0r/margaret-ebook-library"
+)
+```
+
+```go
 meta := b.Metadata()
 fmt.Println("Title:", meta.Title)
 fmt.Println("Authors:", strings.Join(meta.Authors, ", "))
-fmt.Println("Language:", meta.Languages)
+fmt.Println("Languages:", meta.Languages)
 fmt.Println("Description:", meta.Description)
 fmt.Println("FileType:", b.FileType())
 fmt.Println("Version:", b.Version())
@@ -149,6 +224,15 @@ if err != nil {
 ```
 
 ### Working with resources
+
+```go
+import (
+	"fmt"
+	"log"
+
+	ebook "github.com/f0d0r/margaret-ebook-library"
+)
+```
 
 ```go
 // All manifest resources (images, stylesheets, etc.) in manifest order:
@@ -342,3 +426,47 @@ tee := io.TeeReader(rc, io.MultiWriter(mh, sh))
 io.Copy(io.Discard, tee)
 fmt.Println(mh.Signature(), sh.Sum64())
 ```
+
+## Error handling
+
+Sentinel errors are matched with `errors.Is`:
+
+| Error | Meaning |
+| ----- | ------- |
+| `ebook.ErrUnsupportedFormat` | Unknown or unsupported ebook format |
+| `ebook.ErrLimitExceeded` | A safety limit (resource size, record size, EXTH count) was hit — raise it with a functional option |
+| `ebook.ErrNoTransformer` | No conversion path to the requested media type |
+| `ebook.ErrUnsupportedMediaType` | The requested media type itself is not supported |
+
+```go
+import (
+	"errors"
+
+	ebook "github.com/f0d0r/margaret-ebook-library"
+)
+
+b, err := ebook.Read(path)
+if err != nil {
+	if errors.Is(err, ebook.ErrUnsupportedFormat) {
+		log.Fatal("unsupported format")
+	}
+	if errors.Is(err, ebook.ErrLimitExceeded) {
+		log.Fatal("safety limit exceeded, retry with a higher limit")
+	}
+	log.Fatal(err)
+}
+```
+
+## Development
+
+For contributors working on the library itself:
+
+```sh
+git clone https://github.com/f0d0r/margaret-ebook-library.git
+cd margaret-ebook-library
+go test ./...
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).
