@@ -30,7 +30,7 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 ## Installation
 
 ```sh
-go get github.com/f0d0r/margaret-ebook-library@v0.1.0
+go get github.com/f0d0r/margaret-ebook-library@latest
 ```
 
 Full API documentation: https://pkg.go.dev/github.com/f0d0r/margaret-ebook-library
