@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
-	"github.com/f0d0r/margaret-ebook-library/internal/config"
 	"github.com/f0d0r/margaret-ebook-library/internal/registry"
 )
 
@@ -51,7 +50,7 @@ var (
 // The selected reader is then used to extract and return the ebook.
 //
 // An optional [Option] can be passed to override the library-wide safety
-// limits; when omitted, the defaults of [book.DefaultConfig] are used.
+// limits; when omitted, built-in defaults apply (see Option).
 //
 // If no suitable reader is found for the format, it returns an error wrapping
 // [ErrUnsupportedFormat].
@@ -72,7 +71,7 @@ func Read(path string, opts ...Option) (Book, error) {
 // reader is then used to extract and return the ebook.
 //
 // An optional [Option] can be passed to override the library-wide safety
-// limits; when omitted, the defaults of [book.DefaultConfig] are used.
+// limits; when omitted, built-in defaults apply (see Option).
 //
 // The caller retains ownership of the blob and must keep it usable until
 // all resource data (including the cover) has been consumed.
@@ -92,7 +91,7 @@ func ReadFromBlob(b Blob, opts ...Option) (Book, error) {
 // (including the cover) has been consumed.
 //
 // An optional [Option] can be passed to override the library-wide safety
-// limits; when omitted, the defaults of [book.DefaultConfig] are used.
+// limits; when omitted, built-in defaults apply (see Option).
 func ReadFromFile(f *os.File, opts ...Option) (Book, error) {
 	b, err := NewFileBlob(f)
 	if err != nil {
@@ -113,8 +112,3 @@ func read(b Blob, name string, opts []Option) (Book, error) {
 	}
 	return ebook, nil
 }
-
-// Config is a convenience alias for the library-wide safety
-// limits used internally to configure the format readers.
-// Deprecated: use Option instead.
-type Config = config.Config

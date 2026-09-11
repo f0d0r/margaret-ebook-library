@@ -1,8 +1,8 @@
 package config
 
 // Config holds library-wide safety limits shared by all format readers.
-// A zero value means "use the default"; clients that need different limits
-// can build a Config from DefaultConfig and override individual fields.
+// The zero value means "use the default"; callers configure reads through
+// Option, which falls back to DefaultConfig for fields that are not overridden.
 type Config struct {
 	// MaxResourceSize bounds how many bytes may be decompressed for a single
 	// resource (a cover image, a content document, etc.) in any format,
