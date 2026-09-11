@@ -49,11 +49,13 @@ func main() {
 		r, err := book.Resources().OpenReadingOrderAs(context.Background(), mediatype.PlainText)
 		if err != nil {
 			fmt.Printf("Error opening reading order as plain text: %v\n", err)
+			return
 		}
 		defer func() { _ = r.Close() }()
 		plainText, err := io.ReadAll(r)
 		if err != nil {
 			fmt.Printf("Error reading plain text from reading order: %v\n", err)
+			return
 		}
 		fmt.Println(string(plainText))
 	}
