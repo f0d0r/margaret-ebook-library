@@ -3,8 +3,6 @@ package util
 import (
 	"bytes"
 	"strings"
-
-	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
 type Media struct {
@@ -33,15 +31,4 @@ func DetectImageMedia(data []byte) *Media {
 	}
 
 	return nil
-}
-
-// NormalizeMediaType normalizes a MIME type for comparison: lowercases,
-// strips parameters (e.g. "; charset=utf-8"), and trims whitespace.
-func NormalizeMediaType(m string) string {
-	return mediatype.Normalize(m)
-}
-
-// Normalize is an alias for NormalizeMediaType.
-func Normalize(m string) string {
-	return mediatype.Normalize(m)
 }
