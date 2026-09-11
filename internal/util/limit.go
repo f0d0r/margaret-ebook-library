@@ -1,10 +1,13 @@
 package util
 
 import (
+	"errors"
 	"io"
-
-	"github.com/f0d0r/margaret-ebook-library/book"
 )
+
+// ErrLimitExceeded is returned when the underlying reader produces more data
+// than the configured safety maximum, protecting against zip-bomb style e-books.
+var ErrLimitExceeded = errors.New("resource exceeds configured size limit")
 
 // LimitReader returns a reader that yields at most max bytes from r and
 // reports [ErrLimitExceeded] if r holds more data. Unlike io.LimitReader it
@@ -23,7 +26,7 @@ func (l *limitReader) Read(p []byte) (int, error) {
 	if l.remaining <= 0 {
 		var probe [1]byte
 		if n, _ := l.r.Read(probe[:]); n > 0 {
-			return 0, book.ErrLimitExceeded
+			return 0, ErrLimitExceeded
 		}
 		return 0, io.EOF
 	}
