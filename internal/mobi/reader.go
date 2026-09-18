@@ -254,7 +254,11 @@ func (r *MobiReader) content(pdbDb *PdbDb, mobiDoc *Mobi) []book.Resource {
 		// fallback to MOBI6 if MOBI8 parsing failed
 	}
 
-	if mobiDoc.TextRecordCount == 0 || int(mobiDoc.FirstTextRecord) >= len(pdbDb.PdbRecords) {
+	// MOBI6 text records always start at record 1 (calibre:
+	// range(offset, min(records+offset, len)) with offset=1). The
+	// FirstTextRecord header field is ignored because real-world files
+	// may leave it as the 0xFFFF sentinel.
+	if mobiDoc.TextRecordCount == 0 || 1 >= len(pdbDb.PdbRecords) {
 		return nil
 	}
 	return []book.Resource{{

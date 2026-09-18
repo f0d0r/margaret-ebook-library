@@ -20,7 +20,11 @@ func extractText(pdbDb *PdbDb, mobi *Mobi, maxSize int64) ([]byte, error) {
 
 // extractTextWithOffset is the offset-aware variant used for KF8.
 // For MOBI6, offset is 1 (calibre default). For joint MOBI6/KF8, KF8 text starts at kf8_boundary+2.
-// It mirrors calibre's MobiReader.extract_text(offset=...).
+// It mirrors calibre's MobiReader.extract_text(offset=...):
+// text_sections = [text_section(i) for i in range(offset, min(records+offset, len(sections)))].
+// Like calibre, the FirstTextRecord header field is intentionally ignored:
+// some real-world MOBI6 files (e.g. calibre-generated) leave it as the
+// 0xFFFF sentinel, which must not be treated as a record index.
 func extractTextWithOffset(pdbDb *PdbDb, mobi *Mobi, offset int, maxSize int64) ([]byte, error) {
 	var huff *HuffCdicReader
 	switch mobi.Compression {
@@ -38,17 +42,7 @@ func extractTextWithOffset(pdbDb *PdbDb, mobi *Mobi, offset int, maxSize int64) 
 		return nil, fmt.Errorf("unsupported compression type %d", mobi.Compression)
 	}
 
-	first := int(mobi.FirstTextRecord)
-	if first <= 0 {
-		first = offset
-	} else {
-		// For KF8, FirstTextRecord is relative to KF8 start? calibre uses offset directly, ignoring FirstTextRecord for KF8?
-		// We follow calibre: text_sections = [text_section(i) for i in range(offset, min(records+offset, len))]
-		// So if offset !=1, we use offset as base, not FirstTextRecord.
-		if offset != 1 {
-			first = offset
-		}
-	}
+	first := max(offset, 0)
 	first = min(first, len(pdbDb.PdbRecords))
 	end := first + int(mobi.TextRecordCount)
 	end = min(end, len(pdbDb.PdbRecords))

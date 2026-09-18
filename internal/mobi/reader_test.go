@@ -30,12 +30,12 @@ func TestMobiReaderLoadRecord(t *testing.T) {
 		{"valid read from start", 0, 5, "01234", false},
 		{"valid read from middle", 4, 4, "4567", false},
 		{"read entire file", 0, 20, "0123456789ABCDEFGHIJ", false},
-		{"offset past file end", 100, 5, "", true},
+		{"offset past file end returns empty (calibre parity)", 100, 5, "", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data, err := readRecordData(book.NewPathBlob(path), tt.offset, tt.length, config.DefaultConfig().MaxRecordSize)
+			data, err := readRecordData(book.NewPathBlob(path), tt.offset, tt.length, config.DefaultConfig().MaxRecordSize, int64(len(content)))
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("readRecordData() expected error, got nil")
