@@ -207,10 +207,10 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b book.Blob, maxRe
 			length := prevRecord.Length
 
 			prevRecord.Data = func() ([]byte, error) {
-				return readRecordData(b, offset, length, maxRecordSize)
+				return readRecordData(b, offset, length, maxRecordSize, int64(fileSize))
 			}
 			prevRecord.DataSlice = func(len uint32) ([]byte, error) {
-				return readRecordData(b, offset, len, maxRecordSize)
+				return readRecordData(b, offset, len, maxRecordSize, int64(fileSize))
 			}
 		}
 		pdbRecords[i] = *record
@@ -226,18 +226,28 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b book.Blob, maxRe
 		lastOffset := lastRecord.Offset
 		lastLength := lastRecord.Length
 		lastRecord.Data = func() ([]byte, error) {
-			return readRecordData(b, lastOffset, lastLength, maxRecordSize)
+			return readRecordData(b, lastOffset, lastLength, maxRecordSize, int64(fileSize))
 		}
 		lastRecord.DataSlice = func(len uint32) ([]byte, error) {
-			return readRecordData(b, lastOffset, len, maxRecordSize)
+			return readRecordData(b, lastOffset, len, maxRecordSize, int64(fileSize))
 		}
 	}
 	return pdbRecords, nil
 }
 
-func readRecordData(b book.Blob, offset uint32, length uint32, maxRecordSize int64) ([]byte, error) {
+func readRecordData(b book.Blob, offset uint32, length uint32, maxRecordSize, fileSize int64) ([]byte, error) {
 	if uint64(length) > uint64(maxRecordSize) {
 		return nil, fmt.Errorf("record length %d exceeds maximum %d", length, maxRecordSize)
+	}
+	if int64(offset) >= fileSize {
+		// Calibre parity: record offsets fully beyond EOF (truncated file)
+		// yield empty data instead of an error, mirroring calibre's
+		// section() slicing which never fails.
+		return []byte{}, nil
+	}
+	if int64(offset)+int64(length) > fileSize {
+		// Truncated record: return the available prefix.
+		length = uint32(fileSize - int64(offset))
 	}
 
 	data := make([]byte, length)
@@ -245,11 +255,7 @@ func readRecordData(b book.Blob, offset uint32, length uint32, maxRecordSize int
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("read pdb record: %w", err)
 	}
-	if n != int(length) {
-		return nil, fmt.Errorf("read pdb record: expected %d bytes, got %d", length, n)
-	}
-
-	return data, nil
+	return data[:n], nil
 }
 
 // readFullAt reads exactly length bytes at offset using random access.

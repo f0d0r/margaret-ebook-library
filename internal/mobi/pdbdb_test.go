@@ -455,7 +455,7 @@ func TestLazyReadRecord(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)), config.DefaultConfig().MaxRecordSize)
+	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)), config.DefaultConfig().MaxRecordSize, int64(offset+uint32(len(recordData))))
 	if err != nil {
 		t.Fatalf("readRecordData() error: %v", err)
 	}
@@ -487,7 +487,7 @@ func TestReadRecordData(t *testing.T) {
 	}
 	defer func() { _ = f.Close() }()
 
-	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)), config.DefaultConfig().MaxRecordSize)
+	got, err := readRecordData(blobForFile(t, f), offset, uint32(len(recordData)), config.DefaultConfig().MaxRecordSize, int64(offset+uint32(len(recordData))))
 	if err != nil {
 		t.Fatalf("readRecordData() error: %v", err)
 	}
@@ -495,6 +495,54 @@ func TestReadRecordData(t *testing.T) {
 	if !bytes.Equal(got, recordData) {
 		t.Errorf("Got %q, want %q", got, recordData)
 	}
+}
+
+func TestReadRecordDataTruncated(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFile := filepath.Join(tmpDir, "truncated.pdb")
+
+	// Simulate a truncated MOBI: the record table claims more bytes than
+	// the file physically contains. Like calibre's section() slicing,
+	// reads must yield the available prefix (or empty data past EOF)
+	// instead of an error.
+	fileData := []byte("0123456789ABCDEFGHIJ") // 20 bytes
+	if err := os.WriteFile(testFile, fileData, 0644); err != nil {
+		t.Fatalf("WriteFile() error: %v", err)
+	}
+
+	f, err := os.Open(testFile)
+	if err != nil {
+		t.Fatalf("Open() error: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+	blob := blobForFile(t, f)
+	maxSize := config.DefaultConfig().MaxRecordSize
+
+	t.Run("record cut off mid-way returns available prefix", func(t *testing.T) {
+		got, err := readRecordData(blob, 16, 10, maxSize, int64(len(fileData)))
+		if err != nil {
+			t.Fatalf("readRecordData() error: %v", err)
+		}
+		if string(got) != "GHIJ" {
+			t.Errorf("Got %q, want %q", got, "GHIJ")
+		}
+	})
+
+	t.Run("record fully beyond EOF returns empty", func(t *testing.T) {
+		got, err := readRecordData(blob, 100, 5, maxSize, int64(len(fileData)))
+		if err != nil {
+			t.Fatalf("readRecordData() error: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("Got %q, want empty", got)
+		}
+	})
+
+	t.Run("record length limit still enforced", func(t *testing.T) {
+		if _, err := readRecordData(blob, 0, uint32(maxSize+1), maxSize, int64(len(fileData))); err == nil {
+			t.Errorf("readRecordData() expected error for oversized record, got nil")
+		}
+	})
 }
 
 func TestPdbRecordGetData(t *testing.T) {

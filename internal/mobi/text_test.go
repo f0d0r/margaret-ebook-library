@@ -241,6 +241,59 @@ func TestMobiReaderContent(t *testing.T) {
 			t.Errorf("Open() = %q, want %q", data, "<html>hello</html>")
 		}
 	})
+
+	t.Run("ignores FirstTextRecord sentinel like calibre", func(t *testing.T) {
+		// Real-world MOBI6 files (e.g. calibre-generated) leave
+		// FirstTextRecord/LastContentRecord as the 0xFFFF sentinel.
+		// Calibre ignores the field and reads range(1, records+1).
+		pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+			createMockPdbRecord(make([]byte, 100)),
+			createMockPdbRecord([]byte("<html>hello</html>#")),
+		}}
+		mobi := &Mobi{
+			Compression:       CompressionNone,
+			FirstTextRecord:   0xFFFF,
+			LastContentRecord: 0xFFFF,
+			TextRecordCount:   1,
+			TextLength:        uint32(len("<html>hello</html>")),
+		}
+		resources := reader.content(pdbDb, mobi)
+		if len(resources) != 1 {
+			t.Fatalf("content() = %d resources, want 1", len(resources))
+		}
+		rc, err := resources[0].Open()
+		if err != nil {
+			t.Fatalf("Open() error: %v", err)
+		}
+		defer func() { _ = rc.Close() }()
+		data, err := io.ReadAll(rc)
+		if err != nil {
+			t.Fatalf("ReadAll() error: %v", err)
+		}
+		if string(data) != "<html>hello</html>" {
+			t.Errorf("Open() = %q, want %q", data, "<html>hello</html>")
+		}
+	})
+
+	t.Run("extractText ignores FirstTextRecord sentinel", func(t *testing.T) {
+		pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+			createMockPdbRecord(make([]byte, 100)),
+			createMockPdbRecord([]byte("<html>hello</html>#")),
+		}}
+		mobi := &Mobi{
+			Compression:       CompressionNone,
+			FirstTextRecord:   0xFFFF,
+			LastContentRecord: 0xFFFF,
+			TextRecordCount:   1,
+		}
+		got, err := extractText(pdbDb, mobi, 1<<20)
+		if err != nil {
+			t.Fatalf("extractText() error: %v", err)
+		}
+		if string(got) != "<html>hello</html>" {
+			t.Errorf("extractText() = %q, want %q", got, "<html>hello</html>")
+		}
+	})
 }
 
 func TestSizeofTrailingEntry(t *testing.T) {
