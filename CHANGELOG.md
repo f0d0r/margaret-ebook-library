@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-18
+
+### Fixed
+
+- MOBI6 books that leave `FirstTextRecord` as the `0xFFFF` sentinel no
+  longer yield an empty reading order; text records are read from record
+  1 like calibre does.
+- Truncated MOBI/PRC files (record table running past EOF) now return
+  the available content instead of failing the whole book, mirroring
+  calibre's lenient section slicing; `MaxRecordSize` limits still apply.
+
 ## [0.1.0] - 2026-09-11
 
 ### Added
@@ -21,5 +32,6 @@
 - Conservative safety limits (max resource/record sizes, max EXTH records)
   with functional-option overrides.
 
-[Unreleased]: https://github.com/f0d0r/margaret-ebook-library/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/f0d0r/margaret-ebook-library/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/f0d0r/margaret-ebook-library/releases/tag/v0.1.1
 [0.1.0]: https://github.com/f0d0r/margaret-ebook-library/releases/tag/v0.1.0
