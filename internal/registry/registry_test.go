@@ -10,6 +10,7 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/epub"
+	"github.com/f0d0r/margaret-ebook-library/internal/fb2"
 	"github.com/f0d0r/margaret-ebook-library/internal/mobi"
 )
 
@@ -27,6 +28,16 @@ func TestRegistry_ReaderForBlob(t *testing.T) {
 	unsupportedPath := filepath.Join(tmpDir, "book.txt")
 	if err := os.WriteFile(unsupportedPath, []byte("plain text"), 0644); err != nil {
 		t.Fatalf("failed to write text file: %v", err)
+	}
+
+	fb2Path := filepath.Join(tmpDir, "book.fb2")
+	fb2Content := `<?xml version="1.0" encoding="UTF-8"?>
+<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:l="http://www.w3.org/1999/xlink">
+  <description><title-info><book-title>Test</book-title></title-info></description>
+  <body><section><p>Hello</p></section></body>
+</FictionBook>`
+	if err := os.WriteFile(fb2Path, []byte(fb2Content), 0644); err != nil {
+		t.Fatalf("failed to write FB2 file: %v", err)
 	}
 
 	r := New()
@@ -55,6 +66,16 @@ func TestRegistry_ReaderForBlob(t *testing.T) {
 		_, err := r.ReaderForBlob(book.NewPathBlob(unsupportedPath))
 		if !errors.Is(err, book.ErrUnsupportedFormat) {
 			t.Errorf("ReaderForBlob() error = %v, want ErrUnsupportedFormat", err)
+		}
+	})
+
+	t.Run("FB2 blob returns Fb2Reader", func(t *testing.T) {
+		reader, err := r.ReaderForBlob(book.NewPathBlob(fb2Path))
+		if err != nil {
+			t.Fatalf("ReaderForBlob() error: %v", err)
+		}
+		if _, ok := reader.(*fb2.Fb2Reader); !ok {
+			t.Errorf("ReaderForBlob() = %T, want *fb2.Fb2Reader", reader)
 		}
 	})
 }

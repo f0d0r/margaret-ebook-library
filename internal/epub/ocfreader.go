@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"encoding/xml"
 	"fmt"
+
+	ziputil "github.com/f0d0r/margaret-ebook-library/internal/zip"
 )
 
 // OcfReader handles Open Container Format (OCF) parsing and operations
@@ -37,7 +39,7 @@ func (ocf *OcfReader) Read(zr *zip.Reader) (Container, error) {
 // findContainerFile locates the container.xml file within the ZIP archive
 func (ocf *OcfReader) findContainerFile(zr *zip.Reader) (*zip.File, error) {
 	containerPath := "META-INF/container.xml"
-	f := findFileInZip(zr, containerPath)
+	f := ziputil.Find(zr, containerPath)
 	if f == nil {
 		return nil, fmt.Errorf("container.xml not found")
 	}

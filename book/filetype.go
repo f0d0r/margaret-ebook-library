@@ -9,4 +9,7 @@ const (
 
 	// MOBI represents the Mobipocket e-book format (.mobi).
 	MOBI FileType = "mobi"
+
+	// FB2 represents the FictionBook 2 e-book format (.fb2).
+	FB2 FileType = "fb2"
 )

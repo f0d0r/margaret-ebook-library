@@ -5,7 +5,7 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.26.8-blue)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI or KF8/AZW3 — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB and MOBI reading.
+Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI, KF8/AZW3 or FB2 — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB, MOBI and FB2 reading.
 
 ## Features
 
@@ -21,8 +21,9 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 | Format                        | Read          | Write |
 | ----------------------------- | ------------- | ----- |
 | EPUB (`.epub`)                 | ✅            | —     |
-| MOBI6 / PalmDOC (`.mobi`)     | ✅            | —     |
-| KF8 / MOBI8 (`.mobi`, `.azw3`) | ⚠️ experimental | —  |
+| MOBI6 / PalmDOC (`.mobi`, `.prc`, `.azw`) | ✅  | —     |
+| KF8 / MOBI8 (`.mobi`, `.azw`, `.azw3`, `.prc`) | ⚠️ experimental | —  |
+| FB2 / FBZ (`.fb2`, `.fbz`, `.fb2.zip`) | ✅   | —     |
 
 > **KF8 / MOBI8 status (0.1.0):** KF8 reading is experimental and best-effort.
 > The `index`/`cncx`/`fdst`/`mobi8` code paths have no fixture coverage yet,
