@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	ziputil "github.com/f0d0r/margaret-ebook-library/internal/zip"
 	"golang.org/x/text/language"
 )
 
@@ -34,7 +35,7 @@ func (opf OpfReader) Read(zr *zip.Reader, c Container) (Package, error) {
 
 // findPackageFile locates and parses the OPF file specified by the rootfile
 func (opf OpfReader) findPackageFile(zr *zip.Reader, rootfile Rootfile) (Package, error) {
-	pkgFile := findFileInZip(zr, rootfile.FullPath)
+	pkgFile := ziputil.Find(zr, rootfile.FullPath)
 	if pkgFile == nil {
 		return Package{}, fmt.Errorf("opf file not found")
 	}

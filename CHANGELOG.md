@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- FB2 reading (`.fb2`, `.fbz`, `.fb2.zip`, plain or zipped XML):
+  normalized metadata, raw body XML content resources (`application/x-fictionbook-body+xml`),
+  spine-like reading order (notes bodies marked non-linear), transformer
+  to plain text, embedded images and cover image. Detection and metadata
+  follow calibre's `get_fb2_data` and `metadata/fb2.py` rules.
+
 ## [0.1.1] - 2026-09-18
 
 ### Fixed

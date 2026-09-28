@@ -43,9 +43,13 @@ func TestConstants(t *testing.T) {
 		{"XHTML", XHTML, "application/xhtml+xml"},
 		{"MobiHTML", MobiHTML, "application/x-mobipocket-html"},
 		{"JPEG", JPEG, "image/jpeg"},
+		{"JPG", JPG, "image/jpg"},
 		{"PNG", PNG, "image/png"},
 		{"GIF", GIF, "image/gif"},
 		{"SVG", SVG, "image/svg+xml"},
+		{"WEBP", WEBP, "image/webp"},
+		{"BMP", BMP, "image/bmp"},
+		{"MSBMP", MSBMP, "image/x-ms-bmp"},
 		{"OctetStream", OctetStream, "application/octet-stream"},
 		{"CSS", CSS, "text/css"},
 		{"NCX", NCX, "application/x-dtbncx+xml"},
@@ -55,6 +59,39 @@ func TestConstants(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.got != tt.want {
 				t.Fatalf("constant %s = %q, want %q", tt.name, tt.got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExtension(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+		ok    bool
+	}{
+		{"jpeg", "image/jpeg", "jpg", true},
+		{"jpeg alias", "image/jpg", "jpg", true},
+		{"png", "image/png", "png", true},
+		{"gif", "image/gif", "gif", true},
+		{"svg", "image/svg+xml", "svg", true},
+		{"webp", "image/webp", "webp", true},
+		{"bmp", "image/bmp", "bmp", true},
+		{"bmp alias", "image/x-ms-bmp", "bmp", true},
+		{"octet-stream", "application/octet-stream", "bin", true},
+		{"uppercase", "IMAGE/JPEG", "jpg", true},
+		{"parameters stripped", "image/png; charset=binary", "png", true},
+		{"whitespace", "  image/gif  ", "gif", true},
+		{"unknown", "application/pdf", "", false},
+		{"empty", "", "", false},
+		{"not a mime", "hello", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := Extension(tt.input)
+			if got != tt.want || ok != tt.ok {
+				t.Fatalf("Extension(%q) = (%q, %v), want (%q, %v)", tt.input, got, ok, tt.want, tt.ok)
 			}
 		})
 	}

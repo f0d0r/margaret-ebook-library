@@ -10,6 +10,7 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	ziputil "github.com/f0d0r/margaret-ebook-library/internal/zip"
 )
 
 type EpubReader struct {
@@ -38,7 +39,7 @@ func (r *EpubReader) Supports(b book.Blob) bool {
 		return true
 	}
 
-	zr, err := zip.NewReader(b, size)
+	zr, err := ziputil.Open(b)
 	if err != nil {
 		return false
 	}
@@ -98,7 +99,7 @@ func (r *EpubReader) hasValidEpubHeader(b book.Blob) bool {
 }
 
 func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
-	zr, err := openZip(b)
+	zr, err := ziputil.Open(b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open epub: %w", err)
 	}
@@ -134,7 +135,7 @@ func (r *EpubReader) readResources(zr *zip.Reader, p Package) ([]*book.Resource,
 	all := make([]*book.Resource, 0, len(p.Manifest.Items))
 	for _, item := range p.Manifest.Items {
 		resolved := p.ResolvePath(item.Href)
-		file := findFileInZip(zr, resolved)
+		file := ziputil.Find(zr, resolved)
 		if file == nil {
 			continue
 		}
@@ -154,7 +155,7 @@ func (r *EpubReader) readResources(zr *zip.Reader, p Package) ([]*book.Resource,
 			continue
 		}
 		resolved := p.ResolvePath(item.Href)
-		file := findFileInZip(zr, resolved)
+		file := ziputil.Find(zr, resolved)
 		if file == nil {
 			continue
 		}
@@ -181,7 +182,7 @@ func (r *EpubReader) readResources(zr *zip.Reader, p Package) ([]*book.Resource,
 		if existing, ok := resolvedToResource[coverKey]; ok {
 			cover = existing
 		} else {
-			if file := findFileInZip(zr, p.ResolvePath(item.Href)); file != nil {
+			if file := ziputil.Find(zr, p.ResolvePath(item.Href)); file != nil {
 				res := r.resource(*item, file)
 				ptr := new(book.Resource)
 				*ptr = res
@@ -207,18 +208,13 @@ func (r *EpubReader) resource(item Item, file *zip.File) book.Resource {
 		MediaType:    item.MediaType,
 		Size:         int64(file.UncompressedSize64),
 		Open: func() (io.ReadCloser, error) {
-			return r.openZipFile(file)
+			maxSize := r.cfg.MaxResourceSize
+			if maxSize <= 0 {
+				maxSize = config.DefaultConfig().MaxResourceSize
+			}
+			return ziputil.OpenLimited(file, maxSize)
 		},
 	}
-}
-
-// openZip builds a zip.Reader from the blob.
-func openZip(b book.Blob) (*zip.Reader, error) {
-	size, err := b.Size()
-	if err != nil {
-		return nil, err
-	}
-	return zip.NewReader(b, size)
 }
 
 // coverItem returns the manifest item that represents the cover image, if any.
@@ -232,28 +228,4 @@ func (r *EpubReader) coverItem(p Package) *Item {
 		return r.opfReader.ItemById(p, meta.Content)
 	}
 	return nil
-}
-
-// openZipFile opens a zip entry as a streaming reader, refusing entries that
-// would decompress to more than the configured max resource size.
-func (r *EpubReader) openZipFile(f *zip.File) (io.ReadCloser, error) {
-	maxSize := r.cfg.MaxResourceSize
-	if maxSize <= 0 {
-		maxSize = config.DefaultConfig().MaxResourceSize
-	}
-	if f.UncompressedSize64 > uint64(maxSize) {
-		return nil, fmt.Errorf("%w: %q declares %d bytes (limit %d)", book.ErrLimitExceeded, f.Name, f.UncompressedSize64, maxSize)
-	}
-	rc, err := f.Open()
-	if err != nil {
-		return nil, err
-	}
-	return &readCloser{Reader: util.LimitReader(rc, maxSize), Closer: rc}, nil
-}
-
-// readCloser combines a size-limited reader with the closer of the underlying
-// zip entry so callers can close the underlying file after streaming.
-type readCloser struct {
-	io.Reader
-	io.Closer
 }

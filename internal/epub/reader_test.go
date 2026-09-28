@@ -3,6 +3,7 @@ package epub
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	ziputil "github.com/f0d0r/margaret-ebook-library/internal/zip"
 )
 
 func TestGetCover(t *testing.T) {
@@ -263,7 +265,7 @@ func TestEpubReaderSupports(t *testing.T) {
 	}
 }
 
-func TestReadZipFileRejectsOversizedEntry(t *testing.T) {
+func TestOpenLimitedRejectsOversizedEntry(t *testing.T) {
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
 	fw, err := w.CreateHeader(&zip.FileHeader{Name: "cover.jpg", Method: zip.Deflate})
@@ -286,14 +288,16 @@ func TestReadZipFileRejectsOversizedEntry(t *testing.T) {
 		t.Fatalf("got %d files, want 1", len(zr.File))
 	}
 
-	if rc, err := NewEpubReader(config.DefaultConfig()).openZipFile(zr.File[0]); err == nil {
-		t.Fatalf("openZipFile() expected error for oversized entry, got nil")
+	if rc, err := ziputil.OpenLimited(zr.File[0], config.DefaultConfig().MaxResourceSize); err == nil {
+		t.Fatalf("OpenLimited() expected error for oversized entry, got nil")
+	} else if !errors.Is(err, book.ErrLimitExceeded) {
+		t.Fatalf("OpenLimited() error = %v, want ErrLimitExceeded", err)
 	} else if rc != nil {
 		_ = rc.Close()
 	}
 }
 
-func TestReadZipFile_ConfigOverrideRejectsEntry(t *testing.T) {
+func TestOpenLimited_ConfigOverrideRejectsEntry(t *testing.T) {
 	imgData := createTestImageData()
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
@@ -315,16 +319,17 @@ func TestReadZipFile_ConfigOverrideRejectsEntry(t *testing.T) {
 
 	cfg := config.DefaultConfig()
 	cfg.MaxResourceSize = 1
-	reader := NewEpubReader(cfg)
 
-	if rc, err := reader.openZipFile(zr.File[0]); err == nil {
-		t.Fatalf("openZipFile() expected error with reduced MaxResourceSize, got nil")
+	if rc, err := ziputil.OpenLimited(zr.File[0], cfg.MaxResourceSize); err == nil {
+		t.Fatalf("OpenLimited() expected error with reduced MaxResourceSize, got nil")
+	} else if !errors.Is(err, book.ErrLimitExceeded) {
+		t.Fatalf("OpenLimited() error = %v, want ErrLimitExceeded", err)
 	} else if rc != nil {
 		_ = rc.Close()
 	}
 }
 
-func TestReadZipFileReadsNormalEntry(t *testing.T) {
+func TestOpenLimitedReadsNormalEntry(t *testing.T) {
 	imgData := createTestImageData()
 	var buf bytes.Buffer
 	w := zip.NewWriter(&buf)
@@ -344,9 +349,9 @@ func TestReadZipFileReadsNormalEntry(t *testing.T) {
 		t.Fatalf("zip.NewReader() error: %v", err)
 	}
 
-	rc, err := NewEpubReader(config.DefaultConfig()).openZipFile(zr.File[0])
+	rc, err := ziputil.OpenLimited(zr.File[0], config.DefaultConfig().MaxResourceSize)
 	if err != nil {
-		t.Fatalf("openZipFile() unexpected error: %v", err)
+		t.Fatalf("OpenLimited() unexpected error: %v", err)
 	}
 	defer func() { _ = rc.Close() }()
 

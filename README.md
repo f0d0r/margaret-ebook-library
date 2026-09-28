@@ -5,7 +5,7 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.26.8-blue)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI or KF8/AZW3 — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB and MOBI reading.
+Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI, KF8/AZW3 or FB2 — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB, MOBI and FB2 reading.
 
 ## Features
 
@@ -21,8 +21,9 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 | Format                        | Read          | Write |
 | ----------------------------- | ------------- | ----- |
 | EPUB (`.epub`)                 | ✅            | —     |
-| MOBI6 / PalmDOC (`.mobi`)     | ✅            | —     |
-| KF8 / MOBI8 (`.mobi`, `.azw3`) | ⚠️ experimental | —  |
+| MOBI6 / PalmDOC (`.mobi`, `.prc`, `.azw`) | ✅  | —     |
+| KF8 / MOBI8 (`.mobi`, `.azw`, `.azw3`, `.prc`) | ⚠️ experimental | —  |
+| FB2 / FBZ (`.fb2`, `.fbz`, `.fb2.zip`) | ✅   | —     |
 
 > **KF8 / MOBI8 status (0.1.0):** KF8 reading is experimental and best-effort.
 > The `index`/`cncx`/`fdst`/`mobi8` code paths have no fixture coverage yet,
@@ -292,7 +293,7 @@ import (
 
 ctx := context.Background()
 
-// Single resource: XHTML/HTML/MobiHTML -> plain text
+// Single resource: XHTML/HTML/MobiHTML/FB2Body -> plain text
 // MediaType can include charset params; they are normalized (case-insensitive,
 // "; charset=..." stripped).
 for _, r := range b.Resources().All() {
@@ -329,7 +330,7 @@ fmt.Println(string(plain))
 ```
 
 Constants are compile-time safe: `mediatype.PlainText`, `mediatype.XHTML`,
-`mediatype.HTML`, `mediatype.MobiHTML`, etc.
+`mediatype.HTML`, `mediatype.MobiHTML`, `mediatype.FB2Body`, etc.
 
 #### Custom transformers and isolated registries
 
@@ -344,8 +345,7 @@ type Transformer interface {
 ```
 
 `Resource.OpenAs` uses the global `converter.DefaultRegistry` (pre-populated with
-`application/xhtml+xml`, `text/html`, `application/x-mobipocket-html` -> `text/plain`
-streaming via `html.Tokenizer`). For tests or custom DI, use an isolated registry:
+`application/xhtml+xml`, `text/html`, `application/x-mobipocket-html`, `application/x-fictionbook-body+xml` -> `text/plain`). For tests or custom DI, use an isolated registry:
 
 ```go
 import "github.com/f0d0r/margaret-ebook-library/converter"

@@ -120,7 +120,7 @@ func (r *MobiReader) cover(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi) *book.Resou
 				media = util.DetectImageMedia(buf[:n])
 			}
 			if media == nil {
-				media = &util.Media{Type: "application/octet-stream", Extension: "bin"}
+				media = util.UnknownMedia()
 			}
 		} else {
 			return nil

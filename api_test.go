@@ -80,6 +80,85 @@ func TestRead_ZeroRecordMOBI_NoPanic(t *testing.T) {
 	}
 }
 
+func TestReadFromFile_ValidFB2(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "book.fb2")
+	fb2 := `<?xml version="1.0" encoding="UTF-8"?>` +
+		`<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">` +
+		`<description><title-info>` +
+		`<author><first-name>API</first-name><last-name>Author</last-name></author>` +
+		`<book-title>API Test Book</book-title><lang>en</lang>` +
+		`</title-info></description>` +
+		`<body><section><p>Hello API</p></section></body>` +
+		`</FictionBook>`
+	if err := os.WriteFile(path, []byte(fb2), 0644); err != nil {
+		t.Fatalf("failed to write FB2 file: %v", err)
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("failed to open FB2: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	ebook, err := ReadFromFile(f)
+	if err != nil {
+		t.Fatalf("ReadFromFile() error: %v", err)
+	}
+	if ebook.FileType() != book.FB2 {
+		t.Errorf("FileType = %v, want %v", ebook.FileType(), book.FB2)
+	}
+	if ebook.Metadata().Title != "API Test Book" {
+		t.Errorf("Title = %q, want %q", ebook.Metadata().Title, "API Test Book")
+	}
+	if len(ebook.Resources().ReadingOrder()) != 1 {
+		t.Errorf("len(ReadingOrder) = %d, want 1", len(ebook.Resources().ReadingOrder()))
+	}
+}
+
+func TestRead_ValidFB2Zipped(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "book.fbz")
+	fb2 := `<?xml version="1.0" encoding="UTF-8"?>` +
+		`<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0">` +
+		`<description><title-info>` +
+		`<author><nickname>zipauthor</nickname></author>` +
+		`<book-title>Zipped Test Book</book-title><lang>en</lang>` +
+		`</title-info></description>` +
+		`<body><section><p>Hello Zip</p></section></body>` +
+		`</FictionBook>`
+
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatalf("failed to create FBZ file: %v", err)
+	}
+	w := zip.NewWriter(f)
+	fw, err := w.Create("book.fb2")
+	if err != nil {
+		t.Fatalf("failed to create zip entry: %v", err)
+	}
+	if _, err := fw.Write([]byte(fb2)); err != nil {
+		t.Fatalf("failed to write zip entry: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close zip writer: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("failed to close FBZ file: %v", err)
+	}
+
+	ebook, err := Read(path)
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+	if ebook.FileType() != book.FB2 {
+		t.Errorf("FileType = %v, want %v", ebook.FileType(), book.FB2)
+	}
+	if ebook.Metadata().Title != "Zipped Test Book" {
+		t.Errorf("Title = %q, want %q", ebook.Metadata().Title, "Zipped Test Book")
+	}
+}
+
 func TestReadFromFile_ValidMOBI(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "book.mobi")
