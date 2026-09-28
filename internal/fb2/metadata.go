@@ -63,6 +63,14 @@ func parseDoc(data []byte) (parsedMeta, error) {
 // declPattern finds the XML encoding declaration in the prolog.
 var declPattern = regexp.MustCompile(`(?i)encoding\s*=\s*['"][^'"]*['"]`)
 
+// prologScanLimit bounds prolog scanning (encoding declaration): the XML
+// spec requires the declaration first, so 2KB is ample headroom while
+// guaranteeing body text (which may literally discuss encodings) is never
+// rewritten. declLabel and rewriteDecl must share this limit: if the label
+// were found where the rewrite cannot reach, transcoded bytes would keep a
+// lying declaration and double-decode downstream.
+const prologScanLimit = 2048
+
 // normalizeFB2 converts raw FB2 bytes to UTF-8 for encoding/xml, which only
 // accepts UTF-8: UTF-16 (BOM-detected) is transcoded, a declared single-byte
 // encoding is transcoded via the x/text index, a UTF-8 BOM is stripped, and
@@ -118,7 +126,7 @@ func normalizeFB2(raw []byte) ([]byte, error) {
 // or "" when absent. Only the head is scanned: the declaration, if present,
 // must appear there.
 func declLabel(data []byte) string {
-	head := data[:min(2048, len(data))]
+	head := data[:min(prologScanLimit, len(data))]
 	m := declPattern.Find(head)
 	if m == nil {
 		return ""
@@ -133,7 +141,7 @@ func declLabel(data []byte) string {
 // rewriteDecl sets the prolog encoding declaration to UTF-8. Only the head
 // is touched so identical strings in the document body are left alone.
 func rewriteDecl(data []byte) []byte {
-	headLen := min(2048, len(data))
+	headLen := min(prologScanLimit, len(data))
 	loc := declPattern.FindIndex(data[:headLen])
 	if loc == nil {
 		return data
