@@ -173,6 +173,45 @@ func TestParseMetadataLanguage(t *testing.T) {
 	}
 }
 
+func TestFbVersion(t *testing.T) {
+	tests := []struct {
+		name  string
+		space string
+		want  string
+	}{
+		{"2.0", "http://www.gribuser.ru/xml/fictionbook/2.0", "2.0"},
+		{"2.1", "http://www.gribuser.ru/xml/fictionbook/2.1", "2.1"},
+		{"future 2.2", "http://www.gribuser.ru/xml/fictionbook/2.2", "2.2"},
+		{"future 2.10", "http://www.gribuser.ru/xml/fictionbook/2.10", "2.10"},
+		{"bare prefix", "http://www.gribuser.ru/xml/fictionbook/", ""},
+		{"major only", "http://www.gribuser.ru/xml/fictionbook/2", "2"},
+		{"major only other", "http://www.gribuser.ru/xml/fictionbook/20", "20"},
+		{"other family declared as-is", "http://www.gribuser.ru/xml/fictionbook/3.0", "3.0"},
+		{"silly major declared as-is", "http://www.gribuser.ru/xml/fictionbook/8.9", "8.9"},
+		{"unrelated namespace", "http://example.com/book", ""},
+		{"empty", "", ""},
+		{"different case", "HTTP://www.gribuser.ru/xml/fictionbook/2.0", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := fbVersion(tt.space); got != tt.want {
+				t.Errorf("fbVersion(%q) = %q, want %q", tt.space, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseMetadataFutureNamespace(t *testing.T) {
+	data := `<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.2"><description><title-info><author><nickname>a</nickname></author><book-title>Future</book-title><lang>en</lang></title-info></description><body><p>x</p></body></FictionBook>`
+	md, version := parseBytes(t, []byte(data))
+	if md.Title != "Future" {
+		t.Errorf("Title = %q, want Future", md.Title)
+	}
+	if version != "2.2" {
+		t.Errorf("version = %q, want 2.2", version)
+	}
+}
+
 func TestParseMetadataNamespaces(t *testing.T) {
 	t.Run("prefixed", func(t *testing.T) {
 		data := `<fb:FictionBook xmlns:fb="http://www.gribuser.ru/xml/fictionbook/2.0"><fb:description><fb:title-info><fb:author><fb:nickname>a</fb:nickname></fb:author><fb:book-title>Prefixed</fb:book-title><fb:lang>en</fb:lang></fb:title-info></fb:description><fb:body><fb:p>x</fb:p></fb:body></fb:FictionBook>`

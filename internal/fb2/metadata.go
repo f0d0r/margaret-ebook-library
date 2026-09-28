@@ -16,11 +16,14 @@ import (
 	"golang.org/x/text/transform"
 )
 
-// FictionBook namespaces from FictionBook.xsd (2.0) and its 2.1 successor.
-const (
-	fb2NS20 = "http://www.gribuser.ru/xml/fictionbook/2.0"
-	fb2NS21 = "http://www.gribuser.ru/xml/fictionbook/2.1"
-)
+// FictionBook namespace family prefix. The declared version suffix is
+// reported as-is (like EPUB/MOBI report their declared versions): Version()
+// is descriptive, the parser itself is namespace-agnostic.
+const fb2NSPrefix = "http://www.gribuser.ru/xml/fictionbook/"
+
+// fbVersionSuffix only accepts a dotted numeric version ("2.0", "8.9",
+// ...), so lookalikes like ".../2beta" or ".../2.0/" fall through to "".
+var fbVersionSuffix = regexp.MustCompile(`^\d+(\.\d+)*$`)
 
 // parsedMeta is the result of parsing an FB2 description: normalized
 // metadata, the format version from the root namespace, and the cover image
@@ -582,14 +585,13 @@ func assemble(titleInfo, srcTitleInfo, docInfo infoSection, version string) pars
 	return pm
 }
 
-// fbVersion maps the root namespace to a format version.
+// fbVersion maps the root namespace to the declared format version.
+// Anything else yields "" (unknown), matching the "missing values stay
+// empty" convention.
 func fbVersion(space string) string {
-	switch space {
-	case fb2NS20:
-		return "2.0"
-	case fb2NS21:
-		return "2.1"
-	default:
+	rest, ok := strings.CutPrefix(space, fb2NSPrefix)
+	if !ok || !fbVersionSuffix.MatchString(rest) {
 		return ""
 	}
+	return rest
 }
