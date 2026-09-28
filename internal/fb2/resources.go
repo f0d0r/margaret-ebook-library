@@ -16,19 +16,6 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
-// imageExtByType maps declared binary content types to file extensions
-// (calibre's guess_extension parity for the formats FB2 books use).
-var imageExtByType = map[string]string{
-	"image/jpeg":     "jpg",
-	"image/jpg":      "jpg",
-	"image/png":      "png",
-	"image/gif":      "gif",
-	"image/svg+xml":  "svg",
-	"image/webp":     "webp",
-	"image/bmp":      "bmp",
-	"image/x-ms-bmp": "bmp",
-}
-
 // binaryFile is one decoded <binary> payload.
 type binaryFile struct {
 	id        string // FB2 binary id
@@ -93,8 +80,9 @@ func decodeBinary(dec *xml.Decoder, start xml.StartElement, used map[string]int)
 	if err != nil || len(raw) == 0 {
 		return nil, nil
 	}
-	mediaType, ext := declared, imageExtByType[declared]
-	if ext == "" {
+	mediaType := declared
+	ext, ok := mediatype.Extension(declared)
+	if !ok {
 		if media := util.DetectImageMedia(raw[:min(32, len(raw))]); media != nil {
 			mediaType, ext = media.Type, media.Extension
 		} else {
