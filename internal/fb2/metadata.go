@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
@@ -32,16 +33,16 @@ type parsedMeta struct {
 
 // parseMetadata extracts the description metadata (title, authors,
 // description, languages) from raw FB2 bytes following calibre's
-// metadata/fb2.py fallback rules. The input is canonicalized first
-// (idempotent, so already-canonical buffers pass through untouched). On XML
+// metadata/fb2.py fallback rules. The input is normalized first
+// (idempotent, so already-normalized buffers pass through untouched). On XML
 // syntax errors it retries once with bare ampersands fixed (calibre's
 // `raw.replace('& ', '&amp;')` parity).
 func parseMetadata(data []byte) (parsedMeta, error) {
-	canon, err := canonicalizeFB2(bytes.NewReader(data))
+	norm, err := normalizeFB2(data)
 	if err != nil {
 		return parsedMeta{}, err
 	}
-	pm, err := parseDoc(canon)
+	pm, err := parseDoc(norm)
 	if err == nil {
 		return pm, nil
 	}
@@ -49,7 +50,7 @@ func parseMetadata(data []byte) (parsedMeta, error) {
 	if !errors.As(err, &syntaxErr) {
 		return parsedMeta{}, err
 	}
-	fixed := bytes.ReplaceAll(canon, []byte("& "), []byte("&amp; "))
+	fixed := bytes.ReplaceAll(norm, []byte("& "), []byte("&amp; "))
 	return parseDoc(fixed)
 }
 
@@ -59,27 +60,32 @@ func parseDoc(data []byte) (parsedMeta, error) {
 	return parseDocument(dec)
 }
 
-// canonicalizeFB2 reads the (already size-capped) source and normalizes it
-// for encoding/xml, which only accepts UTF-8: UTF-16 (BOM-detected) is
-// transcoded (at most ~1.5x expansion), a UTF-8 BOM is stripped, and stray
-// NUL bytes are removed (calibre strips them before parsing). Other
-// encodings pass through untouched; the declared encoding is honored later
-// via charsetReader. The result is idempotent: re-canonicalizing is a no-op.
-func canonicalizeFB2(r io.Reader) ([]byte, error) {
-	raw, err := io.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
+// declPattern finds the XML encoding declaration in the prolog.
+var declPattern = regexp.MustCompile(`(?i)encoding\s*=\s*['"][^'"]*['"]`)
+
+// normalizeFB2 converts raw FB2 bytes to UTF-8 for encoding/xml, which only
+// accepts UTF-8: UTF-16 (BOM-detected) is transcoded, a declared single-byte
+// encoding is transcoded via the x/text index, a UTF-8 BOM is stripped, and
+// stray NUL bytes are removed (calibre strips them before parsing). After a
+// transcode the declaration is rewritten to UTF-8 so downstream decoders
+// never double-decode. The result is idempotent: re-normalizing is a no-op.
+func normalizeFB2(raw []byte) ([]byte, error) {
 	if len(raw) >= 2 && raw[0] == 0xFF && raw[1] == 0xFE {
 		if len(raw) >= 4 && raw[2] == 0x00 && raw[3] == 0x00 {
 			return nil, fmt.Errorf("unsupported xml encoding: utf-32")
 		}
 		out, _, err := transform.Bytes(unicode.UTF16(unicode.LittleEndian, unicode.ExpectBOM).NewDecoder(), raw)
-		return out, err
+		if err != nil {
+			return nil, err
+		}
+		return rewriteDecl(out), nil
 	}
 	if len(raw) >= 2 && raw[0] == 0xFE && raw[1] == 0xFF {
 		out, _, err := transform.Bytes(unicode.UTF16(unicode.BigEndian, unicode.ExpectBOM).NewDecoder(), raw)
-		return out, err
+		if err != nil {
+			return nil, err
+		}
+		return rewriteDecl(out), nil
 	}
 	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
 	if bytes.IndexByte(raw, 0x00) >= 0 {
@@ -91,7 +97,61 @@ func canonicalizeFB2(r io.Reader) ([]byte, error) {
 		}
 		raw = stripped
 	}
-	return raw, nil
+	label := declLabel(raw)
+	switch strings.ToLower(label) {
+	case "", "utf-8", "utf8", "us-ascii", "ascii":
+		return raw, nil
+	default:
+		enc, err := htmlindex.Get(label)
+		if err != nil {
+			return nil, fmt.Errorf("unsupported xml encoding %q", label)
+		}
+		out, _, err := transform.Bytes(enc.NewDecoder(), raw)
+		if err != nil {
+			return nil, err
+		}
+		return rewriteDecl(out), nil
+	}
+}
+
+// declLabel returns the encoding label from the XML prolog (""),
+// or "" when absent. Only the head is scanned: the declaration, if present,
+// must appear there.
+func declLabel(data []byte) string {
+	head := data[:min(2048, len(data))]
+	m := declPattern.Find(head)
+	if m == nil {
+		return ""
+	}
+	s := string(m)
+	if i := strings.IndexAny(s, `"'`); i >= 0 {
+		s = s[i+1:]
+	}
+	return strings.TrimRight(s, `"'`)
+}
+
+// rewriteDecl sets the prolog encoding declaration to UTF-8. Only the head
+// is touched so identical strings in the document body are left alone.
+func rewriteDecl(data []byte) []byte {
+	headLen := min(2048, len(data))
+	loc := declPattern.FindIndex(data[:headLen])
+	if loc == nil {
+		return data
+	}
+	out := make([]byte, 0, len(data))
+	out = append(out, data[:loc[0]]...)
+	out = append(out, `encoding="UTF-8"`...)
+	return append(out, data[loc[1]:]...)
+}
+
+// canonicalizeFB2 reads the (already size-capped) source and normalizes it
+// via normalizeFB2.
+func canonicalizeFB2(r io.Reader) ([]byte, error) {
+	raw, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	return normalizeFB2(raw)
 }
 
 // charsetReader resolves the XML encoding declaration. UTF-8/16 and ASCII

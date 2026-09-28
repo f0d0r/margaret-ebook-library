@@ -8,6 +8,7 @@ const (
 	HTML        = "text/html"
 	XHTML       = "application/xhtml+xml"
 	MobiHTML    = "application/x-mobipocket-html"
+	FB2Body     = "application/x-fictionbook-body+xml"
 	JPEG        = "image/jpeg"
 	PNG         = "image/png"
 	GIF         = "image/gif"

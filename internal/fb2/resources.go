@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"path"
@@ -152,41 +153,88 @@ func sanitizeImageID(id string) string {
 	return sb.String()
 }
 
-// buildFb2Resources assembles content documents, image resources, the reading
-// order and the cover from canonical FB2 bytes and parsed metadata.
-func buildFb2Resources(data []byte, pm parsedMeta, maxSize int64) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource, error) {
+// findBodyRanges returns [start, end) byte ranges of every top-level body's
+// inner content in document order. Offsets index data, so data must be
+// normalized UTF-8 with an honest declaration (see normalizeFB2):
+// transcoding shifts offsets, and stale declarations would double-decode.
+func findBodyRanges(data []byte) ([][2]int64, error) {
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	dec.CharsetReader = charsetReader
+	var out [][2]int64
+	depth := 0
+	var start int64 = -1
+	for {
+		prev := dec.InputOffset()
+		tok, err := dec.Token()
+		if err == io.EOF {
+			break
+		}
+		if isTruncated(err) && start >= 0 {
+			// Truncated inside a body: extend to end of input (tolerant,
+			// matching the library's truncated-MOBI behavior).
+			out = append(out, [2]int64{start, int64(len(data))})
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			depth++
+			if depth == 2 && t.Name.Local == "body" {
+				start = dec.InputOffset()
+			}
+		case xml.EndElement:
+			if depth == 2 && t.Name.Local == "body" && start >= 0 {
+				out = append(out, [2]int64{start, prev})
+				start = -1
+			}
+			depth--
+		}
+	}
+	return out, nil
+}
+
+// isTruncated reports truncation errors: raw ErrUnexpectedEOF or the
+// SyntaxError("unexpected EOF") that encoding/xml returns mid-document.
+func isTruncated(err error) bool {
+	if err == io.ErrUnexpectedEOF {
+		return true
+	}
+	var syntaxErr *xml.SyntaxError
+	return errors.As(err, &syntaxErr) && strings.Contains(syntaxErr.Msg, "unexpected EOF")
+}
+
+// buildFb2Resources assembles body-slice content resources, image
+// resources, the reading order and the cover from the normalized FB2
+// document buffer and parsed metadata. Body slices are zero-copy views into
+// data; only decoded image payloads add to the memory footprint.
+func buildFb2Resources(data []byte, pm parsedMeta, ranges [][2]int64, maxSize int64) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource, error) {
 	bins, err := collectBinaries(data)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to read fb2 binaries: %w", err)
 	}
-	images := make(map[string]string, len(bins))
-	for _, bf := range bins {
-		images[bf.id] = bf.href
-	}
-
-	docs, err := buildContentDocs(data, pm.metadata.Title, images)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to transform fb2 content: %w", err)
-	}
 
 	var all []*book.Resource
-	readingOrder := make([]book.ReadingOrderItem, 0, len(docs))
-	for _, doc := range docs {
-		// Capture only what Open needs so the intermediate transform
-		// state (inner markup, id sets) can be garbage-collected.
-		name, html, linear := doc.name, doc.html, doc.linear
+	readingOrder := make([]book.ReadingOrderItem, 0, len(ranges))
+	for i, r := range ranges {
+		// The slice shares the document buffer (zero-copy); capturing
+		// only the slice keeps nothing else alive.
+		name := fmt.Sprintf("body%04d.xml", i+1)
+		content := data[r[0]:r[1]]
+		linear := i == 0
 		res := &book.Resource{
-			Id:           strings.TrimSuffix(name, ".html"),
+			Id:           strings.TrimSuffix(name, ".xml"),
 			Name:         name,
 			Href:         name,
 			ResolvedHref: name,
-			MediaType:    mediatype.XHTML,
-			Size:         int64(len(html)),
+			MediaType:    mediatype.FB2Body,
+			Size:         int64(len(content)),
 			Open: func() (io.ReadCloser, error) {
-				if maxSize > 0 && int64(len(html)) > maxSize {
-					return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, name, len(html), maxSize)
+				if maxSize > 0 && int64(len(content)) > maxSize {
+					return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, name, len(content), maxSize)
 				}
-				return io.NopCloser(strings.NewReader(html)), nil
+				return io.NopCloser(bytes.NewReader(content)), nil
 			},
 		}
 		all = append(all, res)

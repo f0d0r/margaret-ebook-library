@@ -293,7 +293,7 @@ import (
 
 ctx := context.Background()
 
-// Single resource: XHTML/HTML/MobiHTML -> plain text
+// Single resource: XHTML/HTML/MobiHTML/FB2Body -> plain text
 // MediaType can include charset params; they are normalized (case-insensitive,
 // "; charset=..." stripped).
 for _, r := range b.Resources().All() {
@@ -330,7 +330,7 @@ fmt.Println(string(plain))
 ```
 
 Constants are compile-time safe: `mediatype.PlainText`, `mediatype.XHTML`,
-`mediatype.HTML`, `mediatype.MobiHTML`, etc.
+`mediatype.HTML`, `mediatype.MobiHTML`, `mediatype.FB2Body`, etc.
 
 #### Custom transformers and isolated registries
 
@@ -345,8 +345,7 @@ type Transformer interface {
 ```
 
 `Resource.OpenAs` uses the global `converter.DefaultRegistry` (pre-populated with
-`application/xhtml+xml`, `text/html`, `application/x-mobipocket-html` -> `text/plain`
-streaming via `html.Tokenizer`). For tests or custom DI, use an isolated registry:
+`application/xhtml+xml`, `text/html`, `application/x-mobipocket-html`, `application/x-fictionbook-body+xml` -> `text/plain`). For tests or custom DI, use an isolated registry:
 
 ```go
 import "github.com/f0d0r/margaret-ebook-library/converter"

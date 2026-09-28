@@ -15,4 +15,8 @@ func init() {
 		mediatype.HTML,
 		mediatype.MobiHTML,
 	)
+	// FictionBook body fragments -> plain text (tolerant scanner, see
+	// fb2totext.go). Registered separately: unlike the HTML variants it
+	// needs its own implementation.
+	DefaultRegistry.Register(&fb2BodyToTextTransformer{from: mediatype.FB2Body, to: mediatype.PlainText})
 }

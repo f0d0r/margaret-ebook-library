@@ -77,31 +77,31 @@ func TestFb2ReadRichStructure(t *testing.T) {
 	}
 
 	rs := ebook.Resources()
-	if rs.Len() != 5 {
-		t.Fatalf("Len() = %d, want 5 (3 content + 2 images)", rs.Len())
+	if rs.Len() != 4 {
+		t.Fatalf("Len() = %d, want 4 (2 bodies + 2 images)", rs.Len())
 	}
 	ro := rs.ReadingOrder()
-	if len(ro) != 3 {
-		t.Fatalf("len(ReadingOrder) = %d, want 3", len(ro))
+	if len(ro) != 2 {
+		t.Fatalf("len(ReadingOrder) = %d, want 2", len(ro))
 	}
-	wantLinear := []bool{true, true, false}
+	wantLinear := []bool{true, false}
 	for i, item := range ro {
 		if item.Linear != wantLinear[i] {
 			t.Errorf("ReadingOrder[%d].Linear = %v, want %v", i, item.Linear, wantLinear[i])
 		}
 	}
-	wantNames := []string{"section0001.html", "section0002.html", "section0003.html"}
+	wantNames := []string{"body0001.xml", "body0002.xml"}
 	for i, item := range ro {
 		if item.Resource.Name != wantNames[i] {
 			t.Errorf("ReadingOrder[%d].Name = %q, want %q", i, item.Resource.Name, wantNames[i])
 		}
-		if item.Resource.MediaType != mediatype.XHTML {
-			t.Errorf("ReadingOrder[%d].MediaType = %q, want %q", i, item.Resource.MediaType, mediatype.XHTML)
+		if item.Resource.MediaType != mediatype.FB2Body {
+			t.Errorf("ReadingOrder[%d].MediaType = %q, want %q", i, item.Resource.MediaType, mediatype.FB2Body)
 		}
 	}
 
 	all := rs.All()
-	if all[0].Name != "section0001.html" || all[3].Name != "cover.png" || all[4].Name != "pic1.jpg" {
+	if all[0].Name != "body0001.xml" || all[2].Name != "cover.png" || all[3].Name != "pic1.jpg" {
 		names := make([]string, len(all))
 		for i, r := range all {
 			names[i] = r.Name
@@ -110,11 +110,28 @@ func TestFb2ReadRichStructure(t *testing.T) {
 	}
 }
 
-func TestFb2ContentHTML(t *testing.T) {
+func TestFb2BodyRawFidelity(t *testing.T) {
 	ebook := readRichBook(t)
 	rs := ebook.Resources()
+	src := richFb2()
 
-	data := func(name string) string {
+	body := func(openTag string) string {
+		t.Helper()
+		start := strings.Index(src, openTag)
+		if start < 0 {
+			t.Fatalf("fixture missing %q", openTag)
+		}
+		start += len(openTag)
+		end := strings.Index(src[start:], "</body>")
+		if end < 0 {
+			t.Fatalf("fixture missing closing body for %q", openTag)
+		}
+		return src[start : start+end]
+	}
+	wantBody1 := body("<body>")
+	wantNotes := body(`<body name="notes">`)
+
+	data := func(name string) []byte {
 		t.Helper()
 		r, ok := rs.GetByHref(name)
 		if !ok {
@@ -124,39 +141,32 @@ func TestFb2ContentHTML(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Data(%q) error: %v", name, err)
 		}
-		return string(b)
+		return b
 	}
 
-	doc1 := data("section0001.html")
-	for _, want := range []string{
-		"<title>Rich Book</title>",
-		"<h1>",
-		"Book Header",
-		"<h2><p>First</p></h2>",
-		"<p>Hello <strong>world</strong>.</p>",
-		`<img src="images/pic1.jpg"`,
-		`href="section0002.html#s2"`,
-		`href="#s1"`,
-		`href="https://example.com"`,
-		"<h3><p>Nested</p></h3>",
-		"Deep.",
-		`<section id="s1">`,
+	// Strongest raw-principle assert: resource bytes equal the stored slice.
+	if got := data("body0001.xml"); !bytes.Equal(got, []byte(wantBody1)) {
+		t.Errorf("body0001.xml differs from stored bytes:\ngot  %q\nwant %q", got, wantBody1)
+	}
+	if got := data("body0002.xml"); !bytes.Equal(got, []byte(wantNotes)) {
+		t.Errorf("body0002.xml differs from stored bytes:\ngot  %q\nwant %q", got, wantNotes)
+	}
+
+	// No metadata or binary payloads may leak into content resources.
+	for name, content := range map[string][]byte{
+		"body0001.xml": data("body0001.xml"),
+		"body0002.xml": data("body0002.xml"),
 	} {
-		if !strings.Contains(doc1, want) {
-			t.Errorf("section0001.html missing %q", want)
+		for _, banned := range []string{"Anna", "Rich Book", "iVBOR", "<binary", "<description"} {
+			if strings.Contains(string(content), banned) {
+				t.Errorf("%s contains %q from outside its body", name, banned)
+			}
 		}
 	}
 
-	doc2 := data("section0002.html")
-	for _, want := range []string{
-		"Line one", "Line two", "Poet",
-		"<th>H</th>", "<td>C</td>",
-		`<img src="#ghost"`,
-		`href="#nowhere"`,
-	} {
-		if !strings.Contains(doc2, want) {
-			t.Errorf("section0002.html missing %q", want)
-		}
+	r, _ := rs.GetByHref("body0001.xml")
+	if r.Size != int64(len(wantBody1)) {
+		t.Errorf("body0001 Size = %d, want %d", r.Size, len(wantBody1))
 	}
 }
 
@@ -165,17 +175,17 @@ func TestFb2PlainTextViaTransformers(t *testing.T) {
 	rs := ebook.Resources()
 	ctx := context.Background()
 
-	r, ok := rs.GetByHref("section0001.html")
+	r, ok := rs.GetByHref("body0001.xml")
 	if !ok {
-		t.Fatal("section0001.html not found")
+		t.Fatal("body0001.xml not found")
 	}
 	text, err := r.DataAs(ctx, mediatype.PlainText)
 	if err != nil {
 		t.Fatalf("DataAs failed: %v", err)
 	}
-	for _, want := range []string{"Hello", "world", "Deep.", "Book Header", "First"} {
+	for _, want := range []string{"Hello", "world", "Deep.", "Book Header", "First", "second", "self", "ext"} {
 		if !strings.Contains(string(text), want) {
-			t.Errorf("DataAs(section0001) missing %q in %q", want, string(text))
+			t.Errorf("DataAs(body0001) missing %q in %q", want, string(text))
 		}
 	}
 
@@ -188,7 +198,7 @@ func TestFb2PlainTextViaTransformers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadAll failed: %v", err)
 	}
-	for _, want := range []string{"Hello", "Line one", "Line two"} {
+	for _, want := range []string{"Hello", "Line one", "Line two", "Poet"} {
 		if !strings.Contains(string(full), want) {
 			t.Errorf("OpenReadingOrderAs missing %q", want)
 		}
@@ -197,16 +207,117 @@ func TestFb2PlainTextViaTransformers(t *testing.T) {
 		t.Errorf("OpenReadingOrderAs should skip non-linear notes, got %q", string(full))
 	}
 
-	notes, ok := rs.GetByHref("section0003.html")
+	notes, ok := rs.GetByHref("body0002.xml")
 	if !ok {
-		t.Fatal("section0003.html not found")
+		t.Fatal("body0002.xml not found")
 	}
 	notesText, err := notes.DataAs(ctx, mediatype.PlainText)
 	if err != nil {
 		t.Fatalf("DataAs(notes) failed: %v", err)
 	}
-	if !strings.Contains(string(notesText), "Footnote") {
-		t.Errorf("notes DataAs missing %q in %q", "Footnote", string(notesText))
+	for _, want := range []string{"Notes", "Footnote text."} {
+		if !strings.Contains(string(notesText), want) {
+			t.Errorf("notes DataAs missing %q in %q", want, string(notesText))
+		}
+	}
+}
+
+func TestFindBodyRanges(t *testing.T) {
+	t.Run("two bodies", func(t *testing.T) {
+		data := `<FictionBook><description/><body><p>one</p></body><body name="notes"><p>two</p></body></FictionBook>`
+		ranges, err := findBodyRanges([]byte(data))
+		if err != nil {
+			t.Fatalf("findBodyRanges() error: %v", err)
+		}
+		if len(ranges) != 2 {
+			t.Fatalf("len(ranges) = %d, want 2", len(ranges))
+		}
+		if got := string([]byte(data)[ranges[0][0]:ranges[0][1]]); got != "<p>one</p>" {
+			t.Errorf("ranges[0] = %q, want %q", got, "<p>one</p>")
+		}
+		if got := string([]byte(data)[ranges[1][0]:ranges[1][1]]); got != "<p>two</p>" {
+			t.Errorf("ranges[1] = %q, want %q", got, "<p>two</p>")
+		}
+	})
+
+	t.Run("markup lookalikes ignored", func(t *testing.T) {
+		data := `<FictionBook><description><!-- <body> fake --></description><body><p>a body of water</p></body></FictionBook>`
+		ranges, err := findBodyRanges([]byte(data))
+		if err != nil {
+			t.Fatalf("findBodyRanges() error: %v", err)
+		}
+		if len(ranges) != 1 {
+			t.Fatalf("len(ranges) = %d, want 1", len(ranges))
+		}
+	})
+
+	t.Run("prefixed body", func(t *testing.T) {
+		data := `<fb:FictionBook xmlns:fb="urn:x"><fb:body><fb:p>x</fb:p></fb:body></fb:FictionBook>`
+		ranges, err := findBodyRanges([]byte(data))
+		if err != nil {
+			t.Fatalf("findBodyRanges() error: %v", err)
+		}
+		if len(ranges) != 1 {
+			t.Fatalf("len(ranges) = %d, want 1", len(ranges))
+		}
+	})
+
+	t.Run("no bodies", func(t *testing.T) {
+		ranges, err := findBodyRanges([]byte(`<FictionBook><description/></FictionBook>`))
+		if err != nil {
+			t.Fatalf("findBodyRanges() error: %v", err)
+		}
+		if len(ranges) != 0 {
+			t.Errorf("len(ranges) = %d, want 0", len(ranges))
+		}
+	})
+
+	t.Run("unclosed body extends to EOF", func(t *testing.T) {
+		data := `<FictionBook><body><p>open`
+		ranges, err := findBodyRanges([]byte(data))
+		if err != nil {
+			t.Fatalf("findBodyRanges() error: %v", err)
+		}
+		if len(ranges) != 1 {
+			t.Fatalf("len(ranges) = %d, want 1", len(ranges))
+		}
+		if got := string([]byte(data)[ranges[0][0]:ranges[0][1]]); got != "<p>open" {
+			t.Errorf("ranges[0] = %q, want %q", got, "<p>open")
+		}
+	})
+
+	t.Run("mismatched tags error", func(t *testing.T) {
+		if _, err := findBodyRanges([]byte(`<FictionBook><body><p>x</div></body></FictionBook>`)); err == nil {
+			t.Error("findBodyRanges() expected error for mismatched tags, got nil")
+		}
+	})
+}
+
+func TestFb2ReadAmpRetryEndToEnd(t *testing.T) {
+	// Bare ampersand in the description forces the fixed-buffer path;
+	// offsets, metadata and binaries must all come from that same buffer.
+	doc := strings.Replace(richFb2(), "Rich Book", "R & D", 1)
+	ebook, err := NewFb2Reader(config.DefaultConfig()).Read(book.NewBytesBlob([]byte(doc)))
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+	if ebook.Metadata().Title != "R & D" {
+		t.Errorf("Title = %q, want %q", ebook.Metadata().Title, "R & D")
+	}
+	ro := ebook.Resources().ReadingOrder()
+	if len(ro) != 2 {
+		t.Fatalf("len(ReadingOrder) = %d, want 2", len(ro))
+	}
+	r, ok := ebook.Resources().GetByHref("body0001.xml")
+	if !ok {
+		t.Fatal("body0001.xml not found")
+	}
+	data, err := r.Data()
+	if err != nil {
+		t.Fatalf("Data() error: %v", err)
+	}
+	if !strings.Contains(string(data), "Hello") {
+		t.Errorf("body0001 content missing, got %q", string(data))
 	}
 }
 

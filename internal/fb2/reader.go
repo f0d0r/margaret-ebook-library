@@ -2,6 +2,9 @@ package fb2
 
 import (
 	"archive/zip"
+	"bytes"
+	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -97,11 +100,28 @@ func (r *Fb2Reader) Read(b book.Blob) (book.Book, error) {
 		return nil, fmt.Errorf("failed to decode fb2: %w", err)
 	}
 
+	// Locate body ranges first: on syntax errors retry with bare ampersands
+	// fixed, and keep using the fixed buffer downstream so offsets,
+	// metadata and binaries stay consistent.
+	ranges, err := findBodyRanges(buf)
+	if err != nil {
+		var syntaxErr *xml.SyntaxError
+		if !errors.As(err, &syntaxErr) {
+			return nil, fmt.Errorf("failed to read fb2 content: %w", err)
+		}
+		fixed := bytes.ReplaceAll(buf, []byte("& "), []byte("&amp; "))
+		ranges, err = findBodyRanges(fixed)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read fb2 content: %w", err)
+		}
+		buf = fixed
+	}
+
 	pm, err := parseMetadata(buf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read fb2 metadata: %w", err)
 	}
-	all, readingOrder, cover, err := buildFb2Resources(buf, pm, maxSize)
+	all, readingOrder, cover, err := buildFb2Resources(buf, pm, ranges, maxSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read fb2 content: %w", err)
 	}
