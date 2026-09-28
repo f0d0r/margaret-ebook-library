@@ -225,7 +225,6 @@ func hasFictionBookRoot(buf []byte) bool {
 // and the character following the tag name must be a tag delimiter so that
 // e.g. "<FictionBookmark>" or prose mentioning FictionBook does not match.
 func scanFictionBookTag(buf []byte) bool {
-	const tag = "FictionBook"
 	for i := range len(buf) {
 		if buf[i] != '<' {
 			continue
@@ -242,7 +241,7 @@ func scanFictionBookTag(buf []byte) bool {
 		if idx := strings.LastIndexByte(name, ':'); idx >= 0 {
 			name = name[idx+1:]
 		}
-		if name != tag {
+		if name != elFictionBook {
 			continue
 		}
 		if k >= len(buf) {

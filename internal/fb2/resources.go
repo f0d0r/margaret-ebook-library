@@ -41,7 +41,7 @@ func collectBinaries(data []byte) ([]*binaryFile, error) {
 			return nil, err
 		}
 		start, ok := tok.(xml.StartElement)
-		if !ok || start.Name.Local != "binary" {
+		if !ok || start.Name.Local != elBinary {
 			continue
 		}
 		bf, err := decodeBinary(dec, start, used)
@@ -61,9 +61,9 @@ func decodeBinary(dec *xml.Decoder, start xml.StartElement, used map[string]int)
 	var id, contentType string
 	for _, a := range start.Attr {
 		switch a.Name.Local {
-		case "id":
+		case attrID:
 			id = a.Value
-		case "content-type":
+		case attrContentType:
 			contentType = a.Value
 		}
 	}
@@ -169,11 +169,11 @@ func findBodyRanges(data []byte) ([][2]int64, error) {
 		switch t := tok.(type) {
 		case xml.StartElement:
 			depth++
-			if depth == 2 && t.Name.Local == "body" {
+			if depth == 2 && t.Name.Local == elBody {
 				start = dec.InputOffset()
 			}
 		case xml.EndElement:
-			if depth == 2 && t.Name.Local == "body" && start >= 0 {
+			if depth == 2 && t.Name.Local == elBody && start >= 0 {
 				out = append(out, [2]int64{start, prev})
 				start = -1
 			}

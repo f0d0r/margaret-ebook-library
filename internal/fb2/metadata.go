@@ -25,6 +25,41 @@ const fb2NSPrefix = "http://www.gribuser.ru/xml/fictionbook/"
 // ...), so lookalikes like ".../2beta" or ".../2.0/" fall through to "".
 var fbVersionSuffix = regexp.MustCompile(`^\d+(\.\d+)*$`)
 
+// FictionBook element and attribute local names (matched
+// namespace-agnostically, so prefixed and 2.0/2.1/namespace-less variants
+// all parse identically).
+const (
+	elFictionBook  = "FictionBook"
+	elDescription  = "description"
+	elTitleInfo    = "title-info"
+	elSrcTitleInfo = "src-title-info"
+	elDocumentInfo = "document-info"
+	elBookTitle    = "book-title"
+	elLang         = "lang"
+	elAuthor       = "author"
+	elAnnotation   = "annotation"
+	elCoverpage    = "coverpage"
+	elFirstName    = "first-name"
+	elMiddleName   = "middle-name"
+	elLastName     = "last-name"
+	elNickname     = "nickname"
+	elImage        = "image"
+	elBody         = "body"
+	elBinary       = "binary"
+	elP            = "p"
+	elV            = "v"
+	elSubtitle     = "subtitle"
+	elTextAuthor   = "text-author"
+	elTh           = "th"
+	elTd           = "td"
+	elEmptyLine    = "empty-line"
+
+	attrID          = "id"
+	attrContentType = "content-type"
+	attrHref        = "href"
+	xlinkNS         = "http://www.w3.org/1999/xlink"
+)
+
 // parsedMeta is the result of parsing an FB2 description: normalized
 // metadata, the format version from the root namespace, and the cover image
 // binary id referenced by coverpage ("" when absent).
@@ -65,6 +100,17 @@ func parseDoc(data []byte) (parsedMeta, error) {
 
 // declPattern finds the XML encoding declaration in the prolog.
 var declPattern = regexp.MustCompile(`(?i)encoding\s*=\s*['"][^'"]*['"]`)
+
+// XML encoding labels (lowercase, compared after normalization).
+const (
+	encUTF8     = "utf-8"
+	encUTF8Alt  = "utf8"
+	encASCII    = "us-ascii"
+	encASCIIAlt = "ascii"
+	encUTF16    = "utf-16"
+	encUTF16LE  = "utf-16le"
+	encUTF16BE  = "utf-16be"
+)
 
 // prologScanLimit bounds prolog scanning (encoding declaration): the XML
 // spec requires the declaration first, so 2KB is ample headroom while
@@ -110,7 +156,7 @@ func normalizeFB2(raw []byte) ([]byte, error) {
 	}
 	label := declLabel(raw)
 	switch strings.ToLower(label) {
-	case "", "utf-8", "utf8", "us-ascii", "ascii":
+	case "", encUTF8, encUTF8Alt, encASCII, encASCIIAlt:
 		return raw, nil
 	default:
 		enc, err := htmlindex.Get(label)
@@ -172,9 +218,9 @@ func canonicalizeFB2(r io.Reader) ([]byte, error) {
 // iso-8859-*, ...).
 func charsetReader(label string, input io.Reader) (io.Reader, error) {
 	switch strings.ToLower(strings.TrimSpace(label)) {
-	case "", "utf-8", "utf8", "us-ascii", "ascii":
+	case "", encUTF8, encUTF8Alt, encASCII, encASCIIAlt:
 		return input, nil
-	case "utf-16", "utf-16le", "utf-16be":
+	case encUTF16, encUTF16LE, encUTF16BE:
 		return input, nil
 	default:
 		enc, err := htmlindex.Get(label)
@@ -218,19 +264,19 @@ func parseDocument(dec *xml.Decoder) (parsedMeta, error) {
 		}
 		if !seenRoot {
 			seenRoot = true
-			if start.Name.Local != "FictionBook" {
+			if start.Name.Local != elFictionBook {
 				return parsedMeta{}, fmt.Errorf("not a FictionBook document: root is %q", start.Name.Local)
 			}
 			version = fbVersion(start.Name.Space)
 			continue
 		}
 		switch start.Name.Local {
-		case "description":
+		case elDescription:
 			if err := parseDescriptionChildren(dec, &titleInfo, &srcTitleInfo, &docInfo); err != nil {
 				return parsedMeta{}, err
 			}
 			return assemble(titleInfo, srcTitleInfo, docInfo, version), nil
-		case "body", "binary":
+		case elBody, elBinary:
 			// No description before content: nothing to collect.
 			return assemble(titleInfo, srcTitleInfo, docInfo, version), nil
 		default:
@@ -265,11 +311,11 @@ func parseDescriptionChildren(dec *xml.Decoder, titleInfo, srcTitleInfo, docInfo
 			seen[tok.Name.Local] = true
 			var dst *infoSection
 			switch tok.Name.Local {
-			case "title-info":
+			case elTitleInfo:
 				dst = titleInfo
-			case "src-title-info":
+			case elSrcTitleInfo:
 				dst = srcTitleInfo
-			case "document-info":
+			case elDocumentInfo:
 				dst = docInfo
 			default:
 				if err := skipElement(dec); err != nil {
@@ -281,7 +327,7 @@ func parseDescriptionChildren(dec *xml.Decoder, titleInfo, srcTitleInfo, docInfo
 				return err
 			}
 		case xml.EndElement:
-			if tok.Name.Local == "description" {
+			if tok.Name.Local == elDescription {
 				return nil
 			}
 		}
@@ -299,7 +345,7 @@ func parseInfoSection(dec *xml.Decoder, name string, dst *infoSection) error {
 		switch tok := tok.(type) {
 		case xml.StartElement:
 			switch tok.Name.Local {
-			case "book-title":
+			case elBookTitle:
 				text, err := textOf(dec)
 				if err != nil {
 					return err
@@ -307,7 +353,7 @@ func parseInfoSection(dec *xml.Decoder, name string, dst *infoSection) error {
 				if dst.title == "" {
 					dst.title = text
 				}
-			case "lang":
+			case elLang:
 				text, err := textOf(dec)
 				if err != nil {
 					return err
@@ -315,7 +361,7 @@ func parseInfoSection(dec *xml.Decoder, name string, dst *infoSection) error {
 				if dst.lang == "" {
 					dst.lang = text
 				}
-			case "author":
+			case elAuthor:
 				author, err := parseAuthor(dec)
 				if err != nil {
 					return err
@@ -323,7 +369,7 @@ func parseInfoSection(dec *xml.Decoder, name string, dst *infoSection) error {
 				if author != "" {
 					dst.authors = append(dst.authors, author)
 				}
-			case "annotation":
+			case elAnnotation:
 				annotation, err := parseAnnotation(dec)
 				if err != nil {
 					return err
@@ -331,7 +377,7 @@ func parseInfoSection(dec *xml.Decoder, name string, dst *infoSection) error {
 				if dst.annotation == "" {
 					dst.annotation = annotation
 				}
-			case "coverpage":
+			case elCoverpage:
 				coverID, err := parseCoverpage(dec)
 				if err != nil {
 					return err
@@ -373,25 +419,25 @@ func parseAuthor(dec *xml.Decoder) (string, error) {
 				return "", err
 			}
 			switch tok.Name.Local {
-			case "first-name":
+			case elFirstName:
 				if first == "" {
 					first = text
 				}
-			case "middle-name":
+			case elMiddleName:
 				if middle == "" {
 					middle = text
 				}
-			case "last-name":
+			case elLastName:
 				if last == "" {
 					last = text
 				}
-			case "nickname":
+			case elNickname:
 				if nickname == "" {
 					nickname = text
 				}
 			}
 		case xml.EndElement:
-			if tok.Name.Local == "author" {
+			if tok.Name.Local == elAuthor {
 				parts := make([]string, 0, 3)
 				for _, p := range []string{first, middle, last} {
 					if p != "" {
@@ -421,7 +467,7 @@ func parseCoverpage(dec *xml.Decoder) (string, error) {
 		}
 		switch tok := tok.(type) {
 		case xml.StartElement:
-			if tok.Name.Local == "image" {
+			if tok.Name.Local == elImage {
 				href := hrefAttr(tok.Attr)
 				if err := skipElement(dec); err != nil {
 					return "", err
@@ -432,7 +478,7 @@ func parseCoverpage(dec *xml.Decoder) (string, error) {
 				return "", err
 			}
 		case xml.EndElement:
-			if tok.Name.Local == "coverpage" {
+			if tok.Name.Local == elCoverpage {
 				return "", nil
 			}
 		}
@@ -443,12 +489,12 @@ func parseCoverpage(dec *xml.Decoder) (string, error) {
 // attribute (calibre parity).
 func hrefAttr(attrs []xml.Attr) string {
 	for _, a := range attrs {
-		if a.Name.Space == "http://www.w3.org/1999/xlink" && a.Name.Local == "href" {
+		if a.Name.Space == xlinkNS && a.Name.Local == attrHref {
 			return a.Value
 		}
 	}
 	for _, a := range attrs {
-		if a.Name.Local == "href" {
+		if a.Name.Local == attrHref {
 			return a.Value
 		}
 	}
@@ -458,7 +504,7 @@ func hrefAttr(attrs []xml.Attr) string {
 // blockEndFlush lists elements whose end starts a new description line.
 func blockEndFlush(local string) bool {
 	switch local {
-	case "p", "v", "subtitle", "text-author", "th", "td":
+	case elP, elV, elSubtitle, elTextAuthor, elTh, elTd:
 		return true
 	default:
 		return false
@@ -496,13 +542,13 @@ func parseAnnotation(dec *xml.Decoder) (string, error) {
 			}
 			cur.WriteString(s)
 		case xml.StartElement:
-			if tok.Name.Local == "empty-line" {
+			if tok.Name.Local == elEmptyLine {
 				flush()
 				lines = append(lines, "")
 			}
 		case xml.EndElement:
 			switch {
-			case tok.Name.Local == "annotation":
+			case tok.Name.Local == elAnnotation:
 				flush()
 				return strings.Join(lines, "\n"), nil
 			case blockEndFlush(tok.Name.Local):
