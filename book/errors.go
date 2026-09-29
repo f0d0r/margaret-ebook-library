@@ -22,4 +22,11 @@ var (
 	// ErrUnsupportedMediaType is returned when a resource has an empty or
 	// otherwise unsupported media type for conversion.
 	ErrUnsupportedMediaType = errors.New("unsupported media type")
+
+	// ErrDRM is returned when the e-book is DRM protected and cannot be
+	// read. EPUB/KEPUB files carrying a non-obfuscation encryption.xml
+	// entry (Adobe ADEPT) or a non-empty rights.xml with encrypted spine
+	// content (Kobo kdrm), as well as MOBI files with DRM records or
+	// PalmDOC/MOBI encryption, are rejected with this error.
+	ErrDRM = errors.New("drm protected")
 )

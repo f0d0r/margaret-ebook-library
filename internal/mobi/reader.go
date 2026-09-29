@@ -56,6 +56,10 @@ func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 		return nil, fmt.Errorf("failed to read MOBI file: %w", err)
 	}
 
+	if isDRMProtected(mobiDoc) {
+		return nil, fmt.Errorf("mobi is DRM protected: %w", book.ErrDRM)
+	}
+
 	var languages []string
 	if mobiDoc.Language() != "" {
 		languages = []string{mobiDoc.Language()}

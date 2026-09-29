@@ -21,9 +21,25 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 | Format                        | Read          | Write |
 | ----------------------------- | ------------- | ----- |
 | EPUB (`.epub`)                 | ✅            | —     |
+| KEPUB (`.kepub.epub`)          | ✅ (as EPUB)  | —     |
 | MOBI6 / PalmDOC (`.mobi`, `.prc`, `.azw`) | ✅  | —     |
 | KF8 / MOBI8 (`.mobi`, `.azw`, `.azw3`, `.prc`) | ⚠️ experimental | —  |
 | FB2 / FBZ (`.fb2`, `.fbz`, `.fb2.zip`) | ✅   | —     |
+
+> **KEPUB status:** a KEPUB is a valid EPUB archive whose content documents
+> carry Kobo rendering markup (`div#book-columns`/`div#book-inner` wrappers,
+> sentence-level `koboSpan` spans). It reads as `FileType() == EPUB` — the
+> container-level differences are rendering-only, so there is no separate
+> `KEPUB` file type and no new API surface. Detection is content-based, so
+> the `.kepub.epub` filename is irrelevant to `Read`/`ReadFromBlob`.
+>
+> **DRM status:** DRM-protected books cannot be read and are rejected with
+> `ebook.ErrDRM` (matched with `errors.Is`): EPUB/KEPUB files with a
+> non-font-obfuscation `META-INF/encryption.xml` entry (Adobe ADEPT) or a
+> non-empty `rights.xml` with encrypted spine content (Kobo kdrm), and MOBI
+> files with DRM records or PalmDOC/MOBI text encryption. Font obfuscation
+> (`adobe#RC`, `idpf.org/2008/embedding`) and leftover/empty `rights.xml`
+> files are not treated as DRM.
 
 > **KF8 / MOBI8 status (0.1.0):** KF8 reading is experimental and best-effort.
 > The `index`/`cncx`/`fdst`/`mobi8` code paths have no fixture coverage yet,
@@ -442,6 +458,7 @@ Sentinel errors are matched with `errors.Is`:
 | Error | Meaning |
 | ----- | ------- |
 | `ebook.ErrUnsupportedFormat` | Unknown or unsupported ebook format |
+| `ebook.ErrDRM` | The book is DRM protected and cannot be read |
 | `ebook.ErrLimitExceeded` | A safety limit (resource size, record size, EXTH count) was hit — raise it with a functional option |
 | `ebook.ErrNoTransformer` | No conversion path to the requested media type |
 | `ebook.ErrUnsupportedMediaType` | The requested media type itself is not supported |
