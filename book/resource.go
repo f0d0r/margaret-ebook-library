@@ -12,18 +12,6 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
-// Package book defines the core domain types for e-books.
-//
-// book does not contain concrete transformation logic, but for ergonomic
-// convenience its Resource and ResourceSet types provide OpenAs methods
-// that delegate to the converter package's DefaultRegistry. Strictly
-// speaking this is a domain -> conversion-service coupling that is
-// pragmatically accepted for 0.1.0 to keep the consumer API pleasant
-// (resource.OpenAs(ctx, mediatype.PlainText)). A future breaking release
-// may move conversion to a separate API (e.g. ebook.OpenAs), but for now
-// the coupling is intentional and cycle-free (converter depends only on
-// mediatype).
-
 // Resource represents an embedded file of an e-book (e.g. a chapter,
 // image, stylesheet, or the cover image). Its content is exposed lazily
 // through Open so callers can stream it without materializing the whole

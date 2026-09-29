@@ -1,6 +1,3 @@
-// Package tools provides non-core utilities outside the classic ebook scope:
-// file hashing and streaming content fingerprints (MinHash, SimHash) that
-// operate on the normalized plain-text reading order via io.Writer/TeeReader.
 package tools
 
 import (
