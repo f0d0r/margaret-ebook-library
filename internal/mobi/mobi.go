@@ -290,6 +290,23 @@ func (m *Mobi) HasDRM() bool {
 	return m.DRMOffset != 0xFFFFFFFF
 }
 
+// isDRMProtected reports whether the MOBI (or its KF8 part in a dual file)
+// is DRM protected. Like Calibre, both the DRM record pointer and the
+// PalmDOC/MOBI text encryption field are treated as DRM: either a present
+// DRM offset or a non-zero encryption type means the content cannot be read.
+func isDRMProtected(m *Mobi) bool {
+	if m == nil {
+		return false
+	}
+	if m.HasDRM() || m.Encryption != EncryptionNone {
+		return true
+	}
+	if m.KF8 != nil && (m.KF8.HasDRM() || m.KF8.Encryption != EncryptionNone) {
+		return true
+	}
+	return false
+}
+
 // Title returns the book title. It prefers the updated title from the EXTH record if available,
 // otherwise falls back to the full name extracted from the MOBI header.
 func (m *Mobi) Title() string {

@@ -31,6 +31,7 @@ var (
 	ErrLimitExceeded        = book.ErrLimitExceeded
 	ErrNoTransformer        = book.ErrNoTransformer
 	ErrUnsupportedMediaType = book.ErrUnsupportedMediaType
+	ErrDRM                  = book.ErrDRM
 )
 
 var (

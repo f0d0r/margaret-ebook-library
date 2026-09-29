@@ -113,6 +113,11 @@ func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read opf file: %w", err)
 	}
+
+	if err := checkDRM(zr, p); err != nil {
+		return nil, err
+	}
+
 	resources, readingOrder, cover := r.readResources(zr, p)
 
 	return &epubBook{
