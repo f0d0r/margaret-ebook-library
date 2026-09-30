@@ -255,7 +255,7 @@ func (r *MobiReader) content(pdbDb *PdbDb, mobiDoc *Mobi) []book.Resource {
 			if errors.Is(err, book.ErrDRM) {
 				return nil
 			}
-			// For corruption/parse failures that might be recoverable, 
+			// For corruption/parse failures that might be recoverable,
 			// we still fallback to MOBI6 path but log the KF8 failure
 			// (this preserves existing behavior while improving error clarity)
 		}
