@@ -16,9 +16,10 @@ type MobiReader struct {
 }
 
 // NewMobiReader creates a new MOBI reader instance with the given
-// safety limits.
+// safety limits. A zero Config is normalized to [config.DefaultConfig] so that
+// a hand-built struct cannot silently disable the limits or the KF8 fallback.
 func NewMobiReader(cfg config.Config) *MobiReader {
-	return &MobiReader{cfg: cfg}
+	return &MobiReader{cfg: cfg.Normalize()}
 }
 
 func (r *MobiReader) Supports(b book.Blob) bool {
@@ -44,7 +45,7 @@ func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 	}
 	pdbDb, err := ReadPdbDb(b, maxRecordSize)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read PDB database: %w", err)
+		return nil, fmt.Errorf("%w: failed to read PDB database: %w", book.ErrCorrupt, err)
 	}
 
 	maxExthRecords := r.cfg.MaxExthRecords
@@ -53,7 +54,7 @@ func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 	}
 	mobiDoc, err := ReadMobi(pdbDb, maxExthRecords)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read MOBI file: %w", err)
+		return nil, fmt.Errorf("%w: failed to read MOBI file: %w", book.ErrParseFailed, err)
 	}
 
 	if isDRMProtected(mobiDoc) {
@@ -228,51 +229,50 @@ func (r *MobiReader) buildMobiResources(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi
 
 // content returns the book's text as HTML resources.
 // For MOBI6 it is a single index.html; for MOBI8/KF8 it is multiple part files in correct order.
+//
+// A KF8 parse failure never fails the whole read silently: the returned
+// resource carries the error on Open, so the caller sees it explicitly. The
+// only exception is a dual MOBI6+KF8 file with KF8FallbackToMOBI6 enabled
+// (the default), where the intact MOBI6 content is served instead.
 func (r *MobiReader) content(pdbDb *PdbDb, mobiDoc *Mobi) []book.Resource {
 	maxResourceSize := r.cfg.MaxResourceSize
 	if maxResourceSize <= 0 {
 		maxResourceSize = config.DefaultConfig().MaxResourceSize
 	}
 
-	// Try MOBI8 path first
+	// Try the MOBI8 path first. It only returns an error when the KF8 content
+	// could not be produced at all (DRM, unusable indices, limit exceeded);
+	// readMobi8Indices already degrades to a single raw-ML resource when the
+	// index tables are broken.
 	if isMobi8(mobiDoc) {
 		resources, err := r.contentMobi8(pdbDb, mobiDoc, maxResourceSize)
-		if err != nil {
-			// Per-resource limit exceeded: return a single resource that
-			// fails on Open with ErrLimitExceeded so the error is explicit
-			// to the caller (instead of silently falling back to MOBI6).
-			if errors.Is(err, book.ErrLimitExceeded) {
-				return []book.Resource{{
-					Name:      "part0000.html",
-					MediaType: "application/x-mobipocket-html",
-					Size:      0,
-					Open: func() (io.ReadCloser, error) {
-						return nil, err
-					},
-				}}
-			}
-			// For DRM errors, return immediately - don't fallback to MOBI6
-			if errors.Is(err, book.ErrDRM) {
-				return nil
-			}
-			// For corruption/parse failures: respect KF8FallbackToMOBI6 config
-			if !r.cfg.KF8FallbackToMOBI6 {
-				// Return a resource that fails on Open with the error
-				return []book.Resource{{
-					Name:      "part0000.html",
-					MediaType: "application/x-mobipocket-html",
-					Size:      0,
-					Open: func() (io.ReadCloser, error) {
-						return nil, fmt.Errorf("KF8 parsing failed: %w", err)
-					},
-				}}
-			}
-			// Fallback to MOBI6 if MOBI8 parsing failed (config default: true)
+		if err == nil && resources == nil {
+			// No KF8 content at all: treat it as a parse failure so the
+			// fallback/strict handling below applies.
+			err = fmt.Errorf("no KF8 content produced")
 		}
-		if resources != nil {
+		if err == nil {
 			return resources
 		}
-		// fallback to MOBI6 if MOBI8 parsing returned nil resources
+		switch {
+		case errors.Is(err, book.ErrLimitExceeded):
+			// Surface the limit on Open instead of hiding it behind the MOBI6
+			// fallback, which would silently return different content.
+			return []book.Resource{failingResource("part0000.html", err)}
+		case errors.Is(err, book.ErrDRM):
+			// A DRM-protected KF8 part cannot be read, and the MOBI6 part of a
+			// dual file is DRM protected as well; never fall back here.
+			return []book.Resource{failingResource("part0000.html", err)}
+		case !r.cfg.KF8Fallback() || mobiDoc.KF8 == nil:
+			// Fallback disabled, or no MOBI6 content to fall back to: a
+			// standalone KF8 file has no second rendering to serve.
+			return []book.Resource{failingResource("part0000.html", kf8ContentError(err))}
+		}
+		// A joint MOBI6+KF8 file with the fallback enabled: serve the intact
+		// MOBI6 content when it exists, otherwise report the KF8 failure.
+		if mobiDoc.TextRecordCount == 0 || 1 >= len(pdbDb.PdbRecords) {
+			return []book.Resource{failingResource("part0000.html", kf8ContentError(err))}
+		}
 	}
 
 	// MOBI6 text records always start at record 1 (calibre:
@@ -310,81 +310,89 @@ func isMobi8(mobiDoc *Mobi) bool {
 }
 
 func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobiDoc *Mobi, maxResourceSize int64) (resources []book.Resource, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			resources = nil
-			err = fmt.Errorf("panic in contentMobi8: %v", r)
+	err = withRecover("contentMobi8", func() error {
+		rawML, kf8, offset, err := extractMobi8Raw(pdbDb, mobiDoc, -1)
+		if err != nil || len(rawML) == 0 {
+			return err
 		}
-	}()
-	rawML, kf8, offset, err := extractMobi8Raw(pdbDb, mobiDoc, -1)
-	if err != nil || len(rawML) == 0 {
-		return nil, err
-	}
-	sections, err := loadSections(pdbDb)
-	if err != nil {
-		return nil, err
-	}
-	kf8Sections := sections
-	if offset > 1 && offset-1 < len(sections) {
-		kf8Sections = sections[offset-1:]
-	}
-	codec := kf8.Codec
-	if codec == "" {
-		codec = "utf-8"
-	}
-	flowTable, files, elems, err := readMobi8Indices(kf8Sections, kf8, codec)
-	if err != nil {
-		if len(rawML) > 0 {
-			if maxResourceSize > 0 && int64(len(rawML)) > maxResourceSize {
-				return nil, fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, "part0000.html", len(rawML), maxResourceSize)
+		sections, err := loadSections(pdbDb)
+		if err != nil {
+			return err
+		}
+		kf8Sections := sections
+		if offset > 1 && offset-1 < len(sections) {
+			kf8Sections = sections[offset-1:]
+		}
+		codec := kf8.Codec
+		if codec == "" {
+			codec = "utf-8"
+		}
+		flowTable, files, elems, err := readMobi8Indices(kf8Sections, kf8, codec)
+		if err != nil {
+			if len(rawML) == 0 {
+				return err
 			}
-			return []book.Resource{{
-				Name:      "part0000.html",
-				MediaType: "application/x-mobipocket-html",
-				Size:      int64(len(rawML)),
-				Open: func() (io.ReadCloser, error) {
-					return io.NopCloser(bytes.NewReader(rawML)), nil
-				},
-			}}, nil
+			// The index tables are unusable but the raw markup was decompressed:
+			// serve it as a single resource instead of dropping the content.
+			if maxResourceSize > 0 && int64(len(rawML)) > maxResourceSize {
+				return fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, "part0000.html", len(rawML), maxResourceSize)
+			}
+			resources = []book.Resource{htmlResource("part0000.html", rawML)}
+			return nil
 		}
-		return nil, err
-	}
 
-	parts, partInfos, err := buildMobi8Parts(rawML, flowTable, files, elems)
-	if err != nil || len(parts) == 0 {
-		return nil, err
-	}
+		parts, partInfos, err := buildMobi8Parts(rawML, flowTable, files, elems)
+		if err != nil || len(parts) == 0 {
+			return err
+		}
 
-	for i, p := range parts {
-		if maxResourceSize > 0 && int64(len(p)) > maxResourceSize {
-			name := partInfos[i].Filename
+		for i, p := range parts {
+			if maxResourceSize > 0 && int64(len(p)) > maxResourceSize {
+				name := partInfos[i].Filename
+				if name == "" {
+					name = fmt.Sprintf("part%04d.html", i)
+				}
+				return fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, name, len(p), maxResourceSize)
+			}
+		}
+
+		resources = make([]book.Resource, 0, len(parts))
+		for i, part := range parts {
+			info := partInfos[i]
+			name := info.Filename
 			if name == "" {
 				name = fmt.Sprintf("part%04d.html", i)
 			}
-			return nil, fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, name, len(p), maxResourceSize)
+			resources = append(resources, htmlResource(name, part))
 		}
-	}
+		return nil
+	})
+	return
+}
 
-	resources = make([]book.Resource, 0, len(parts))
-	for i, part := range parts {
-		p := part
-		info := partInfos[i]
-		name := info.Filename
-		if name == "" {
-			name = fmt.Sprintf("part%04d.html", i)
-		}
-		size := int64(len(p))
-		resources = append(resources, book.Resource{
-			Name:      name,
-			MediaType: "application/x-mobipocket-html",
-			Size:      size,
-			Open: func() (io.ReadCloser, error) {
-				if maxResourceSize > 0 && int64(len(p)) > maxResourceSize {
-					return nil, fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, name, len(p), maxResourceSize)
-				}
-				return io.NopCloser(bytes.NewReader(p)), nil
-			},
-		})
+// htmlResource builds a KF8 content resource that serves data on Open.
+// KF8 parts are bounded at parse time (MaxResourceSize is checked before the
+// resource is handed out), so Open simply returns the bytes.
+func htmlResource(name string, data []byte) book.Resource {
+	return book.Resource{
+		Name:      name,
+		MediaType: "application/x-mobipocket-html",
+		Size:      int64(len(data)),
+		Open: func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(data)), nil
+		},
 	}
-	return resources, nil
+}
+
+// failingResource builds a KF8 content resource that reports err on Open, so a
+// parse failure reaches the caller through the normal resource API.
+func failingResource(name string, err error) book.Resource {
+	return book.Resource{
+		Name:      name,
+		MediaType: "application/x-mobipocket-html",
+		Size:      0,
+		Open: func() (io.ReadCloser, error) {
+			return nil, err
+		},
+	}
 }

@@ -59,7 +59,7 @@ func resolveOptions(opts []Option) config.Config {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	fallback := d.KF8FallbackToMOBI6
+	fallback := d.KF8Fallback()
 	if o.kf8FallbackToMOBI6 != nil {
 		fallback = *o.kf8FallbackToMOBI6
 	}
@@ -67,6 +67,6 @@ func resolveOptions(opts []Option) config.Config {
 		MaxResourceSize:    o.maxResourceSize,
 		MaxRecordSize:      o.maxRecordSize,
 		MaxExthRecords:     o.maxExthRecords,
-		KF8FallbackToMOBI6: fallback,
+		KF8FallbackToMOBI6: &fallback,
 	}
 }
