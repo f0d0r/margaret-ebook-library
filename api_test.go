@@ -504,3 +504,28 @@ func buildZeroRecordMOBI() []byte {
 
 	return header
 }
+
+// TestReadFromBlob_MalformedMOBIReturnsCorrupt pins the public sentinel
+// contract for a malformed MOBI container: the caller gets ErrCorrupt through
+// errors.Is instead of an unclassified error.
+func TestReadFromBlob_MalformedMOBIReturnsCorrupt(t *testing.T) {
+	// Passes format detection, but the record table runs past EOF.
+	raw := buildMinimalMOBI()
+	_, err := ReadFromBlob(book.NewBytesBlob(raw[:80]))
+	if !errors.Is(err, book.ErrCorrupt) {
+		t.Errorf("ReadFromBlob() error = %v, want ErrCorrupt", err)
+	}
+}
+
+// TestKF8FallbackOptionIsPublicAPI keeps the exported option wired to the
+// reader: it must be usable straight from the top-level package.
+func TestKF8FallbackOptionIsPublicAPI(t *testing.T) {
+	opt := WithKF8FallbackToMOBI6(false)
+	if opt == nil {
+		t.Fatal("WithKF8FallbackToMOBI6 returned nil")
+	}
+	cfg := resolveOptions([]Option{opt})
+	if cfg.KF8Fallback() {
+		t.Error("KF8Fallback() = true after WithKF8FallbackToMOBI6(false)")
+	}
+}

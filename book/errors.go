@@ -29,4 +29,12 @@ var (
 	// content (Kobo kdrm), as well as MOBI files with DRM records or
 	// PalmDOC/MOBI encryption, are rejected with this error.
 	ErrDRM = errors.New("drm protected")
+
+	// ErrCorrupt is returned when the e-book file is malformed or corrupted
+	// and cannot be properly parsed.
+	ErrCorrupt = errors.New("corrupt file")
+
+	// ErrParseFailed is returned when parsing of format-specific structures
+	// fails due to invalid data or unexpected format variations.
+	ErrParseFailed = errors.New("parse failed")
 )

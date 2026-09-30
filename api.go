@@ -32,6 +32,8 @@ var (
 	ErrNoTransformer        = book.ErrNoTransformer
 	ErrUnsupportedMediaType = book.ErrUnsupportedMediaType
 	ErrDRM                  = book.ErrDRM
+	ErrCorrupt              = book.ErrCorrupt
+	ErrParseFailed          = book.ErrParseFailed
 )
 
 var (

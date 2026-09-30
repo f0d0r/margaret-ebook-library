@@ -23,7 +23,7 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 | EPUB (`.epub`)                 | ✅            | —     |
 | KEPUB (`.kepub.epub`)          | ✅ (as EPUB)  | —     |
 | MOBI6 / PalmDOC (`.mobi`, `.prc`, `.azw`) | ✅  | —     |
-| KF8 / MOBI8 (`.mobi`, `.azw`, `.azw3`, `.prc`) | ⚠️ experimental | —  |
+| KF8 / MOBI8 (`.mobi`, `.azw`, `.azw3`, `.prc`) | ✅ | —  |
 | FB2 / FBZ (`.fb2`, `.fbz`, `.fb2.zip`) | ✅   | —     |
 
 > **KEPUB status:** a KEPUB is a valid EPUB archive whose content documents
@@ -40,13 +40,6 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 > files with DRM records or PalmDOC/MOBI text encryption. Font obfuscation
 > (`adobe#RC`, `idpf.org/2008/embedding`) and leftover/empty `rights.xml`
 > files are not treated as DRM.
-
-> **KF8 / MOBI8 status (0.1.0):** KF8 reading is experimental and best-effort.
-> The `index`/`cncx`/`fdst`/`mobi8` code paths have no fixture coverage yet,
-> and if MOBI8 parsing fails the reader silently falls back to the MOBI6
-> content of the file (`internal/mobi/reader.go`). The library contains no
-> `recover()` calls, so a malformed file that triggers a panic propagates it
-> to the caller. A full KF8 fixture suite is planned after 0.1.0.
 
 ## Requirements
 
@@ -247,6 +240,31 @@ if err != nil {
     log.Fatal(err)
 }
 ```
+
+### KF8 / MOBI8 fallback behaviour
+
+A joint MOBI6+KF8 file (a `.mobi`/`.azw` carrying both renderings, separated by
+a `BOUNDARY` record) is read from its KF8 part. When that KF8 part cannot be
+parsed — corrupt index tables, a broken flow table, unreadable markup — the
+reader falls back to the intact MOBI6 content, which is the same content the
+book exposes to older readers. This is the default so that a damaged KF8 part
+never costs the reader the book.
+
+The fallback is configurable. Turn it off for Calibre-like strict behaviour, so
+a KF8 parse failure is reported instead of silently serving different content:
+
+```go
+b, err := ebook.Read(
+    "books/dual.mobi",
+    ebook.WithKF8FallbackToMOBI6(false), // report KF8 parse failures
+)
+```
+
+The parse error does not abort the read: the returned content resource reports
+it from `Open` (matched with `errors.Is` against `ebook.ErrCorrupt` or
+`ebook.ErrParseFailed`), so metadata and the remaining resources stay usable.
+Two cases never fall back: a standalone KF8 file (there is no MOBI6 rendering to
+serve), and a DRM-protected file, which is rejected with `ebook.ErrDRM`.
 
 ### Working with resources
 
@@ -459,6 +477,8 @@ Sentinel errors are matched with `errors.Is`:
 | ----- | ------- |
 | `ebook.ErrUnsupportedFormat` | Unknown or unsupported ebook format |
 | `ebook.ErrDRM` | The book is DRM protected and cannot be read |
+| `ebook.ErrCorrupt` | The file is malformed or truncated (unreadable container, recovered parse panic) |
+| `ebook.ErrParseFailed` | A format-specific structure could not be parsed (headers, indices, metadata) |
 | `ebook.ErrLimitExceeded` | A safety limit (resource size, record size, EXTH count) was hit — raise it with a functional option |
 | `ebook.ErrNoTransformer` | No conversion path to the requested media type |
 | `ebook.ErrUnsupportedMediaType` | The requested media type itself is not supported |

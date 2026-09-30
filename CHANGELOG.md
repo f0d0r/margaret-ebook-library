@@ -9,6 +9,23 @@
   spine-like reading order (notes bodies marked non-linear), transformer
   to plain text, embedded images and cover image. Detection and metadata
   follow calibre's `get_fb2_data` and `metadata/fb2.py` rules.
+- `WithKF8FallbackToMOBI6` option controlling whether a KF8 parse failure in a
+  joint MOBI6+KF8 file falls back to the MOBI6 content (default `true`).
+
+### Changed
+
+- KF8/MOBI8 reading is no longer experimental: parse failures no longer fall
+  back silently, they are reported through the content resource's `Open` as
+  `ErrCorrupt` / `ErrParseFailed` unless the MOBI6 fallback is enabled.
+- Panic recovery for malformed KF8 input is centralized in one helper and
+  classifies recovered panics as `ErrCorrupt`.
+- A zero-value `Config` now keeps the documented defaults (limits and KF8
+  fallback) instead of silently disabling the fallback.
+
+### Fixed
+
+- KF8 content is no longer dropped when the index tables cannot be read: the
+  decompressed markup is served as a single resource.
 
 ## [0.1.1] - 2026-09-18
 

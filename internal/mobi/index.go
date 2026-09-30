@@ -319,46 +319,47 @@ func getTagSectionStart(data []byte, hdr *indxHeader) int {
 // sections is slice of raw PDB record data (ordered), idx is 0-based PDB record index (KF8-relative).
 // codec is "utf-8" or "cp1252".
 // Returns ordered table (map + ordered keys) and CNCX.
-func ReadIndex(sections [][]byte, idx int, codec string) (map[string]map[uint32][]int, []string, CNCX, error) {
-	table := make(map[string]map[uint32][]int)
-	var ordered []string
-	cncx := make(CNCX)
-
-	if idx < 0 || idx >= len(sections) {
-		return table, ordered, cncx, fmt.Errorf("index %d out of range %d", idx, len(sections))
-	}
-	data := sections[idx]
-	hdr, err := parseIndxHeader(data)
-	if err != nil {
-		return table, ordered, cncx, err
-	}
-	indxCount := hdr.Count
-
-	if hdr.Ncncx > 0 {
-		off := idx + indxCount + 1
-		var cncxRecords [][]byte
-		for i := off; i < off+hdr.Ncncx && i < len(sections); i++ {
-			cncxRecords = append(cncxRecords, sections[i])
+func ReadIndex(sections [][]byte, idx int, codec string) (table map[string]map[uint32][]int, ordered []string, cncx CNCX, err error) {
+	table = make(map[string]map[uint32][]int)
+	cncx = make(CNCX)
+	err = withRecover("ReadIndex", func() error {
+		if idx < 0 || idx >= len(sections) {
+			return fmt.Errorf("index %d out of range %d", idx, len(sections))
 		}
-		c, err := parseCNCX(cncxRecords, codec)
-		if err == nil {
-			cncx = c
+		data := sections[idx]
+		hdr, err := parseIndxHeader(data)
+		if err != nil {
+			return err
 		}
-	}
+		indxCount := hdr.Count
 
-	tagSectionStart := getTagSectionStart(data, hdr)
-	if tagSectionStart+4 > len(data) {
-		return table, ordered, cncx, fmt.Errorf("TAGX not found")
-	}
-	controlByteCount, tags, err := parseTagxSection(data[tagSectionStart:])
-	if err != nil {
-		return table, ordered, cncx, err
-	}
+		if hdr.Ncncx > 0 {
+			off := idx + indxCount + 1
+			var cncxRecords [][]byte
+			for i := off; i < off+hdr.Ncncx && i < len(sections); i++ {
+				cncxRecords = append(cncxRecords, sections[i])
+			}
+			c, err := parseCNCX(cncxRecords, codec)
+			if err == nil {
+				cncx = c
+			}
+		}
 
-	for i := idx + 1; i < idx+1+indxCount && i < len(sections); i++ {
-		recData := sections[i]
-		_ = parseIndexRecord(table, &ordered, recData, controlByteCount, tags, codec, hdr.OrdtMap)
-	}
+		tagSectionStart := getTagSectionStart(data, hdr)
+		if tagSectionStart+4 > len(data) {
+			return fmt.Errorf("TAGX not found")
+		}
+		controlByteCount, tags, err := parseTagxSection(data[tagSectionStart:])
+		if err != nil {
+			return err
+		}
 
-	return table, ordered, cncx, nil
+		for i := idx + 1; i < idx+1+indxCount && i < len(sections); i++ {
+			if err := parseIndexRecord(table, &ordered, sections[i], controlByteCount, tags, codec, hdr.OrdtMap); err != nil {
+				return fmt.Errorf("index record %d: %w", i, err)
+			}
+		}
+		return nil
+	})
+	return table, ordered, cncx, err
 }
