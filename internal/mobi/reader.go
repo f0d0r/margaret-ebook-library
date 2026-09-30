@@ -255,14 +255,24 @@ func (r *MobiReader) content(pdbDb *PdbDb, mobiDoc *Mobi) []book.Resource {
 			if errors.Is(err, book.ErrDRM) {
 				return nil
 			}
-			// For corruption/parse failures that might be recoverable,
-			// we still fallback to MOBI6 path but log the KF8 failure
-			// (this preserves existing behavior while improving error clarity)
+			// For corruption/parse failures: respect KF8FallbackToMOBI6 config
+			if !r.cfg.KF8FallbackToMOBI6 {
+				// Return a resource that fails on Open with the error
+				return []book.Resource{{
+					Name:      "part0000.html",
+					MediaType: "application/x-mobipocket-html",
+					Size:      0,
+					Open: func() (io.ReadCloser, error) {
+						return nil, fmt.Errorf("KF8 parsing failed: %w", err)
+					},
+				}}
+			}
+			// Fallback to MOBI6 if MOBI8 parsing failed (config default: true)
 		}
 		if resources != nil {
 			return resources
 		}
-		// fallback to MOBI6 if MOBI8 parsing failed
+		// fallback to MOBI6 if MOBI8 parsing returned nil resources
 	}
 
 	// MOBI6 text records always start at record 1 (calibre:

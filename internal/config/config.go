@@ -14,13 +14,20 @@ type Config struct {
 
 	// MaxExthRecords bounds the number of EXTH records parsed from a MOBI file.
 	MaxExthRecords int
+
+	// KF8FallbackToMOBI6 controls whether KF8 parsing falls back to MOBI6
+	// on parse failures (corrupt, malformed, etc.). Default is true to
+	// preserve existing behavior. Set to false to match Calibre's behavior
+	// where KF8 parse failures return an error instead of silently falling back.
+	KF8FallbackToMOBI6 bool
 }
 
 // DefaultConfig returns the library-wide default safety limits.
 func DefaultConfig() Config {
 	return Config{
-		MaxResourceSize: 100 * 1024 * 1024, // 100 MB
-		MaxRecordSize:   100 * 1024 * 1024, // 100 MB
-		MaxExthRecords:  256,
+		MaxResourceSize:    100 * 1024 * 1024, // 100 MB
+		MaxRecordSize:      100 * 1024 * 1024, // 100 MB
+		MaxExthRecords:     256,
+		KF8FallbackToMOBI6: true,
 	}
 }
