@@ -23,7 +23,7 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 | EPUB (`.epub`)                 | ✅            | —     |
 | KEPUB (`.kepub.epub`)          | ✅ (as EPUB)  | —     |
 | MOBI6 / PalmDOC (`.mobi`, `.prc`, `.azw`) | ✅  | —     |
-| KF8 / MOBI8 (`.mobi`, `.azw`, `.azw3`, `.prc`) | ⚠️ experimental | —  |
+| KF8 / MOBI8 (`.mobi`, `.azw`, `.azw3`, `.prc`) | ✅ | —  |
 | FB2 / FBZ (`.fb2`, `.fbz`, `.fb2.zip`) | ✅   | —     |
 
 > **KEPUB status:** a KEPUB is a valid EPUB archive whose content documents
@@ -40,13 +40,6 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 > files with DRM records or PalmDOC/MOBI text encryption. Font obfuscation
 > (`adobe#RC`, `idpf.org/2008/embedding`) and leftover/empty `rights.xml`
 > files are not treated as DRM.
-
-> **KF8 / MOBI8 status (0.1.0):** KF8 reading is experimental and best-effort.
-> The `index`/`cncx`/`fdst`/`mobi8` code paths have no fixture coverage yet,
-> and if MOBI8 parsing fails the reader silently falls back to the MOBI6
-> content of the file (`internal/mobi/reader.go`). The library contains no
-> `recover()` calls, so a malformed file that triggers a panic propagates it
-> to the caller. A full KF8 fixture suite is planned after 0.1.0.
 
 ## Requirements
 

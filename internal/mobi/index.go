@@ -319,10 +319,18 @@ func getTagSectionStart(data []byte, hdr *indxHeader) int {
 // sections is slice of raw PDB record data (ordered), idx is 0-based PDB record index (KF8-relative).
 // codec is "utf-8" or "cp1252".
 // Returns ordered table (map + ordered keys) and CNCX.
-func ReadIndex(sections [][]byte, idx int, codec string) (map[string]map[uint32][]int, []string, CNCX, error) {
-	table := make(map[string]map[uint32][]int)
-	var ordered []string
-	cncx := make(CNCX)
+func ReadIndex(sections [][]byte, idx int, codec string) (table map[string]map[uint32][]int, ordered []string, cncx CNCX, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			table = make(map[string]map[uint32][]int)
+			ordered = nil
+			cncx = make(CNCX)
+			err = fmt.Errorf("panic in ReadIndex: %v", r)
+		}
+	}()
+	table = make(map[string]map[uint32][]int)
+	ordered = nil
+	cncx = make(CNCX)
 
 	if idx < 0 || idx >= len(sections) {
 		return table, ordered, cncx, fmt.Errorf("index %d out of range %d", idx, len(sections))

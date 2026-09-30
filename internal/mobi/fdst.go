@@ -8,7 +8,13 @@ import (
 // parseFDST parses the FDST record.
 // data is the raw FDST record (sections[fdstidx]).
 // Returns flow table as slice of [start,end] pairs.
-func parseFDST(data []byte) ([][2]int, error) {
+func parseFDST(data []byte) (flowTable [][2]int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			flowTable = nil
+			err = fmt.Errorf("panic in parseFDST: %v", r)
+		}
+	}()
 	if len(data) < 8 || string(data[:4]) != "FDST" {
 		return nil, fmt.Errorf("not a valid FDST record")
 	}

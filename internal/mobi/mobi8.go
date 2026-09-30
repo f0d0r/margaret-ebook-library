@@ -48,6 +48,14 @@ type FlowInfo struct {
 // codec is "utf-8" or "cp1252".
 // mobi is the KF8 Mobi header with KF8-relative indices.
 func readMobi8Indices(sections [][]byte, mobi *Mobi, codec string) (flowTable [][2]int, files []FileInfo, elems []Elem, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			flowTable = nil
+			files = nil
+			elems = nil
+			err = fmt.Errorf("panic in readMobi8Indices: %v", r)
+		}
+	}()
 	// FDST
 	if mobi.FdstIdx != NullIndex {
 		if int(mobi.FdstIdx) < len(sections) {
@@ -154,6 +162,13 @@ func atoiOrZero(s string) int {
 // flowTable is from FDST or nil (fallback to single flow).
 // files and elems from SKEL/DIV.
 func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems []Elem) (parts [][]byte, partInfos []Part, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			parts = nil
+			partInfos = nil
+			err = fmt.Errorf("panic in buildMobi8Parts: %v", r)
+		}
+	}()
 	flows := [][]byte{}
 	ft := flowTable
 	if len(ft) == 0 {
@@ -304,8 +319,14 @@ func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems [
 
 // loadSections loads all PDB records as raw bytes for INDX parsing.
 // It returns a slice where index i corresponds to PDB record i.
-func loadSections(pdbDb *PdbDb) ([][]byte, error) {
-	sections := make([][]byte, len(pdbDb.PdbRecords))
+func loadSections(pdbDb *PdbDb) (sections [][]byte, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			sections = nil
+			err = fmt.Errorf("panic in loadSections: %v", r)
+		}
+	}()
+	sections = make([][]byte, len(pdbDb.PdbRecords))
 	for i, rec := range pdbDb.PdbRecords {
 		data, err := rec.Data()
 		if err != nil {
@@ -321,23 +342,30 @@ func loadSections(pdbDb *PdbDb) ([][]byte, error) {
 
 // extractMobi8Raw extracts the decompressed KF8 rawML.
 // It handles joint vs standalone. Returns rawML, the KF8 Mobi header to use, and the offset used.
-func extractMobi8Raw(pdbDb *PdbDb, mobi *Mobi, maxSize int64) ([]byte, *Mobi, int, error) {
-	var kf8 *Mobi
-	var offset int
+func extractMobi8Raw(pdbDb *PdbDb, mobi *Mobi, maxSize int64) (rawML []byte, kf8Mobi *Mobi, offset int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			rawML = nil
+			kf8Mobi = nil
+			offset = 0
+			err = fmt.Errorf("panic in extractMobi8Raw: %v", r)
+		}
+	}()
+	var offsetVal int
 	if mobi.KF8 != nil {
-		kf8 = mobi.KF8
-		offset = max(int(mobi.EXTH.KF8HeaderIndex())+1, 1)
+		kf8Mobi = mobi.KF8
+		offsetVal = max(int(mobi.EXTH.KF8HeaderIndex())+1, 1)
 	} else if mobi.MobiVersion == 8 {
-		kf8 = mobi
-		offset = 1
+		kf8Mobi = mobi
+		offsetVal = 1
 	} else {
 		return nil, nil, 0, fmt.Errorf("not a KF8 file")
 	}
-	raw, err := extractTextWithOffset(pdbDb, kf8, offset, maxSize)
+	raw, err := extractTextWithOffset(pdbDb, kf8Mobi, offsetVal, maxSize)
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	return raw, kf8, offset, nil
+	return raw, kf8Mobi, offsetVal, nil
 }
 
 // locateBegEndOfTag mirrors calibre's locate_beg_end_of_tag.

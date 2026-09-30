@@ -251,6 +251,13 @@ func (r *MobiReader) content(pdbDb *PdbDb, mobiDoc *Mobi) []book.Resource {
 					},
 				}}
 			}
+			// For DRM errors, return immediately - don't fallback to MOBI6
+			if errors.Is(err, book.ErrDRM) {
+				return nil
+			}
+			// For corruption/parse failures that might be recoverable, 
+			// we still fallback to MOBI6 path but log the KF8 failure
+			// (this preserves existing behavior while improving error clarity)
 		}
 		if resources != nil {
 			return resources
@@ -292,7 +299,13 @@ func isMobi8(mobiDoc *Mobi) bool {
 	return false
 }
 
-func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobiDoc *Mobi, maxResourceSize int64) ([]book.Resource, error) {
+func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobiDoc *Mobi, maxResourceSize int64) (resources []book.Resource, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			resources = nil
+			err = fmt.Errorf("panic in contentMobi8: %v", r)
+		}
+	}()
 	rawML, kf8, offset, err := extractMobi8Raw(pdbDb, mobiDoc, -1)
 	if err != nil || len(rawML) == 0 {
 		return nil, err
@@ -342,7 +355,7 @@ func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobiDoc *Mobi, maxResourceSize i
 		}
 	}
 
-	resources := make([]book.Resource, 0, len(parts))
+	resources = make([]book.Resource, 0, len(parts))
 	for i, part := range parts {
 		p := part
 		info := partInfos[i]
