@@ -5,18 +5,16 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"path"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
-	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	"github.com/f0d0r/margaret-ebook-library/internal/opf"
 )
 
 type EpubReader struct {
 	cfg       config.Config
 	ocfReader OcfReader
-	opfReader OpfReader
 }
 
 // NewEpubReader creates a new EPUB reader instance with the given
@@ -25,7 +23,6 @@ func NewEpubReader(cfg config.Config) *EpubReader {
 	return &EpubReader{
 		cfg:       cfg,
 		ocfReader: NewOcfReader(),
-		opfReader: NewOpfReader(),
 	}
 }
 
@@ -109,7 +106,7 @@ func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
 		return nil, fmt.Errorf("failed to read ocf file: %w", err)
 	}
 
-	p, err := r.opfReader.Read(zr, c)
+	p, err := readPackage(zr, c)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read opf file: %w", err)
 	}
@@ -122,10 +119,10 @@ func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
 
 	return &epubBook{
 		metadata: book.Metadata{
-			Title:       r.opfReader.Title(p),
-			Authors:     r.opfReader.Authors(p),
-			Description: r.opfReader.Description(p),
-			Languages:   r.opfReader.Languages(p),
+			Title:       p.Title(),
+			Authors:     p.Authors(),
+			Description: p.Description(),
+			Languages:   p.Languages(),
 		},
 		resources:  book.NewResourceSet(resources, readingOrder, cover),
 		version:    p.Version,
@@ -134,103 +131,21 @@ func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
 }
 
 // readResources returns all manifest resources, spine reading order with Linear flag, and cover.
-func (r *EpubReader) readResources(zr *zip.Reader, p Package) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource) {
-	// All: manifest order, only entries present in ZIP.
-	resolvedToResource := make(map[string]*book.Resource, len(p.Manifest.Items))
-	all := make([]*book.Resource, 0, len(p.Manifest.Items))
-	for _, item := range p.Manifest.Items {
-		resolved := p.ResolvePath(item.Href)
-		file := compressutil.Find(zr, resolved)
+func (r *EpubReader) readResources(zr *zip.Reader, p opf.Package) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource) {
+	return opf.BuildResources(p, func(item opf.Item) (opf.EntrySource, bool) {
+		file := compressutil.Find(zr, p.ResolvePath(item.Href))
 		if file == nil {
-			continue
+			return opf.EntrySource{}, false
 		}
-		res := r.resource(item, file)
-		res.ResolvedHref = util.CleanHref(res.ResolvedHref)
-		ptr := new(book.Resource)
-		*ptr = res
-		all = append(all, ptr)
-		resolvedToResource[util.CleanHref(resolved)] = ptr
-	}
-
-	// ReadingOrder: spine order, including linear="no" with flag, reusing pointers from all when possible.
-	readingOrder := make([]book.ReadingOrderItem, 0, len(p.Spine.ItemRefs))
-	for _, itemRef := range p.Spine.ItemRefs {
-		item := r.opfReader.ItemById(p, itemRef.IdRef)
-		if item == nil {
-			continue
-		}
-		resolved := p.ResolvePath(item.Href)
-		file := compressutil.Find(zr, resolved)
-		if file == nil {
-			continue
-		}
-		key := util.CleanHref(resolved)
-		var resPtr *book.Resource
-		if existing, ok := resolvedToResource[key]; ok {
-			resPtr = existing
-		} else {
-			res := r.resource(*item, file)
-			res.ResolvedHref = util.CleanHref(res.ResolvedHref)
-			ptr := new(book.Resource)
-			*ptr = res
-			resPtr = ptr
-		}
-		linear := itemRef.Linear != "no"
-		readingOrder = append(readingOrder, book.ReadingOrderItem{Resource: resPtr, Linear: linear})
-	}
-
-	// Cover is derived from all: determine cover item first, then look it up in the already built map.
-	// No second Resource creation when the cover is already in all (common case).
-	var cover *book.Resource
-	if item := r.coverItem(p); item != nil {
-		coverKey := util.CleanHref(p.ResolvePath(item.Href))
-		if existing, ok := resolvedToResource[coverKey]; ok {
-			cover = existing
-		} else {
-			if file := compressutil.Find(zr, p.ResolvePath(item.Href)); file != nil {
-				res := r.resource(*item, file)
-				ptr := new(book.Resource)
-				*ptr = res
-				all = append(all, ptr)
-				resolvedToResource[coverKey] = ptr
-				cover = ptr
-			}
-		}
-	}
-	return all, readingOrder, cover
-}
-
-// resource builds a lazily-opened Resource from a manifest item and its
-// matching ZIP entry.
-func (r *EpubReader) resource(item Item, file *zip.File) book.Resource {
-	resolved := util.CleanHref(file.Name)
-	return book.Resource{
-		Id:           item.ID,
-		Name:         path.Base(file.Name),
-		Href:         item.Href,
-		ResolvedHref: resolved,
-		Properties:   item.Properties,
-		MediaType:    item.MediaType,
-		Size:         int64(file.UncompressedSize64),
-		Open: func() (io.ReadCloser, error) {
-			maxSize := r.cfg.MaxResourceSize
-			if maxSize <= 0 {
-				maxSize = config.DefaultConfig().MaxResourceSize
-			}
-			return compressutil.OpenLimited(file, maxSize)
-		},
-	}
-}
-
-// coverItem returns the manifest item that represents the cover image, if any.
-// Priority: first item with properties="cover-image", then <meta name="cover"> reference.
-func (r *EpubReader) coverItem(p Package) *Item {
-	coverItems := r.opfReader.ItemsByProperty(p, "cover-image")
-	if len(coverItems) > 0 {
-		return &coverItems[0]
-	}
-	if meta := r.opfReader.MetaByName(p, "cover"); meta != nil {
-		return r.opfReader.ItemById(p, meta.Content)
-	}
-	return nil
+		return opf.EntrySource{
+			Size: int64(file.UncompressedSize64),
+			Open: func() (io.ReadCloser, error) {
+				maxSize := r.cfg.MaxResourceSize
+				if maxSize <= 0 {
+					maxSize = config.DefaultConfig().MaxResourceSize
+				}
+				return compressutil.OpenLimited(file, maxSize)
+			},
+		}, true
+	})
 }

@@ -120,7 +120,7 @@ func TestGetCover(t *testing.T) {
 				t.Fatalf("failed to read container: %v", err)
 			}
 
-			pkg, err := reader.opfReader.Read(zr, container)
+			pkg, err := readPackage(zr, container)
 			if err != nil {
 				t.Fatalf("failed to read opf: %v", err)
 			}
