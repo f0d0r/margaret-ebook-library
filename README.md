@@ -5,7 +5,7 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.26.8-blue)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI, KF8/AZW3 or FB2 — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB, MOBI and FB2 reading.
+Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI, KF8/AZW3 or FB2 — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB, MOBI, FB2 and LIT reading.
 
 ## Features
 
@@ -25,6 +25,7 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 | MOBI6 / PalmDOC (`.mobi`, `.prc`, `.azw`) | ✅  | —     |
 | KF8 / MOBI8 (`.mobi`, `.azw`, `.azw3`, `.prc`) | ✅ | —  |
 | FB2 / FBZ (`.fb2`, `.fbz`, `.fb2.zip`) | ✅   | —     |
+| LIT (`.lit`, MS Reader)       | ✅ (metadata + content; sealed sections expose `ErrDRM` on `Open`) | — |
 
 > **KEPUB status:** a KEPUB is a valid EPUB archive whose content documents
 > carry Kobo rendering markup (`div#book-columns`/`div#book-inner` wrappers,
@@ -37,7 +38,10 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 > `ebook.ErrDRM` (matched with `errors.Is`): EPUB/KEPUB files with a
 > non-font-obfuscation `META-INF/encryption.xml` entry (Adobe ADEPT) or a
 > non-empty `rights.xml` with encrypted spine content (Kobo kdrm), and MOBI
-> files with DRM records or PalmDOC/MOBI text encryption. Font obfuscation
+> files with DRM records or PalmDOC/MOBI text encryption. LIT files with a
+> passport-locked (`/DRMStorage/Licenses/EUL`) container are rejected outright;
+> sealed/inscribed LIT sections whose keys don't verify stay listed but fail
+> with `ErrDRM` when opened. Font obfuscation
 > (`adobe#RC`, `idpf.org/2008/embedding`) and leftover/empty `rights.xml`
 > files are not treated as DRM.
 

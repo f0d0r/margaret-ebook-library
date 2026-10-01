@@ -1,11 +1,13 @@
 package lit
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	"github.com/f0d0r/margaret-ebook-library/internal/opf"
 )
 
 // litMagic is the 8-byte LIT signature at offset 0 ("ITOLITLS").
@@ -50,8 +52,70 @@ func (r *LitReader) Supports(b book.Blob) bool {
 	return string(buf[:]) == litMagic
 }
 
-// Read is not yet implemented; it currently reports a parse failure so
-// callers get an explicit error through the normal API.
+// splicePackageTail repairs MS-era packages whose </package> closes early
+// with manifest/spine siblings trailing behind (one unbalanced close
+// upstream shifts every close one level up). It moves the first
+// </package> past the trailing elements. Balanced documents have nothing
+// after </package> and pass through untouched; text content can never forge
+// the marker since literal angle brackets are doubled by the decoder.
+func splicePackageTail(decoded []byte) []byte {
+	const close = "</package>"
+	idx := bytes.Index(decoded, []byte(close))
+	if idx < 0 {
+		return decoded
+	}
+	tail := bytes.TrimSpace(decoded[idx+len(close):])
+	if len(tail) == 0 {
+		return decoded
+	}
+	if !bytes.Contains(tail, []byte("<manifest")) && !bytes.Contains(tail, []byte("<spine")) {
+		return decoded
+	}
+	out := make([]byte, 0, len(decoded))
+	out = append(out, decoded[:idx]...)
+	out = append(out, tail...)
+	out = append(out, close...)
+	return out
+}
+
+// Read parses the LIT container into metadata and lazily-opened resources.
 func (r *LitReader) Read(b book.Blob) (book.Book, error) {
-	return nil, fmt.Errorf("lit Read not yet implemented: %w", book.ErrParseFailed)
+	maxSize := r.cfg.MaxResourceSize
+	if maxSize <= 0 {
+		maxSize = config.DefaultConfig().MaxResourceSize
+	}
+	c, err := openContainer(b, maxSize)
+	if err != nil {
+		return nil, err
+	}
+
+	raw, err := c.getFile(metaEntry)
+	if err != nil {
+		return nil, err
+	}
+	opfText, err := decodeUnbinary(raw, &opfTables, c.manifestPaths(), nil, "")
+	if err != nil {
+		return nil, fmt.Errorf("lit: failed to decode OPF: %w", err)
+	}
+	opfText = splicePackageTail(opfText)
+
+	p, err := opf.Parse(bytes.NewReader(opfText))
+	if err != nil {
+		return nil, fmt.Errorf("lit: failed to parse OPF: %w", err)
+	}
+	p.OpfPath = "content.opf"
+
+	all, order, cover := c.buildResources(p, maxSize)
+
+	return &litBook{
+		metadata: book.Metadata{
+			Title:       p.Title(),
+			Authors:     p.Authors(),
+			Description: p.Description(),
+			Languages:   p.Languages(),
+		},
+		resources:  book.NewResourceSet(all, order, cover),
+		version:    litVersionString,
+		packageDoc: p,
+	}, nil
 }

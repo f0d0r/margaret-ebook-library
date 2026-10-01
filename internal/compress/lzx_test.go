@@ -20,6 +20,8 @@ type lzxTestWriter struct {
 	hold uint32
 	n    int
 	out  []byte
+	// frameOut counts output bytes across blocks for frame padding.
+	frameOut int64
 }
 
 func (w *lzxTestWriter) bits(v uint32, n int) {
@@ -30,6 +32,24 @@ func (w *lzxTestWriter) bits(v uint32, n int) {
 		w.out = append(w.out, byte(u), byte(u>>8))
 		w.hold <<= 16
 		w.n -= 16
+	}
+}
+
+// padFrame emits zero bits to the next 16-bit boundary. LZX frames are
+// unit-aligned in the stream, so the writer must pad whenever cumulative
+// output crosses a 32KB frame boundary mid-stream.
+func (w *lzxTestWriter) padFrame() {
+	for w.n%16 != 0 {
+		w.bits(0, 1)
+	}
+}
+
+// noteOut records n output bytes, padding on frame crossings.
+func (w *lzxTestWriter) noteOut(n int) {
+	prev := w.frameOut
+	w.frameOut += int64(n)
+	if prev/32768 != w.frameOut/32768 {
+		w.padFrame()
 	}
 }
 
@@ -72,18 +92,30 @@ func testCanonical(nSyms int, lens []uint8) map[int]struct {
 }
 
 func (w *lzxTestWriter) huffLensSlice(lens []uint8) {
-	w.huffLens(len(lens), lens)
+	w.huffLensOld(len(lens), lens, nil)
 }
 
-func (w *lzxTestWriter) huffLens(nSyms int, lens []uint8) {
+// huffLensOld encodes code lengths as deltas against old (nil = zeros,
+// i.e. a first block). Runs of equal nonzero targets use code 19.
+func (w *lzxTestWriter) huffLensOld(nSyms int, lens, old []uint8) {
 	pre := make([]uint8, 20)
-	// Determine needed pretree symbols: deltas and run codes for a simple
-	// literal encoding with zero runs via code 18.
-	type run struct{ sym, extra, nbits int }
+	// Determine needed pretree symbols: deltas and run codes. A 19-run
+	// carries a trailing value symbol (rep).
+	type run struct {
+		sym, extra, nbits int
+		rep               int
+	}
 	var ops []run
 	used := map[int]bool{}
-	// NOTE: first-block lengths start from zero per position, so each
-	// delta is taken against old=0: z = (0 - target) mod 17.
+	cur := make([]uint8, nSyms)
+	copy(cur, old)
+	delta := func(pos int, v uint8) int {
+		dz := (int(cur[pos]) - int(v)) % 17
+		if dz < 0 {
+			dz += 17
+		}
+		return dz
+	}
 	for x := 0; x < nSyms; {
 		if lens[x] == 0 {
 			z := x
@@ -94,34 +126,60 @@ func (w *lzxTestWriter) huffLens(nSyms int, lens []uint8) {
 			for n > 0 {
 				switch {
 				case n >= 20+31:
-					ops = append(ops, run{18, 31, 5})
+					ops = append(ops, run{sym: 18, extra: 31, nbits: 5})
 					n -= 20 + 31
 				case n >= 20:
-					ops = append(ops, run{18, n - 20, 5})
+					ops = append(ops, run{sym: 18, extra: n - 20, nbits: 5})
 					n = 0
 				case n >= 4+15:
-					ops = append(ops, run{17, 15, 4})
+					ops = append(ops, run{sym: 17, extra: 15, nbits: 4})
 					n -= 4 + 15
 				case n >= 4:
-					ops = append(ops, run{17, n - 4, 4})
+					ops = append(ops, run{sym: 17, extra: n - 4, nbits: 4})
 					n = 0
 				default:
-					ops = append(ops, run{0, 0, 0})
+					ops = append(ops, run{sym: 0})
 					n--
 				}
+			}
+			for i := x; i < z; i++ {
+				cur[i] = 0
 			}
 			x = z
 			continue
 		}
-		z := (0 - int(lens[x])) % 17
-		if z < 0 {
-			z += 17
+		// Run of equal nonzero targets: first literal, rest via 19.
+		v := lens[x]
+		z := x + 1
+		for z < nSyms && lens[z] == v {
+			z++
 		}
-		ops = append(ops, run{z, 0, 0})
+		ops = append(ops, run{sym: delta(x, v), rep: -1})
+		cur[x] = v
 		x++
+		rem := z - x
+		for rem >= 4 {
+			k := 5
+			if rem == 4 || rem == 6 || rem == 7 || rem == 8 {
+				k = 4
+			}
+			ops = append(ops, run{sym: 19, extra: k - 4, nbits: 1, rep: delta(x, v)})
+			for i := 0; i < k; i++ {
+				cur[x+i] = v
+			}
+			x += k
+			rem -= k
+		}
+		for ; x < z; x++ {
+			ops = append(ops, run{sym: delta(x, v), rep: -1})
+			cur[x] = v
+		}
 	}
 	for _, op := range ops {
 		used[op.sym] = true
+		if op.rep >= 0 {
+			used[op.rep] = true
+		}
 	}
 	// Assign tiny pretree lengths in symbol order.
 	order := []int{}
@@ -151,6 +209,10 @@ func (w *lzxTestWriter) huffLens(nSyms int, lens []uint8) {
 			w.bits(uint32(op.extra), 4)
 		case 18:
 			w.bits(uint32(op.extra), 5)
+		case 19:
+			w.bits(uint32(op.extra), 1)
+			r := codes[op.rep]
+			w.bits(uint32(r.code), r.length)
 		}
 	}
 }
@@ -169,19 +231,24 @@ type lzxTestElem struct {
 }
 
 func (w *lzxTestWriter) verbatimBlock(mainLens []uint8, lenLens []uint8, elems []lzxTestElem, outLen int) {
+	w.verbatimBlockOld(mainLens, lenLens, elems, outLen, nil, nil)
+}
+
+func (w *lzxTestWriter) verbatimBlockOld(mainLens []uint8, lenLens []uint8, elems []lzxTestElem, outLen int, oldMain, oldLen []uint8) {
 	w.bits(1, 3) // verbatim
 	w.bits(uint32(outLen>>8), 16)
 	w.bits(uint32(outLen&0xFF), 8)
 	nMain := len(mainLens)
-	w.huffLensSlice(mainLens[:256])
-	w.huffLensSlice(mainLens[256:])
-	w.huffLensSlice(lenLens)
+	w.huffLensOld(256, mainLens[:256], sliceOld(oldMain, 0, 256))
+	w.huffLensOld(nMain-256, mainLens[256:], sliceOld(oldMain, 256, nMain))
+	w.huffLensOld(len(lenLens), lenLens, oldLen)
 	mainCodes := testCanonical(nMain, mainLens)
 	lenCodes := testCanonical(len(lenLens), lenLens)
 	for _, e := range elems {
 		if e.lit {
 			c := mainCodes[int(e.b)]
 			w.bits(uint32(c.code), c.length)
+			w.noteOut(1)
 			continue
 		}
 		lh := e.matchLen - 2
@@ -206,7 +273,29 @@ func (w *lzxTestWriter) verbatimBlock(mainLens []uint8, lenLens []uint8, elems [
 				w.bits(uint32(e.alignedSym), 3) // fixed 3-bit aligned syms in tests
 			}
 		}
+		w.noteOut(e.matchLen)
 	}
+}
+
+func sliceOld(old []uint8, from, to int) []uint8 {
+	if old == nil {
+		return nil
+	}
+	return old[from:to]
+}
+
+// lzxSlotFor finds a verbatim position slot encoding offset.
+func lzxSlotFor(offset, posnSlots int) (slot int, verbatim uint32, n int, ok bool) {
+	for s := posnSlots - 1; s >= 4; s-- {
+		base := int64(lzxPositionBase[s]) - 2
+		if int64(offset) < base {
+			continue
+		}
+		if vb := int64(offset) - base; vb < int64(1)<<lzxExtraBits[s] {
+			return s, uint32(vb), int(lzxExtraBits[s]), true
+		}
+	}
+	return 0, 0, 0, false
 }
 
 func (w *lzxTestWriter) alignedBlock(mainLens []uint8, lenLens []uint8, alignedLens []uint8, elems []lzxTestElem, outLen int) {
@@ -227,6 +316,7 @@ func (w *lzxTestWriter) alignedBlock(mainLens []uint8, lenLens []uint8, alignedL
 		if e.lit {
 			c := mainCodes[int(e.b)]
 			w.bits(uint32(c.code), c.length)
+			w.noteOut(1)
 			continue
 		}
 		lh := e.matchLen - 2
@@ -252,6 +342,7 @@ func (w *lzxTestWriter) alignedBlock(mainLens []uint8, lenLens []uint8, alignedL
 				w.bits(uint32(a.code), a.length)
 			}
 		}
+		w.noteOut(e.matchLen)
 	}
 }
 
@@ -315,7 +406,7 @@ func TestLZXVerbatimLiterals(t *testing.T) {
 	w.bits(0, 1) // no E8
 	mainLens := make([]uint8, 256+30*8)
 	mainLens['H'], mainLens['e'], mainLens['l'], mainLens['o'] = 2, 2, 2, 3
-	lenLens := make([]uint8, 250)
+	lenLens := make([]uint8, 249)
 	lenLens[0] = 1
 	msg := []byte("Hello")
 	var elems []lzxTestElem
@@ -337,7 +428,7 @@ func TestLZXVerbatimMatch(t *testing.T) {
 	// 256 + slot<<3 + lenHeader for slot 4 header 2 and slot 0 header 0.
 	mainLens[256+(4<<3)+2] = 2
 	mainLens[256+(0<<3)+0] = 3
-	lenLens := make([]uint8, 250)
+	lenLens := make([]uint8, 249)
 	lenLens[0] = 1
 	elems := []lzxTestElem{
 		{lit: true, b: 'A'},
@@ -362,7 +453,7 @@ func TestLZXAlignedMatch(t *testing.T) {
 		mainLens[b] = 3
 	}
 	mainLens[256+(10<<3)+2] = 3 // match len 4, slot 10
-	lenLens := make([]uint8, 250)
+	lenLens := make([]uint8, 249)
 	lenLens[0] = 1
 	alignedLens := []uint8{3, 3, 3, 3, 3, 3, 3, 3}
 	prefix := bytes.Repeat([]byte("wxyz"), 8) // 32 bytes
@@ -386,7 +477,7 @@ func TestLZXLongCodes(t *testing.T) {
 	mainLens := make([]uint8, 256+30*8)
 	mainLens['A'] = 2
 	mainLens['Z'] = 15
-	lenLens := make([]uint8, 250)
+	lenLens := make([]uint8, 249)
 	lenLens[0] = 1
 	elems := []lzxTestElem{
 		{lit: true, b: 'A'},
@@ -408,7 +499,7 @@ func TestLZXLengthFooter(t *testing.T) {
 	mainLens := make([]uint8, 256+30*8)
 	mainLens['A'] = 1
 	mainLens[256+(3<<3)+7] = 2
-	lenLens := make([]uint8, 250)
+	lenLens := make([]uint8, 249)
 	lenLens[1] = 1
 	elems := []lzxTestElem{
 		{lit: true, b: 'A'},
@@ -673,4 +764,164 @@ func TestLZXChunksIndependent(t *testing.T) {
 	if string(out) != "ABCD" {
 		t.Fatalf("decode = %q, want ABCD", out)
 	}
+}
+
+// TestLZXLength19 covers pretree code 19 (repeated length runs) with a run
+// of six identical lengths.
+func TestLZXLength19(t *testing.T) {
+	var w lzxTestWriter
+	w.bits(0, 1)
+	mainLens := make([]uint8, 256+30*8)
+	mainLens['A'] = 2
+	for i := 65; i < 71; i++ {
+		mainLens[i] = 4
+	}
+	lenLens := make([]uint8, 249)
+	lenLens[0] = 1
+	var elems []lzxTestElem
+	elems = append(elems, lzxTestElem{lit: true, b: 'A'})
+	for i := 65; i < 71; i++ {
+		elems = append(elems, lzxTestElem{lit: true, b: byte(i)})
+	}
+	w.verbatimBlock(mainLens, lenLens, elems, 7)
+	if got, want := decodeAll(t, w.bytes(), 15, 7, 1<<20), []byte("AABCDEF"); !bytes.Equal(got, want) {
+		t.Fatalf("decode = %q, want %q", got, want)
+	}
+}
+
+// TestLZXMultiBlock covers cross-block table deltas and R0 persistence:
+// block 2 reuses block 1's repeat offset without setting it.
+func TestLZXMultiBlock(t *testing.T) {
+	var w lzxTestWriter
+	w.bits(0, 1)
+	mainLens1 := make([]uint8, 256+30*8)
+	mainLens1['A'], mainLens1['B'] = 2, 2
+	mainLens1[256+(4<<3)+2] = 2
+	lenLens := make([]uint8, 249)
+	lenLens[0] = 1
+	w.verbatimBlock(mainLens1, lenLens, []lzxTestElem{
+		{lit: true, b: 'A'},
+		{lit: true, b: 'B'},
+		{matchLen: 4, matchSlot: 4, verbatim: 0, verbatimN: 1},
+	}, 6)
+	mainLens2 := make([]uint8, 256+30*8)
+	mainLens2['C'] = 2
+	mainLens2[256+(0<<3)+0] = 2
+	w.verbatimBlockOld(mainLens2, lenLens, []lzxTestElem{
+		{lit: true, b: 'C'},
+		{matchLen: 2, matchSlot: 0},
+	}, 3, mainLens1, lenLens)
+	if got, want := decodeAll(t, w.bytes(), 15, 9, 1<<20), []byte("ABABABCBC"); !bytes.Equal(got, want) {
+		t.Fatalf("decode = %q, want %q", got, want)
+	}
+}
+
+// TestLZXAlignedRSlots covers aligned-block R0/R1/R2 repeat offsets.
+func TestLZXAlignedRSlots(t *testing.T) {
+	var w lzxTestWriter
+	w.bits(0, 1)
+	mainLens := make([]uint8, 256+30*8)
+	for _, b := range []byte("ABCD") {
+		mainLens[b] = 3
+	}
+	mainLens[256+(5<<3)+2] = 4
+	mainLens[256+(0<<3)+2] = 4
+	mainLens[256+(1<<3)+0] = 4
+	mainLens[256+(2<<3)+0] = 4
+	lenLens := make([]uint8, 249)
+	lenLens[0] = 1
+	alignedLens := []uint8{3, 3, 3, 3, 3, 3, 3, 3}
+	var elems []lzxTestElem
+	for _, b := range []byte("ABCD") {
+		elems = append(elems, lzxTestElem{lit: true, b: b})
+	}
+	elems = append(elems,
+		lzxTestElem{matchLen: 4, matchSlot: 5, verbatim: 0, verbatimN: 1},
+		lzxTestElem{matchLen: 4, matchSlot: 0},
+		lzxTestElem{matchLen: 2, matchSlot: 1},
+		lzxTestElem{matchLen: 2, matchSlot: 2},
+	)
+	w.alignedBlock(mainLens, lenLens, alignedLens, elems, 16)
+	if got, want := decodeAll(t, w.bytes(), 15, 16, 1<<20), []byte("ABCDABCDABCDDDDD"); !bytes.Equal(got, want) {
+		t.Fatalf("decode = %q, want %q", got, want)
+	}
+}
+
+// TestLZXWindowWrap covers matches reaching past the window start after a
+// frame wrap, including the two-run edge copy.
+func TestLZXWindowWrap(t *testing.T) {
+	const windowBits = 15
+	const windowSize = 1 << windowBits
+	var w lzxTestWriter
+	w.bits(0, 1)
+	mainLens := make([]uint8, 256+30*8)
+	for i := 0; i < 250; i++ {
+		mainLens[i] = 8
+	}
+	lenLens := make([]uint8, 249)
+	lenLens[0] = 1
+	lits := make([]byte, windowSize)
+	var elems []lzxTestElem
+	for i := range lits {
+		lits[i] = byte(i % 250)
+		elems = append(elems, lzxTestElem{lit: true, b: lits[i]})
+	}
+	w.verbatimBlock(mainLens, lenLens, elems, windowSize)
+	slot, vb, _, ok := lzxSlotFor(20000, windowBits<<1)
+	if !ok {
+		t.Fatal("no slot for offset 20000")
+	}
+	mainLens2 := make([]uint8, 256+30*8)
+	mainLens2[256+(slot<<3)+6] = 8
+	mainLens2[256+(7<<3)+6] = 8
+	extra := int(lzxExtraBits[slot])
+	w.verbatimBlockOld(mainLens2, lenLens, []lzxTestElem{
+		{matchLen: 8, matchSlot: slot, verbatim: vb, verbatimN: extra},
+		{matchLen: 8, matchSlot: 7, verbatim: uint32(10 - (int(lzxPositionBase[7]) - 2)), verbatimN: int(lzxExtraBits[7])},
+	}, 16, mainLens, lenLens)
+	want := append(append([]byte(nil), lits...), lits[windowSize-20000:windowSize-20000+8]...)
+	m1out := lits[windowSize-20000 : windowSize-20000+8]
+	// m2 wraps the window edge: last 2 window bytes, then the bytes m1
+	// just wrote at the window start.
+	want = append(want, lits[windowSize-2:]...)
+	want = append(want, m1out[:6]...)
+	if got := decodeAll(t, w.bytes(), windowBits, int64(windowSize+16), 1<<26); !bytes.Equal(got, want) {
+		t.Fatalf("decode len = %d, want %d (equal=%v)", len(got), len(want), bytes.Equal(got, want))
+	}
+}
+
+// TestLZXZeroBlocks covers empty blocks: a lone one is tolerated, a run of
+// them is rejected as a crafted-stream guard.
+func TestLZXZeroBlocks(t *testing.T) {
+	emptyMain := make([]uint8, 256+30*8)
+	emptyLen := make([]uint8, 249)
+	buildZeros := func(n int) []byte {
+		var w lzxTestWriter
+		w.bits(0, 1)
+		for i := 0; i < n; i++ {
+			w.verbatimBlock(emptyMain, emptyLen, nil, 0)
+		}
+		return w.bytes()
+	}
+	t.Run("tolerated once", func(t *testing.T) {
+		var w lzxTestWriter
+		w.bits(0, 1)
+		w.verbatimBlock(emptyMain, emptyLen, nil, 0)
+		mainLens := make([]uint8, 256+30*8)
+		mainLens['Z'] = 1
+		w.verbatimBlockOld(mainLens, emptyLen, []lzxTestElem{{lit: true, b: 'Z'}}, 1, emptyMain, emptyLen)
+		if got := decodeAll(t, w.bytes(), 15, 1, 1<<20); !bytes.Equal(got, []byte("Z")) {
+			t.Fatalf("decode = %q, want Z", got)
+		}
+	})
+	t.Run("run rejected", func(t *testing.T) {
+		rc, err := NewLZXReader(bytes.NewReader(buildZeros(17)), 15, 100, 1<<20)
+		if err != nil {
+			t.Fatalf("NewLZXReader() error: %v", err)
+		}
+		defer func() { _ = rc.Close() }()
+		if _, err := io.ReadAll(rc); !errors.Is(err, book.ErrCorrupt) {
+			t.Fatalf("ReadAll() error = %v, want ErrCorrupt", err)
+		}
+	})
 }

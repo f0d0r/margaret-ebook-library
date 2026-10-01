@@ -12,4 +12,7 @@ const (
 
 	// FB2 represents the FictionBook 2 e-book format (.fb2).
 	FB2 FileType = "fb2"
+
+	// LIT represents the Microsoft Reader e-book format (.lit).
+	LIT FileType = "lit"
 )

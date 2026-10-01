@@ -24,6 +24,7 @@ const (
 	EPUB = book.EPUB
 	MOBI = book.MOBI
 	FB2  = book.FB2
+	LIT  = book.LIT
 )
 
 var (

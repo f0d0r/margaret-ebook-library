@@ -14,6 +14,7 @@ func init() {
 		mediatype.XHTML,
 		mediatype.HTML,
 		mediatype.MobiHTML,
+		mediatype.OEB1Document,
 	)
 	// FictionBook body fragments -> plain text (tolerant scanner, see
 	// fb2totext.go). Registered separately: unlike the HTML variants it

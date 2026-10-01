@@ -4,6 +4,17 @@
 
 ### Added
 
+- LIT reading (`.lit`, MS Reader): normalized metadata, spine reading order
+  and lazily-opened content/cover resources from OEB 1.x packages, following
+  the ConvertLIT and calibre LIT readers (ITSF container, LZX sections,
+  binary OPF/content decoding). Sealed/inscribed sections whose keys don't
+  verify stay listed but fail with `ErrDRM` on `Open`; passport-locked
+  (`/DRMStorage/Licenses/EUL`) files are rejected outright. MS-era files
+  with unbalanced binary markup are tolerated like MS Reader.
+- Shared `internal/opf` package: OPF parsing, metadata extraction and
+  OPF-driven resource assembly (`BuildResources`) used by both the EPUB and
+  the LIT readers; `internal/zip` renamed to `internal/compress` hosting it
+  alongside a streaming LZX decompressor.
 - FB2 reading (`.fb2`, `.fbz`, `.fb2.zip`, plain or zipped XML):
   normalized metadata, raw body XML content resources (`application/x-fictionbook-body+xml`),
   spine-like reading order (notes bodies marked non-linear), transformer

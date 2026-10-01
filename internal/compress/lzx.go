@@ -126,7 +126,7 @@ func newLzxHuffman(nSyms int, tableBits uint, lens []uint8) (*lzxHuffman, error)
 		total += count[b] << (lzxMaxCodeLen - b)
 	}
 	if total > 1<<lzxMaxCodeLen {
-		return nil, fmt.Errorf("compress: lzx over-subscribed huffman lengths: %w", book.ErrCorrupt)
+		return nil, fmt.Errorf("compress: lzx over-subscribed huffman lengths nsyms=%d: %w", nSyms, book.ErrCorrupt)
 	}
 	codes := make([]int, nSyms)
 	for s := range nSyms {
@@ -152,17 +152,18 @@ func newLzxHuffman(nSyms int, tableBits uint, lens []uint8) (*lzxHuffman, error)
 		if uint(l) <= tableBits {
 			prefix := c << (tableBits - uint(l))
 			if prefix+(1<<(tableBits-uint(l))) > len(h.table) {
-				return nil, fmt.Errorf("compress: lzx huffman code overflows table: %w", book.ErrCorrupt)
+				return nil, fmt.Errorf("compress: lzx huffman code overflows table nsyms=%d: %w", nSyms, book.ErrCorrupt)
 			}
 			for i := 0; i < 1<<(tableBits-uint(l)); i++ {
 				if h.table[prefix+i] != -1 {
-					return nil, fmt.Errorf("compress: lzx duplicate huffman code: %w", book.ErrCorrupt)
+					return nil, fmt.Errorf("compress: lzx duplicate sym=%d len=%d code=%d prefix=%d collide=%d nsyms=%d: %w", sym, l, c, prefix, prefix+i, nSyms, book.ErrCorrupt)
 				}
 				h.table[prefix+i] = int32(sym)
 			}
 			continue
 		}
-		// Long code: walk/create extension nodes past the direct prefix.
+		// Long code: walk/create extension nodes past the direct prefix,
+		// consuming the remaining bits most-significant first.
 		idx := c >> (uint(l) - tableBits)
 		var node int
 		switch e := h.table[idx]; {
@@ -172,10 +173,18 @@ func newLzxHuffman(nSyms int, tableBits uint, lens []uint8) (*lzxHuffman, error)
 		case e < 0:
 			node = int(-(e + 2))
 		default:
-			return nil, fmt.Errorf("compress: lzx conflicting huffman code: %w", book.ErrCorrupt)
+			return nil, fmt.Errorf("compress: lzx conflicting huffman code nsyms=%d: %w", nSyms, book.ErrCorrupt)
 		}
-		for b := int(tableBits) + 1; b < l; b++ {
-			bit := (c >> (uint(l) - uint(b) - 1)) & 1
+		rem := int(l) - int(tableBits)
+		for k := 0; k < rem; k++ {
+			bit := (c >> (uint(rem) - 1 - uint(k))) & 1
+			if k == rem-1 {
+				if h.nodes[node][bit] != -1 {
+					return nil, fmt.Errorf("compress: lzx duplicate sym=%d len=%d code=%b node=%d bit=%d has=%d nsyms=%d: %w", sym, l, c, node, bit, h.nodes[node][bit], nSyms, book.ErrCorrupt)
+				}
+				h.nodes[node][bit] = int32(sym)
+				break
+			}
 			switch next := h.nodes[node][bit]; {
 			case next == -1:
 				n := newNode()
@@ -184,13 +193,8 @@ func newLzxHuffman(nSyms int, tableBits uint, lens []uint8) (*lzxHuffman, error)
 			case next < 0:
 				node = int(-(next + 2))
 			default:
-				return nil, fmt.Errorf("compress: lzx conflicting huffman code: %w", book.ErrCorrupt)
+				return nil, fmt.Errorf("compress: lzx conflicting huffman code nsyms=%d: %w", nSyms, book.ErrCorrupt)
 			}
-		}
-		if bit := c & 1; h.nodes[node][bit] != -1 {
-			return nil, fmt.Errorf("compress: lzx duplicate huffman code: %w", book.ErrCorrupt)
-		} else {
-			h.nodes[node][bit] = int32(sym)
 		}
 	}
 	return h, nil
@@ -393,6 +397,7 @@ type lzxDecoder struct {
 	blockRemain  int
 	needPadSkip  bool // previous block was odd-sized uncompressed
 	headerSeen   bool
+	zeroBlocks   int // consecutive zero-length blocks (DoS guard)
 	intelSize    int32
 	intelPos     int32
 	intelStarted bool
@@ -507,8 +512,14 @@ func (d *lzxDecoder) decodeFrame() error {
 	if frameSize <= 0 {
 		return io.EOF
 	}
-	frameStart := d.windowPosn
-	bytesTodo := frameSize
+	// A previous match may have overrun into this frame; those carried
+	// bytes are already decoded and must be emitted, not re-decoded.
+	frameBase := d.framePosn
+	carried := d.windowPosn - frameBase
+	if carried < 0 || frameBase+frameSize > d.windowSize {
+		return fmt.Errorf("compress: lzx frame cursor invalid: %w", book.ErrCorrupt)
+	}
+	bytesTodo := frameSize - carried
 	for bytesTodo > 0 {
 		if d.blockRemain == 0 {
 			done, err := d.readBlockHeader()
@@ -518,6 +529,17 @@ func (d *lzxDecoder) decodeFrame() error {
 			if done {
 				break
 			}
+			// Zero-length blocks carry no data yet cost a full table
+			// rebuild each; cap consecutive ones against crafted streams.
+			// (Valid encoders never emit them.)
+			if d.blockRemain == 0 {
+				d.zeroBlocks++
+				if d.zeroBlocks > 16 {
+					return fmt.Errorf("compress: lzx too many empty blocks: %w", book.ErrCorrupt)
+				}
+				continue
+			}
+			d.zeroBlocks = 0
 		}
 		run := min(d.blockRemain, bytesTodo)
 		bytesTodo -= run
@@ -533,19 +555,27 @@ func (d *lzxDecoder) decodeFrame() error {
 			d.blockRemain += over // over is negative
 		}
 	}
-	produced := d.windowPosn - frameStart
-	if produced == 0 {
-		// Unknown-length streams end here; known-length streams that
-		// stop short are truncated.
-		if d.expectOut >= 0 && d.emitted < d.expectOut {
+	produced := d.windowPosn - frameBase
+	if produced < frameSize {
+		// The input ended mid-frame: a clean end for unknown lengths,
+		// truncation for known ones. No realignment applies past the
+		// end of input.
+		if d.expectOut >= 0 && d.emitted+int64(produced) < d.expectOut {
 			return fmt.Errorf("compress: lzx truncated stream: %w", book.ErrCorrupt)
 		}
-		return io.EOF
+		if produced == 0 {
+			return io.EOF
+		}
+		if err := d.stageFrame(frameBase, produced); err != nil {
+			return err
+		}
+		d.finished = true
+		return nil
 	}
 	if err := d.bits.alignToUnit(); err != nil {
 		return err
 	}
-	return d.stageFrame(frameStart, produced)
+	return d.stageFrame(frameBase, frameSize)
 }
 
 // stageFrame copies a decoded frame out of the window, applies the E8
@@ -708,7 +738,7 @@ func (d *lzxDecoder) readBlockHeader() (done bool, err error) {
 		if d.mainLen[0xE8] != 0 {
 			d.intelStarted = true
 		}
-		if err := d.readLens(d.lengthLen, 0, lzxNumSecondaryLens+1); err != nil {
+		if err := d.readLens(d.lengthLen, 0, lzxNumSecondaryLens); err != nil {
 			return false, err
 		}
 		if d.length, err = newLzxHuffman(len(d.lengthLen), lzxLengthBits, d.lengthLen); err != nil {
@@ -760,7 +790,7 @@ func (d *lzxDecoder) readLens(lens []uint8, first, last int) error {
 			}
 			n += 4
 			if x+int(n) > last {
-				return fmt.Errorf("compress: lzx length run overflows table: %w", book.ErrCorrupt)
+				return fmt.Errorf("compress: lzx length run overflows table [%d,%d) x=%d n=%d: %w", first, last, x, n, book.ErrCorrupt)
 			}
 			for ; n > 0; n-- {
 				lens[x] = 0
@@ -773,7 +803,7 @@ func (d *lzxDecoder) readLens(lens []uint8, first, last int) error {
 			}
 			n += 20
 			if x+int(n) > last {
-				return fmt.Errorf("compress: lzx length run overflows table: %w", book.ErrCorrupt)
+				return fmt.Errorf("compress: lzx length run overflows table [%d,%d) x=%d n=%d: %w", first, last, x, n, book.ErrCorrupt)
 			}
 			for ; n > 0; n-- {
 				lens[x] = 0
