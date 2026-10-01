@@ -31,35 +31,21 @@ func cleanContentHTML(content []byte) []byte {
 	return formTagRe.ReplaceAll(content, []byte("<$1div>"))
 }
 
-// reverseManifest maps canonical manifest paths back to internal ids for
-// OPF href resolution.
-func reverseManifest(manifest map[string]manifestItem) map[string]string {
-	paths := make(map[string]string, len(manifest))
-	for id, item := range manifest {
-		key := util.CleanHref(item.path)
-		if _, ok := paths[key]; !ok {
-			paths[key] = id
-		}
-	}
-	return paths
-}
-
 // buildResources assembles the OPF-driven resource set. Spine content
 // documents decode through UnBinary HTML; every other entry serves raw
 // bytes. All reads stay lazy through the returned Open functions.
 func (c *container) buildResources(p opf.Package, maxSize int64) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource) {
-	paths := reverseManifest(c.manifest)
 	return opf.BuildResources(p, func(item opf.Item) (opf.EntrySource, bool) {
-		return c.lookup(item, p, paths, maxSize)
+		return c.lookup(item, p, maxSize)
 	})
 }
 
 // lookup resolves one manifest item to its stored bytes. Missing directory
-// entries are skipped; present-but-unreadable entries (e.g. DES sections
-// whose keys don't verify) stay listed with an Open that reports the
-// failure, mirroring the MOBI failing-resource pattern.
-func (c *container) lookup(item opf.Item, p opf.Package, paths map[string]string, maxSize int64) (opf.EntrySource, bool) {
-	internal, ok := paths[util.CleanHref(p.ResolvePath(item.Href))]
+// entries are skipped; present-but-unreadable entries (e.g. sealed
+// sections) stay listed with an Open that reports the failure, mirroring
+// the MOBI failing-resource pattern.
+func (c *container) lookup(item opf.Item, p opf.Package, maxSize int64) (opf.EntrySource, bool) {
+	internal, ok := c.opfIds[util.CleanHref(p.ResolvePath(item.Href))]
 	if !ok {
 		return opf.EntrySource{}, false
 	}
@@ -81,7 +67,7 @@ func (c *container) lookup(item opf.Item, p opf.Package, paths map[string]string
 		Size: size,
 		Open: func() (io.ReadCloser, error) {
 			if size > maxSize {
-				return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, item.Href, size, maxSize)
+				return nil, book.LimitError(item.Href, size, maxSize)
 			}
 			data, err := c.getFile(entry)
 			if err != nil {
@@ -124,15 +110,15 @@ func (c *container) openContent(internal, doc string, maxSize int64) (io.ReadClo
 		return nil, err
 	}
 	if int64(len(data)) > maxSize {
-		return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, internal, len(data), maxSize)
+		return nil, book.LimitError(internal, int64(len(data)), maxSize)
 	}
-	decoded, err := decodeUnbinary(data, &htmlTables, c.manifestPaths(), c.getAtoms(internal), doc)
+	decoded, err := decodeUnbinary(data, &htmlTables, c.opfPaths, c.getAtoms(internal), doc)
 	if err != nil {
 		return nil, fmt.Errorf("lit: failed to decode content: %w", err)
 	}
 	out := append([]byte(contentHTMLDecl), cleanContentHTML(decoded)...)
 	if int64(len(out)) > maxSize {
-		return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, internal, len(out), maxSize)
+		return nil, book.LimitError(internal, int64(len(out)), maxSize)
 	}
 	return io.NopCloser(bytes.NewReader(out)), nil
 }

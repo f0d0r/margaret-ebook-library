@@ -30,6 +30,28 @@ func ubAttr(id byte, v string) []byte {
 }
 func ubText(s string) []byte { return []byte(s) }
 
+// ubItem emits a self-closing manifest item; ref is the href value without
+// the one-character binary prefix.
+func ubItem(id, ref, media string) []byte {
+	var b []byte
+	b = append(b, ubLeaf(17)...)
+	b = append(b, ubAttr(0x06, id)...)
+	b = append(b, 0x07, byte(len(ref)+2), 0x02)
+	b = append(b, ref...)
+	b = append(b, ubAttr(0x08, media)...)
+	b = append(b, 0x00)
+	return b
+}
+
+// ubItemRef emits a self-closing spine itemref.
+func ubItemRef(idref string) []byte {
+	var b []byte
+	b = append(b, ubLeaf(19)...)
+	b = append(b, ubAttr(0x0A, idref)...)
+	b = append(b, 0x00)
+	return b
+}
+
 func fixtureMeta() []byte {
 	var b []byte
 	b = append(b, ubOpen(1)...) // package
@@ -66,28 +88,15 @@ func fixtureMeta() []byte {
 	b = append(b, ubClose()...)  // metadata
 	b = append(b, ubOpen(16)...) // manifest
 	b = append(b, 0x00)
-	b = append(b, ubLeaf(17)...) // item
-	b = append(b, ubAttr(0x06, "c1")...)
-	b = append(b, 0x07, 0x04, 0x02, 'c', '1') // href with 1-char prefix
-	b = append(b, ubAttr(0x08, "text/html")...)
-	b = append(b, 0x00)          // self-close
-	b = append(b, ubLeaf(17)...) // cover item
-	b = append(b, ubAttr(0x06, "cover")...)
-	b = append(b, 0x07, 0x0C, 0x02)
-	b = append(b, "cover.jpeg"...)
-	b = append(b, ubAttr(0x08, "image/jpeg")...)
-	b = append(b, 0x00)          // self-close
+	b = append(b, ubItem("c1", "c1", "text/html")...)
+	b = append(b, ubItem("cover", "cover.jpeg", "image/jpeg")...)
 	b = append(b, ubClose()...)  // manifest
 	b = append(b, ubOpen(18)...) // spine
 	b = append(b, 0x00)
-	b = append(b, ubLeaf(19)...) // itemref
-	b = append(b, ubAttr(0x0A, "c1")...)
-	b = append(b, 0x00)
-	b = append(b, ubLeaf(19)...) // ghost itemref (no manifest item)
-	b = append(b, ubAttr(0x0A, "ghost")...)
-	b = append(b, 0x00)
-	b = append(b, ubClose()...) // spine
-	b = append(b, ubClose()...) // package
+	b = append(b, ubItemRef("c1")...)
+	b = append(b, ubItemRef("ghost")...) // no manifest item
+	b = append(b, ubClose()...)          // spine
+	b = append(b, ubClose()...)          // package
 	return b
 }
 
@@ -124,19 +133,17 @@ func fixtureManifest() []byte {
 	return b
 }
 
-func fixtureNameList() []byte {
+func fixtureNameList(names ...string) []byte {
 	var b []byte
-	b = append(b, 0x00, 0x00, 0x01, 0x00)
-	b = append(b, 0x0C, 0x00)
-	for _, c := range "Uncompressed" {
-		b = append(b, byte(c), 0x00)
+	b = append(b, 0x00, 0x00, byte(len(names)), 0x00)
+	for _, name := range names {
+		b = append(b, byte(len(name)), 0x00)
+		for _, c := range name {
+			b = append(b, byte(c), 0x00)
+		}
+		b = append(b, 0x00, 0x00)
 	}
-	return append(b, 0x00, 0x00)
-}
-
-type litDirEntry struct {
-	name string
-	data []byte
+	return b
 }
 
 func u32le(v int64) []byte {
@@ -160,119 +167,19 @@ func enc(v int64) []byte {
 	return groups
 }
 
-// buildLit assembles a minimal valid LIT file. All entries live in section
-// 0 (raw). extra entries are appended after the standard three.
-func buildLit(extra []litDirEntry) []byte {
-	entries := []litDirEntry{
-		{metaEntry, fixtureMeta()},
-		{"/manifest", fixtureManifest()},
-		{nameListEntry, fixtureNameList()},
+// baseEntries returns the three entries every LIT container carries, all in
+// section 0 (raw). Tests append their own entries to this.
+func baseEntries() []secEntry {
+	return []secEntry{
+		{metaEntry, 0, 0, 0, fixtureMeta()},
+		{"/manifest", 0, 0, 0, fixtureManifest()},
+		{nameListEntry, 0, 0, 0, fixtureNameList("Uncompressed")},
 	}
-	entries = append(entries, extra...)
-
-	const contentOff = int64(352)
-	const countSize = int64(16)
-	const guidSize = int64(16)
-
-	// The directory embeds payload offsets, so converge in two passes
-	// (magnitudes are stable after the first).
-	var dirLen int64 = 32 + 512
-	offsets := make([]int64, len(entries))
-	var eb []byte
-	for pass := 0; pass < 2; pass++ {
-		// Directory offsets are content-relative.
-		off := dirLen + 16 + 16 + 16
-		eb = nil
-		for i, e := range entries {
-			offsets[i] = off
-			off += int64(len(e.data))
-			eb = append(eb, byte(len(e.name)))
-			eb = append(eb, e.name...)
-			eb = append(eb, 0x00)
-			eb = append(eb, enc(offsets[i])...)
-			eb = append(eb, enc(int64(len(e.data)))...)
-		}
-		dirLen = 32 + int64(50+len(eb))
-	}
-	chunkSize := 50 + len(eb)
-	r := int64(chunkSize) - 48 - int64(len(eb))
-	chunk := []byte("AOLL")
-	chunk = append(chunk, u32le(r)...)
-	chunk = append(chunk, make([]byte, 40)...)
-	chunk = append(chunk, eb...)
-	chunk = append(chunk, byte(len(entries)), 0x00)
-
-	dirPiece := []byte("IFCM")
-	dirPiece = append(dirPiece, make([]byte, 4)...)
-	dirPiece = append(dirPiece, u32le(int64(chunkSize))...)
-	dirPiece = append(dirPiece, make([]byte, 12)...)
-	dirPiece = append(dirPiece, 0x01, 0x00, 0x00, 0x00)
-	dirPiece = append(dirPiece, make([]byte, 4)...)
-	dirPiece = append(dirPiece, chunk...)
-
-	countPiece := make([]byte, 16)
-	binary.LittleEndian.PutUint32(countPiece[8:], 0x200)
-	countPiece[12] = 0x02
-
-	sec := make([]byte, 232)
-	binary.LittleEndian.PutUint32(sec[4:], 152)
-	copy(sec[152:], "CAOL")
-	binary.LittleEndian.PutUint32(sec[152+4:], 2)
-	binary.LittleEndian.PutUint32(sec[152+8:], 80)
-	binary.LittleEndian.PutUint32(sec[152+20:], uint32(chunkSize))
-	binary.LittleEndian.PutUint32(sec[152+24:], 0x200)
-	sec[152+28] = 0x00
-	sec[152+32] = 0x02
-	copy(sec[200:], "ITSF")
-	binary.LittleEndian.PutUint32(sec[200+4:], 4)
-	binary.LittleEndian.PutUint32(sec[200+8:], 32)
-	binary.LittleEndian.PutUint32(sec[200+12:], 1)
-	binary.LittleEndian.PutUint32(sec[200+16:], uint32(contentOff))
-	binary.LittleEndian.PutUint32(sec[200+28:], 0x409)
-
-	head := make([]byte, 40)
-	copy(head, "ITOLITLS")
-	binary.LittleEndian.PutUint32(head[8:], 1)
-	binary.LittleEndian.PutUint32(head[12:], 40)
-	binary.LittleEndian.PutUint32(head[16:], 5)
-	binary.LittleEndian.PutUint32(head[20:], 232)
-
-	piece := func(off, size int64) []byte {
-		var p [16]byte
-		binary.LittleEndian.PutUint32(p[0:], uint32(off))
-		binary.LittleEndian.PutUint32(p[8:], uint32(size))
-		return p[:]
-	}
-	payloadOff := contentOff + dirLen + countSize + 2*guidSize
-	var file []byte
-	file = append(file, head...)
-	file = append(file, piece(contentOff, payloadOff+totalPayload(entries)-contentOff)...)
-	file = append(file, piece(contentOff, dirLen)...)
-	file = append(file, piece(contentOff+dirLen, countSize)...)
-	file = append(file, piece(contentOff+dirLen+countSize, guidSize)...)
-	file = append(file, piece(contentOff+dirLen+countSize+guidSize, guidSize)...)
-	file = append(file, sec...)
-	file = append(file, dirPiece...)
-	file = append(file, countPiece...)
-	file = append(file, make([]byte, guidSize)...)
-	file = append(file, make([]byte, guidSize)...)
-	for _, e := range entries {
-		file = append(file, e.data...)
-	}
-	return file
-}
-
-func totalPayload(entries []litDirEntry) int64 {
-	var n int64
-	for _, e := range entries {
-		n += int64(len(e.data))
-	}
-	return n
 }
 
 func TestLitReadMetadata(t *testing.T) {
 	r := NewLitReader(config.DefaultConfig())
-	b := book.NewBytesBlob(buildLit(nil))
+	b := book.NewBytesBlob(buildLitSections(t, baseEntries()))
 	if !r.Supports(b) {
 		t.Fatal("Supports = false for synthetic LIT")
 	}
@@ -305,7 +212,7 @@ func TestLitReadMetadata(t *testing.T) {
 }
 
 func TestLitReadResolvesHref(t *testing.T) {
-	b := book.NewBytesBlob(buildLit(nil))
+	b := book.NewBytesBlob(buildLitSections(t, baseEntries()))
 	c, err := openContainer(b, config.DefaultConfig().MaxResourceSize)
 	if err != nil {
 		t.Fatalf("openContainer: %v", err)
@@ -314,11 +221,7 @@ func TestLitReadResolvesHref(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getFile: %v", err)
 	}
-	paths := map[string]string{}
-	for id, item := range c.manifest {
-		paths[id] = item.path
-	}
-	dec, err := decodeUnbinary(raw, &opfTables, paths, nil, "")
+	dec, err := decodeUnbinary(raw, &opfTables, c.opfPaths, nil, "")
 	if err != nil {
 		t.Fatalf("decodeUnbinary: %v", err)
 	}
@@ -337,7 +240,9 @@ func TestLitReadResolvesHref(t *testing.T) {
 
 func TestLitReadDRM(t *testing.T) {
 	r := NewLitReader(config.DefaultConfig())
-	b := book.NewBytesBlob(buildLit([]litDirEntry{{"/DRMStorage/Licenses/EUL", []byte{}}}))
+	b := book.NewBytesBlob(buildLitSections(t, append(baseEntries(),
+		secEntry{name: "/DRMStorage/Licenses/EUL", data: []byte{}},
+	)))
 	if !r.Supports(b) {
 		t.Fatal("Supports = false")
 	}
@@ -381,10 +286,10 @@ func fixtureContent() []byte {
 func TestLitReadResources(t *testing.T) {
 	coverBytes := []byte{0xFF, 0xD8, 0xFF, 0xE0, 'c', 'o', 'v', 'e', 'r'}
 	contentBin := fixtureContent()
-	b := book.NewBytesBlob(buildLit([]litDirEntry{
-		{"/data/c1/content", contentBin},
-		{"/data/cov", coverBytes},
-	}))
+	b := book.NewBytesBlob(buildLitSections(t, append(baseEntries(),
+		secEntry{name: "/data/c1/content", data: contentBin},
+		secEntry{name: "/data/cov", data: coverBytes},
+	)))
 	ebook, err := NewLitReader(config.DefaultConfig()).Read(b)
 	if err != nil {
 		t.Fatalf("Read: %v", err)
@@ -492,17 +397,11 @@ func fixtureSectionMeta() []byte {
 	b = append(b, ubClose()...)  // metadata
 	b = append(b, ubOpen(16)...) // manifest
 	b = append(b, 0x00)
-	b = append(b, ubLeaf(17)...) // item s9
-	b = append(b, ubAttr(0x06, "s9")...)
-	b = append(b, 0x07, 0x04, 0x02, 's', '9')
-	b = append(b, ubAttr(0x08, "text/html")...)
-	b = append(b, 0x00)
+	b = append(b, ubItem("s9", "s9", "text/html")...)
 	b = append(b, ubClose()...)  // manifest
 	b = append(b, ubOpen(18)...) // spine
 	b = append(b, 0x00)
-	b = append(b, ubLeaf(19)...) // itemref s9
-	b = append(b, ubAttr(0x0A, "s9")...)
-	b = append(b, 0x00)
+	b = append(b, ubItemRef("s9")...)
 	b = append(b, ubClose()...) // spine
 	b = append(b, ubClose()...) // package
 	return b
@@ -524,21 +423,6 @@ func fixtureSectionManifest() []byte {
 	b = append(b, 0x00, 0x00, 0x00, 0x00)
 	b = append(b, 0x00)
 	return b
-}
-
-func fixtureNameList2() []byte {
-	var b []byte
-	b = append(b, 0x00, 0x00, 0x02, 0x00)
-	b = append(b, 0x0C, 0x00)
-	for _, c := range "Uncompressed" {
-		b = append(b, byte(c), 0x00)
-	}
-	b = append(b, 0x00, 0x00)
-	b = append(b, 0x02, 0x00)
-	for _, c := range "S1" {
-		b = append(b, byte(c), 0x00)
-	}
-	return append(b, 0x00, 0x00)
 }
 
 type secEntry struct {
@@ -665,7 +549,7 @@ func TestLitLZXSection(t *testing.T) {
 	entries := []secEntry{
 		{metaEntry, 0, 0, 0, fixtureSectionMeta()},
 		{"/manifest", 0, 0, 0, fixtureSectionManifest()},
-		{nameListEntry, 0, 0, 0, fixtureNameList2()},
+		{nameListEntry, 0, 0, 0, fixtureNameList("Uncompressed", "S1")},
 		{"::DataSpace/Storage/S1/Transform/List", 0, 0, 0, litLZXGUID},
 		{"::DataSpace/Storage/S1/Content", 0, 0, 0, chunk},
 		{"::DataSpace/Storage/S1/ControlData", 0, 0, 0, control},

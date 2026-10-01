@@ -14,10 +14,6 @@ import (
 // See litheaders.c: lit_magic_string in the convertlit reference.
 const litMagic = "ITOLITLS"
 
-// minLitSize is the primary header size (PRI_SIZE) from litheaders.c.
-// lit_i_read_headers rejects anything smaller, so Supports does too.
-const minLitSize = 40
-
 type LitReader struct {
 	cfg config.Config
 }
@@ -30,13 +26,13 @@ func NewLitReader(cfg config.Config) *LitReader {
 }
 
 // Supports reports whether b looks like a LIT file. It checks only the
-// 8-byte "ITOLITLS" magic at offset 0 (plus the 40-byte minimum size), so
-// detection is a single Size call and a single 8-byte ReadAt with no
-// decompression. Stricter validation (version, header lengths) is left to
+// 8-byte "ITOLITLS" magic at offset 0 (plus the primary-header minimum
+// size), so detection is a single Size call and a single 8-byte ReadAt with
+// no decompression. Stricter validation (version, header lengths) is left to
 // Read.
 func (r *LitReader) Supports(b book.Blob) bool {
 	size, err := b.Size()
-	if err != nil || size < minLitSize {
+	if err != nil || size < priSize {
 		return false
 	}
 
@@ -80,11 +76,7 @@ func splicePackageTail(decoded []byte) []byte {
 
 // Read parses the LIT container into metadata and lazily-opened resources.
 func (r *LitReader) Read(b book.Blob) (book.Book, error) {
-	maxSize := r.cfg.MaxResourceSize
-	if maxSize <= 0 {
-		maxSize = config.DefaultConfig().MaxResourceSize
-	}
-	c, err := openContainer(b, maxSize)
+	c, err := openContainer(b, r.cfg.MaxResourceSize)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +85,7 @@ func (r *LitReader) Read(b book.Blob) (book.Book, error) {
 	if err != nil {
 		return nil, err
 	}
-	opfText, err := decodeUnbinary(raw, &opfTables, c.manifestPaths(), nil, "")
+	opfText, err := decodeUnbinary(raw, &opfTables, c.opfPaths, nil, "")
 	if err != nil {
 		return nil, fmt.Errorf("lit: failed to decode OPF: %w", err)
 	}
@@ -105,7 +97,7 @@ func (r *LitReader) Read(b book.Blob) (book.Book, error) {
 	}
 	p.OpfPath = "content.opf"
 
-	all, order, cover := c.buildResources(p, maxSize)
+	all, order, cover := c.buildResources(p, r.cfg.MaxResourceSize)
 
 	return &litBook{
 		metadata: book.Metadata{
@@ -114,8 +106,7 @@ func (r *LitReader) Read(b book.Blob) (book.Book, error) {
 			Description: p.Description(),
 			Languages:   p.Languages(),
 		},
-		resources:  book.NewResourceSet(all, order, cover),
-		version:    litVersionString,
-		packageDoc: p,
+		resources: book.NewResourceSet(all, order, cover),
+		version:   litVersionString,
 	}, nil
 }

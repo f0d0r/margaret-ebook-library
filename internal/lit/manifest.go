@@ -10,6 +10,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
 )
 
 // manifestItem maps one internal LIT id to its output path.
@@ -128,34 +129,42 @@ func stripSharedPrefix(manifest map[string]manifestItem) {
 	}
 }
 
-// manifestPaths maps internal ids to output paths for href resolution.
-func (c *container) manifestPaths() map[string]string {
-	paths := make(map[string]string, len(c.manifest))
-	for id, item := range c.manifest {
-		paths[id] = item.path
+// indexManifest builds both lookup directions once per container, over
+// sorted ids so path collisions resolve deterministically (first wins).
+func (c *container) indexManifest() {
+	ids := make([]string, 0, len(c.manifest))
+	for id := range c.manifest {
+		ids = append(ids, id)
 	}
-	return paths
+	sort.Strings(ids)
+	c.opfPaths = make(map[string]string, len(c.manifest))
+	c.opfIds = make(map[string]string, len(c.manifest))
+	for _, id := range ids {
+		item := c.manifest[id]
+		c.opfPaths[id] = item.path
+		key := util.CleanHref(item.path)
+		if _, ok := c.opfIds[key]; !ok {
+			c.opfIds[key] = id
+		}
+	}
 }
 
 // sizedString reads a length-prefixed UTF-8 string: the length is one
-// character giving the following character count.
+// character giving the following character count. zpad consumes one trailing
+// NUL after the string, which some fields carry.
 func sizedString(raw []byte, zpad bool) (string, []byte, error) {
-	if len(raw) == 0 {
-		return "", nil, fmt.Errorf("lit: truncated string: %w", book.ErrCorrupt)
-	}
-	n, size := utf8.DecodeRune(raw)
-	if n == utf8.RuneError && size <= 1 {
-		return "", nil, fmt.Errorf("lit: invalid string length: %w", book.ErrCorrupt)
+	// decodeRune reports the consumed width, which doubles as the offset of
+	// the remainder when called from position 0.
+	n, size, err := decodeRune(raw, 0)
+	if err != nil {
+		return "", nil, err
 	}
 	raw = raw[size:]
 	var sb strings.Builder
-	for i := 0; i < int(n); i++ {
-		if len(raw) == 0 {
-			return "", nil, fmt.Errorf("lit: truncated string body: %w", book.ErrCorrupt)
-		}
-		c, size := utf8.DecodeRune(raw)
-		if c == utf8.RuneError && size <= 1 {
-			return "", nil, fmt.Errorf("lit: invalid string char: %w", book.ErrCorrupt)
+	for i := rune(0); i < n; i++ {
+		var c rune
+		if c, size, err = decodeRune(raw, 0); err != nil {
+			return "", nil, err
 		}
 		sb.WriteRune(c)
 		raw = raw[size:]

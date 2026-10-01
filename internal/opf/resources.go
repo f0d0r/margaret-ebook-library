@@ -20,6 +20,23 @@ type EntrySource struct {
 	Open func() (io.ReadCloser, error)
 }
 
+// newResource builds one manifest resource from its item, the canonical path
+// it resolved to and the located entry. The three BuildResources call sites
+// differ only in which lookup path they took, so the naming stays here.
+func newResource(item Item, resolved string, src EntrySource) *book.Resource {
+	res := book.Resource{
+		Id:           item.ID,
+		Name:         path.Base(resolved),
+		Href:         item.Href,
+		ResolvedHref: resolved,
+		Properties:   item.Properties,
+		MediaType:    item.MediaType,
+		Size:         src.Size,
+		Open:         src.Open,
+	}
+	return &res
+}
+
 // BuildResources assembles all manifest resources, the spine reading order
 // with Linear flags, and the cover from a package. Manifest items without a
 // backing entry (lookup reports false) are skipped, mirroring how missing
@@ -34,18 +51,7 @@ func BuildResources(p Package, lookup func(Item) (EntrySource, bool)) (all []*bo
 		if !ok {
 			continue
 		}
-		res := book.Resource{
-			Id:           item.ID,
-			Name:         path.Base(resolved),
-			Href:         item.Href,
-			ResolvedHref: resolved,
-			Properties:   item.Properties,
-			MediaType:    item.MediaType,
-			Size:         src.Size,
-			Open:         src.Open,
-		}
-		ptr := new(book.Resource)
-		*ptr = res
+		ptr := newResource(item, resolved, src)
 		all = append(all, ptr)
 		resolvedToResource[resolved] = ptr
 	}
@@ -65,19 +71,7 @@ func BuildResources(p Package, lookup func(Item) (EntrySource, bool)) (all []*bo
 			if !ok {
 				continue
 			}
-			res := book.Resource{
-				Id:           item.ID,
-				Name:         path.Base(resolved),
-				Href:         item.Href,
-				ResolvedHref: resolved,
-				Properties:   item.Properties,
-				MediaType:    item.MediaType,
-				Size:         src.Size,
-				Open:         src.Open,
-			}
-			ptr := new(book.Resource)
-			*ptr = res
-			resPtr = ptr
+			resPtr = newResource(*item, resolved, src)
 		}
 		linear := itemRef.Linear != "no"
 		readingOrder = append(readingOrder, book.ReadingOrderItem{Resource: resPtr, Linear: linear})
@@ -89,18 +83,7 @@ func BuildResources(p Package, lookup func(Item) (EntrySource, bool)) (all []*bo
 			cover = existing
 		} else {
 			if src, ok := lookup(*item); ok {
-				res := book.Resource{
-					Id:           item.ID,
-					Name:         path.Base(coverKey),
-					Href:         item.Href,
-					ResolvedHref: coverKey,
-					Properties:   item.Properties,
-					MediaType:    item.MediaType,
-					Size:         src.Size,
-					Open:         src.Open,
-				}
-				ptr := new(book.Resource)
-				*ptr = res
+				ptr := newResource(*item, coverKey, src)
 				all = append(all, ptr)
 				resolvedToResource[coverKey] = ptr
 				cover = ptr

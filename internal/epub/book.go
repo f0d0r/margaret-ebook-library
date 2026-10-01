@@ -2,16 +2,14 @@ package epub
 
 import (
 	domain "github.com/f0d0r/margaret-ebook-library/book"
-	"github.com/f0d0r/margaret-ebook-library/internal/opf"
 )
 
 // epubBook represents a parsed EPUB e-book implementing domain.Book.
 // It is an internal implementation detail; callers should use the Book interface via the root ebook package.
 type epubBook struct {
-	metadata   domain.Metadata
-	resources  *domain.ResourceSet
-	version    string
-	packageDoc opf.Package
+	metadata  domain.Metadata
+	resources *domain.ResourceSet
+	version   string
 }
 
 func (b *epubBook) Metadata() domain.Metadata {
@@ -28,9 +26,4 @@ func (b *epubBook) FileType() domain.FileType {
 
 func (b *epubBook) Version() string {
 	return b.version
-}
-
-// Package returns the format-specific parsed OPF package document.
-func (b *epubBook) Package() opf.Package {
-	return b.packageDoc
 }

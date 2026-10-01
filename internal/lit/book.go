@@ -2,7 +2,6 @@ package lit
 
 import (
 	"github.com/f0d0r/margaret-ebook-library/book"
-	"github.com/f0d0r/margaret-ebook-library/internal/opf"
 )
 
 // litVersionString is the reported format version: the LIT primary header
@@ -12,10 +11,9 @@ const litVersionString = "1"
 
 // litBook represents a parsed LIT e-book implementing book.Book.
 type litBook struct {
-	metadata   book.Metadata
-	resources  *book.ResourceSet
-	version    string
-	packageDoc opf.Package
+	metadata  book.Metadata
+	resources *book.ResourceSet
+	version   string
 }
 
 func (b *litBook) Metadata() book.Metadata {

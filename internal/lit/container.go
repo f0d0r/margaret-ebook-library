@@ -9,6 +9,7 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	compress "github.com/f0d0r/margaret-ebook-library/internal/compress"
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
 )
 
 // Container layout constants. Offsets are into the primary header;
@@ -20,7 +21,9 @@ const (
 	priHdrLen    = 12
 	priNumPieces = 16
 	priSecHdrLen = 20
-	priSize      = 40
+	// priSize is the primary header size (PRI_SIZE) from litheaders.c.
+	// lit_i_read_headers rejects anything smaller, so Supports does too.
+	priSize = 40
 
 	pieceSize = 16
 
@@ -64,6 +67,8 @@ type container struct {
 	sectionNames  []string
 	sectionCache  [][][]byte // per-section assembled payload, nil until loaded
 	manifest      map[string]manifestItem
+	opfPaths      map[string]string // internal id → output path (href resolution)
+	opfIds        map[string]string // canonical path → internal id (OPF lookup)
 
 	entryChunkLen uint32
 	countChunkLen uint32
@@ -79,13 +84,13 @@ func openContainer(b book.Blob, maxSize int64) (*container, error) {
 	if err != nil {
 		return nil, fmt.Errorf("lit: failed to stat: %w", err)
 	}
-	if size < minLitSize {
+	if size < priSize {
 		return nil, fmt.Errorf("lit: file too small: %w", book.ErrCorrupt)
 	}
 	c := &container{blob: b, fileSize: size, maxSize: maxSize, entries: map[string]directoryEntry{}}
 
 	head := make([]byte, priSize)
-	if err := readAtFull(b, head, 0); err != nil {
+	if err := util.ReadAtFull(b, head, 0); err != nil {
 		return nil, fmt.Errorf("lit: failed to read header: %w", book.ErrCorrupt)
 	}
 	if string(head[:8]) != litMagic {
@@ -130,6 +135,7 @@ func openContainer(b book.Blob, maxSize int64) (*container, error) {
 	if c.manifest, err = readManifest(raw); err != nil {
 		return nil, err
 	}
+	c.indexManifest()
 	return c, nil
 }
 
@@ -149,7 +155,7 @@ func (c *container) readSecondaryHeader(offset, length int64) error {
 		return fmt.Errorf("lit: empty secondary header: %w", book.ErrCorrupt)
 	}
 	raw := make([]byte, length)
-	if err := readAtFull(c.blob, raw, offset); err != nil {
+	if err := util.ReadAtFull(c.blob, raw, offset); err != nil {
 		return fmt.Errorf("lit: failed to read secondary header: %w", book.ErrCorrupt)
 	}
 	at := int64(int32LE(raw[4:]))
@@ -209,7 +215,7 @@ func (c *container) readSecondaryHeader(offset, length int64) error {
 // readPieces walks the piece table; piece 1 holds the directory.
 func (c *container) readPieces(hdrLen, numPieces int64) error {
 	table := make([]byte, numPieces*pieceSize)
-	if err := readAtFull(c.blob, table, hdrLen); err != nil {
+	if err := util.ReadAtFull(c.blob, table, hdrLen); err != nil {
 		return fmt.Errorf("lit: failed to read piece table: %w", book.ErrCorrupt)
 	}
 	for i := int64(0); i < numPieces; i++ {
@@ -226,7 +232,7 @@ func (c *container) readPieces(hdrLen, numPieces int64) error {
 		case 0:
 			// File size piece; the Blob size is authoritative.
 		case 1:
-			data, err := c.readBounded(offset, size)
+			data, err := c.readBounded(offset, size, "directory piece")
 			if err != nil {
 				return err
 			}
@@ -241,7 +247,7 @@ func (c *container) readPieces(hdrLen, numPieces int64) error {
 				return err
 			}
 		case 2:
-			data, err := c.readBounded(offset, size)
+			data, err := c.readBounded(offset, size, "count piece")
 			if err != nil {
 				return err
 			}
@@ -257,13 +263,14 @@ func (c *container) readPieces(hdrLen, numPieces int64) error {
 	return nil
 }
 
-// readBounded reads size bytes at offset, enforcing maxSize.
-func (c *container) readBounded(offset, size int64) ([]byte, error) {
+// readBounded reads size bytes at offset, enforcing maxSize. what names the
+// read in the limit error (e.g. `entry "/meta"`).
+func (c *container) readBounded(offset, size int64, what string) ([]byte, error) {
 	if size > c.maxSize {
-		return nil, fmt.Errorf("lit: %d bytes exceeds limit %d: %w", size, c.maxSize, book.ErrLimitExceeded)
+		return nil, fmt.Errorf("lit: %s %d bytes exceeds limit %d: %w", what, size, c.maxSize, book.ErrLimitExceeded)
 	}
 	data := make([]byte, size)
-	if err := readAtFull(c.blob, data, offset); err != nil {
+	if err := util.ReadAtFull(c.blob, data, offset); err != nil {
 		return nil, fmt.Errorf("lit: short read: %w", book.ErrCorrupt)
 	}
 	return data, nil
@@ -392,14 +399,11 @@ func (c *container) getFile(name string) ([]byte, error) {
 		return nil, fmt.Errorf("lit: missing entry %q: %w", name, book.ErrCorrupt)
 	}
 	if entry.section == 0 {
-		if entry.size > c.maxSize {
-			return nil, fmt.Errorf("lit: entry %q %d bytes exceeds limit %d: %w", name, entry.size, c.maxSize, book.ErrLimitExceeded)
-		}
 		off := c.contentOffset + entry.offset
 		if entry.offset < 0 || entry.size > c.fileSize-off {
 			return nil, fmt.Errorf("lit: entry %q out of bounds: %w", name, book.ErrCorrupt)
 		}
-		return c.readBounded(off, entry.size)
+		return c.readBounded(off, entry.size, fmt.Sprintf("entry %q", name))
 	}
 	section, err := c.sectionData(entry.section)
 	if err != nil {
@@ -650,16 +654,4 @@ func decodeUTF16LE(raw []byte) string {
 // int32LE decodes a signed little-endian 32-bit integer.
 func int32LE(raw []byte) int32 {
 	return int32(binary.LittleEndian.Uint32(raw))
-}
-
-// readAtFull reads exactly len(buf) bytes at offset or fails.
-func readAtFull(r io.ReaderAt, buf []byte, offset int64) error {
-	n, err := r.ReadAt(buf, offset)
-	if err != nil && err != io.EOF {
-		return err
-	}
-	if n != len(buf) {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
 )
 
 // UnBinary flags for tag records.
@@ -117,16 +118,16 @@ const (
 	stCloseTag
 )
 
-// unbinFrame is one stack entry of the decoder.
+// unbinFrame is one stack entry of the decoder. Only the state that must
+// survive a suspension travels here: the tag being closed, the attribute map
+// the parent element inherited (a dynamic tag reads it without resetting, for
+// reference parity), the nesting depth and the resume point. Everything else
+// is consumed within a single inner call.
 type unbinFrame struct {
-	depth      int
-	tagName    string
-	attrMap    map[int]string
-	dynamicTag int
-	inCensor   bool
-	goingDown  bool
-	state      unbinState
-	flags      int
+	depth   int
+	tagName string
+	attrMap map[int]string
+	state   unbinState
 }
 
 // unbinary decodes MS Reader binary markup into XML text. tables selects
@@ -163,9 +164,11 @@ func (u *unbinary) inner(stack []unbinFrame) ([]unbinFrame, error) {
 	fr := stack[len(stack)-1]
 	stack = stack[:len(stack)-1]
 	depth, tagName, currentMap := fr.depth, fr.tagName, fr.attrMap
-	dynamicTag := fr.dynamicTag
-	inCensor, goingDown := fr.inCensor, fr.goingDown
-	state, flags := fr.state, fr.flags
+	// inCensor, goingDown and flags never cross a suspension: both push sites
+	// are reached with them already reset, so the zero value resumes exactly.
+	var inCensor, goingDown bool
+	var flags int
+	state := fr.state
 	var count int
 	var href strings.Builder
 	var customName []byte
@@ -177,7 +180,6 @@ func (u *unbinary) inner(stack []unbinFrame) ([]unbinFrame, error) {
 		u.buf.WriteString("</")
 		u.buf.WriteString(tagName)
 		u.buf.WriteString(">")
-		dynamicTag = 0
 		tagName = ""
 		state = stText
 	}
@@ -271,12 +273,11 @@ func (u *unbinary) inner(stack []unbinFrame) ([]unbinFrame, error) {
 				state = stText
 				if !goingDown {
 					tagName = ""
-					dynamicTag = 0
 					u.buf.WriteString(" />")
 				} else {
 					u.buf.WriteByte('>')
 					stack = append(stack,
-						unbinFrame{depth: depth, tagName: tagName, attrMap: currentMap, dynamicTag: dynamicTag, state: stCloseTag, flags: flags},
+						unbinFrame{depth: depth, tagName: tagName, attrMap: currentMap, state: stCloseTag},
 						unbinFrame{depth: depth + 1, state: stText},
 					)
 					return stack, nil
@@ -367,7 +368,6 @@ func (u *unbinary) inner(stack []unbinFrame) ([]unbinFrame, error) {
 			if count <= 0 || count > len(u.bin)-u.cpos {
 				return stack, fmt.Errorf("lit: invalid character count %d: %w", count, book.ErrCorrupt)
 			}
-			dynamicTag++
 			state = stGetCustom
 			tagName = ""
 			customName = customName[:0]
@@ -556,7 +556,7 @@ func isEntityStart(s []byte) bool {
 	}
 	if i < len(s) && (isNameStart(s[i])) {
 		i++
-		for i < len(s) && isNameChar(s[i]) {
+		for i < len(s) && util.IsXMLNameChar(s[i]) {
 			i++
 		}
 		return i < len(s) && s[i] == ';'
@@ -570,10 +570,6 @@ func isHex(c byte) bool {
 
 func isNameStart(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' || c == ':'
-}
-
-func isNameChar(c byte) bool {
-	return isNameStart(c) || c >= '0' && c <= '9' || c == '.' || c == '-'
 }
 
 func escapeAmpersand(raw []byte) []byte {

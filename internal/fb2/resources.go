@@ -220,7 +220,7 @@ func buildFb2Resources(data []byte, pm parsedMeta, ranges [][2]int64, maxSize in
 			Size:         int64(len(content)),
 			Open: func() (io.ReadCloser, error) {
 				if maxSize > 0 && int64(len(content)) > maxSize {
-					return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, name, len(content), maxSize)
+					return nil, book.LimitError(name, int64(len(content)), maxSize)
 				}
 				return io.NopCloser(bytes.NewReader(content)), nil
 			},
@@ -254,7 +254,7 @@ func imageResources(bins []*binaryFile, maxSize int64) []*book.Resource {
 			Size:         int64(len(bf.data)),
 			Open: func() (io.ReadCloser, error) {
 				if maxSize > 0 && int64(len(bf.data)) > maxSize {
-					return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, bf.href, len(bf.data), maxSize)
+					return nil, book.LimitError(bf.href, int64(len(bf.data)), maxSize)
 				}
 				return io.NopCloser(bytes.NewReader(bf.data)), nil
 			},

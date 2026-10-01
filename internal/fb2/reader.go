@@ -12,6 +12,7 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/book"
 	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
 )
 
 type Fb2Reader struct {
@@ -234,7 +235,7 @@ func scanFictionBookTag(buf []byte) bool {
 			continue
 		}
 		k := j
-		for k < len(buf) && isNameChar(buf[k]) {
+		for k < len(buf) && util.IsXMLNameChar(buf[k]) {
 			k++
 		}
 		name := string(buf[j:k])
@@ -253,19 +254,6 @@ func scanFictionBookTag(buf []byte) bool {
 		}
 	}
 	return false
-}
-
-// isNameChar reports whether c may appear in an XML tag/namespace-prefix
-// name (ASCII subset; sufficient for matching the FictionBook literal).
-func isNameChar(c byte) bool {
-	switch {
-	case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9':
-		return true
-	case c == '_' || c == '-' || c == '.' || c == ':':
-		return true
-	default:
-		return false
-	}
 }
 
 func isSpace(c byte) bool {

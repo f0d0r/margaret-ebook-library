@@ -40,19 +40,12 @@ func (r *MobiReader) Supports(b book.Blob) bool {
 
 func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 	maxRecordSize := r.cfg.MaxRecordSize
-	if maxRecordSize <= 0 {
-		maxRecordSize = config.DefaultConfig().MaxRecordSize
-	}
 	pdbDb, err := ReadPdbDb(b, maxRecordSize)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to read PDB database: %w", book.ErrCorrupt, err)
 	}
 
-	maxExthRecords := r.cfg.MaxExthRecords
-	if maxExthRecords <= 0 {
-		maxExthRecords = config.DefaultConfig().MaxExthRecords
-	}
-	mobiDoc, err := ReadMobi(pdbDb, maxExthRecords)
+	mobiDoc, err := ReadMobi(pdbDb, r.cfg.MaxExthRecords)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to read MOBI file: %w", book.ErrParseFailed, err)
 	}
@@ -68,16 +61,9 @@ func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 
 	cover := r.cover(b, pdbDb, mobiDoc)
 	content := r.content(pdbDb, mobiDoc)
-	maxResourceSize := r.cfg.MaxResourceSize
-	if maxResourceSize <= 0 {
-		maxResourceSize = config.DefaultConfig().MaxResourceSize
-	}
-	if maxRecordSize <= 0 {
-		maxRecordSize = config.DefaultConfig().MaxRecordSize
-	}
 
 	// Build All + ReadingOrder for ResourceSet (cover alias handled internally)
-	all, readingOrder, coverAliased := r.buildMobiResources(b, pdbDb, mobiDoc, cover, content, maxResourceSize, maxRecordSize)
+	all, readingOrder, coverAliased := r.buildMobiResources(b, pdbDb, mobiDoc, cover, content, r.cfg.MaxResourceSize, maxRecordSize)
 
 	return &mobiBook{
 		metadata: book.Metadata{
@@ -103,13 +89,7 @@ func (r *MobiReader) cover(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi) *book.Resou
 		return nil
 	}
 	maxCoverSize := r.cfg.MaxResourceSize
-	if maxCoverSize <= 0 {
-		maxCoverSize = config.DefaultConfig().MaxResourceSize
-	}
 	maxRecordSize := r.cfg.MaxRecordSize
-	if maxRecordSize <= 0 {
-		maxRecordSize = config.DefaultConfig().MaxRecordSize
-	}
 	coverOffset := coverRecord.Offset
 	// Try to detect media; for oversized records DataSlice will fail due to limit check, so fallback to direct read.
 	magicData, err := coverRecord.DataSlice(8)
@@ -143,7 +123,7 @@ func (r *MobiReader) cover(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi) *book.Resou
 		Size:         int64(coverLength),
 		Open: func() (io.ReadCloser, error) {
 			if maxCoverSize > 0 && int64(coverLength) > maxCoverSize {
-				return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, href, coverLength, maxCoverSize)
+				return nil, book.LimitError(href, int64(coverLength), maxCoverSize)
 			}
 			if maxRecordSize > 0 && int64(coverLength) > maxRecordSize {
 				return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxRecordSize %d", book.ErrLimitExceeded, href, coverLength, maxRecordSize)
@@ -236,9 +216,6 @@ func (r *MobiReader) buildMobiResources(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi
 // (the default), where the intact MOBI6 content is served instead.
 func (r *MobiReader) content(pdbDb *PdbDb, mobiDoc *Mobi) []book.Resource {
 	maxResourceSize := r.cfg.MaxResourceSize
-	if maxResourceSize <= 0 {
-		maxResourceSize = config.DefaultConfig().MaxResourceSize
-	}
 
 	// Try the MOBI8 path first. It only returns an error when the KF8 content
 	// could not be produced at all (DRM, unusable indices, limit exceeded);
@@ -334,6 +311,8 @@ func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobiDoc *Mobi, maxResourceSize i
 			}
 			// The index tables are unusable but the raw markup was decompressed:
 			// serve it as a single resource instead of dropping the content.
+			// This message names a KF8 part rather than a manifest resource, so
+			// it does not use book.LimitError.
 			if maxResourceSize > 0 && int64(len(rawML)) > maxResourceSize {
 				return fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, "part0000.html", len(rawML), maxResourceSize)
 			}
@@ -346,6 +325,8 @@ func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobiDoc *Mobi, maxResourceSize i
 			return err
 		}
 
+		// Same wording as above: these name synthetic KF8 parts, not manifest
+		// resources, so book.LimitError does not apply.
 		for i, p := range parts {
 			if maxResourceSize > 0 && int64(len(p)) > maxResourceSize {
 				name := partInfos[i].Filename

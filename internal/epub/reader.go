@@ -54,18 +54,7 @@ func (r *EpubReader) hasValidEpubHeader(b book.Blob) bool {
 	}
 
 	// 1. Verify ZIP signature. Valid ZIP files can start with one of several PK headers.
-	if buf[0] != 0x50 || buf[1] != 0x4B {
-		return false
-	}
-
-	switch {
-	case buf[2] == 0x03 && buf[3] == 0x04:
-		// ZIP local file header
-	case buf[2] == 0x05 && buf[3] == 0x06:
-		// ZIP end of central directory (empty archive style)
-	case buf[2] == 0x07 && buf[3] == 0x08:
-		// ZIP data descriptor / other valid ZIP signature
-	default:
+	if !compressutil.IsZip(buf[:n]) {
 		return false
 	}
 
@@ -124,9 +113,8 @@ func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
 			Description: p.Description(),
 			Languages:   p.Languages(),
 		},
-		resources:  book.NewResourceSet(resources, readingOrder, cover),
-		version:    p.Version,
-		packageDoc: p,
+		resources: book.NewResourceSet(resources, readingOrder, cover),
+		version:   p.Version,
 	}, nil
 }
 

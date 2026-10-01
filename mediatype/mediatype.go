@@ -21,10 +21,9 @@ const (
 	CSS         = "text/css"
 	NCX         = "application/x-dtbncx+xml"
 	OPF         = "application/oebps-package+xml"
-	// OEB1Document and OEB1CSS are the legacy Open eBook 1.x content
-	// types used by MS Reader .LIT packages.
+	// OEB1Document is the legacy Open eBook 1.x content type used by MS
+	// Reader .LIT packages.
 	OEB1Document = "text/x-oeb1-document"
-	OEB1CSS      = "text/x-oeb1-css"
 )
 
 // extByType is the single source of truth mapping MIME types to canonical

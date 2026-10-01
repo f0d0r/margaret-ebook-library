@@ -75,7 +75,7 @@ func imageResources(b book.Blob, pdbDb *PdbDb, mobi *Mobi, maxResourceSize, maxR
 				Size:         int64(recLength),
 				Open: func() (io.ReadCloser, error) {
 					if maxRes > 0 && int64(recLength) > maxRes {
-						return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, hrefCopy, recLength, maxRes)
+						return nil, book.LimitError(hrefCopy, int64(recLength), maxRes)
 					}
 					if maxRec > 0 && int64(recLength) > maxRec {
 						return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxRecordSize %d", book.ErrLimitExceeded, hrefCopy, recLength, maxRec)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
 )
 
 const PDB_HEADER_SIZE = 78
@@ -86,8 +87,8 @@ func ReadPdbDb(b book.Blob, maxRecordSize int64) (*PdbDb, error) {
 		return nil, fmt.Errorf("file too large: %d", fileSize)
 	}
 
-	header, err := readFullAt(b, 0, PDB_HEADER_SIZE)
-	if err != nil {
+	header := make([]byte, PDB_HEADER_SIZE)
+	if err := util.ReadAtFull(b, header, 0); err != nil {
 		return nil, fmt.Errorf("read pdb header: %w", err)
 	}
 
@@ -187,8 +188,8 @@ func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b book.Blob, maxRe
 	// read to avoid one syscall (and, for path-based blobs, one file open)
 	// per record.
 	tableLen := int(numberOfRecords) * 8
-	table, err := readFullAt(b, int64(PDB_HEADER_SIZE), tableLen)
-	if err != nil {
+	table := make([]byte, tableLen)
+	if err := util.ReadAtFull(b, table, int64(PDB_HEADER_SIZE)); err != nil {
 		return nil, fmt.Errorf("read record info: %w", err)
 	}
 
@@ -256,17 +257,4 @@ func readRecordData(b book.Blob, offset uint32, length uint32, maxRecordSize, fi
 		return nil, fmt.Errorf("read pdb record: %w", err)
 	}
 	return data[:n], nil
-}
-
-// readFullAt reads exactly length bytes at offset using random access.
-func readFullAt(r io.ReaderAt, offset int64, length int) ([]byte, error) {
-	data := make([]byte, length)
-	n, err := r.ReadAt(data, offset)
-	if err != nil && err != io.EOF {
-		return nil, err
-	}
-	if n != length {
-		return nil, io.ErrUnexpectedEOF
-	}
-	return data, nil
 }
