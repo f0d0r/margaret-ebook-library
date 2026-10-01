@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
-	ziputil "github.com/f0d0r/margaret-ebook-library/internal/zip"
+	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
 )
 
 // Adobe/IDPF font obfuscation algorithms. These are the only
@@ -54,12 +54,12 @@ func checkDRM(zr *zip.Reader, p Package) error {
 }
 
 func checkAdobeDRM(zr *zip.Reader) error {
-	f := ziputil.Find(zr, "META-INF/encryption.xml")
+	f := compressutil.Find(zr, "META-INF/encryption.xml")
 	if f == nil {
 		return nil
 	}
 	// encryption.xml is tiny; cap the parse input.
-	raw, err := ziputil.ReadHead(f, 1<<20)
+	raw, err := compressutil.ReadHead(f, 1<<20)
 	if err != nil {
 		return fmt.Errorf("epub is DRM protected (META-INF/encryption.xml unreadable): %w", book.ErrDRM)
 	}
@@ -125,7 +125,7 @@ func checkKoboDRM(zr *zip.Reader, p Package) error {
 	if first == nil {
 		return nil
 	}
-	raw, err := ziputil.ReadHead(first, koboDRMProbeSize)
+	raw, err := compressutil.ReadHead(first, koboDRMProbeSize)
 	if err != nil {
 		return fmt.Errorf("kepub is DRM protected (rights.xml present, spine unreadable): %w", book.ErrDRM)
 	}
@@ -146,7 +146,7 @@ func checkKoboDRM(zr *zip.Reader, p Package) error {
 // name to tolerate leading ./ prefixes while staying case-sensitive on
 // the file name itself.
 func findRightsXML(zr *zip.Reader) *zip.File {
-	if f := ziputil.Find(zr, "rights.xml"); f != nil {
+	if f := compressutil.Find(zr, "rights.xml"); f != nil {
 		return f
 	}
 	for _, f := range zr.File {
@@ -174,7 +174,7 @@ func firstSpineContentFile(zr *zip.Reader, p Package) *zip.File {
 			continue
 		}
 		resolved := p.ResolvePath(item.Href)
-		if f := ziputil.Find(zr, resolved); f != nil {
+		if f := compressutil.Find(zr, resolved); f != nil {
 			return f
 		}
 	}

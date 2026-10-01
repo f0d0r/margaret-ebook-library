@@ -8,9 +8,9 @@ import (
 	"path"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
-	ziputil "github.com/f0d0r/margaret-ebook-library/internal/zip"
 )
 
 type EpubReader struct {
@@ -39,7 +39,7 @@ func (r *EpubReader) Supports(b book.Blob) bool {
 		return true
 	}
 
-	zr, err := ziputil.Open(b)
+	zr, err := compressutil.Open(b)
 	if err != nil {
 		return false
 	}
@@ -99,7 +99,7 @@ func (r *EpubReader) hasValidEpubHeader(b book.Blob) bool {
 }
 
 func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
-	zr, err := ziputil.Open(b)
+	zr, err := compressutil.Open(b)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open epub: %w", err)
 	}
@@ -140,7 +140,7 @@ func (r *EpubReader) readResources(zr *zip.Reader, p Package) ([]*book.Resource,
 	all := make([]*book.Resource, 0, len(p.Manifest.Items))
 	for _, item := range p.Manifest.Items {
 		resolved := p.ResolvePath(item.Href)
-		file := ziputil.Find(zr, resolved)
+		file := compressutil.Find(zr, resolved)
 		if file == nil {
 			continue
 		}
@@ -160,7 +160,7 @@ func (r *EpubReader) readResources(zr *zip.Reader, p Package) ([]*book.Resource,
 			continue
 		}
 		resolved := p.ResolvePath(item.Href)
-		file := ziputil.Find(zr, resolved)
+		file := compressutil.Find(zr, resolved)
 		if file == nil {
 			continue
 		}
@@ -187,7 +187,7 @@ func (r *EpubReader) readResources(zr *zip.Reader, p Package) ([]*book.Resource,
 		if existing, ok := resolvedToResource[coverKey]; ok {
 			cover = existing
 		} else {
-			if file := ziputil.Find(zr, p.ResolvePath(item.Href)); file != nil {
+			if file := compressutil.Find(zr, p.ResolvePath(item.Href)); file != nil {
 				res := r.resource(*item, file)
 				ptr := new(book.Resource)
 				*ptr = res
@@ -217,7 +217,7 @@ func (r *EpubReader) resource(item Item, file *zip.File) book.Resource {
 			if maxSize <= 0 {
 				maxSize = config.DefaultConfig().MaxResourceSize
 			}
-			return ziputil.OpenLimited(file, maxSize)
+			return compressutil.OpenLimited(file, maxSize)
 		},
 	}
 }

@@ -1,4 +1,4 @@
-package zip
+package compress
 
 import (
 	stdzip "archive/zip"

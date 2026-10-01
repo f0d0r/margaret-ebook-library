@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
-	ziputil "github.com/f0d0r/margaret-ebook-library/internal/zip"
 )
 
 func TestGetCover(t *testing.T) {
@@ -288,7 +288,7 @@ func TestOpenLimitedRejectsOversizedEntry(t *testing.T) {
 		t.Fatalf("got %d files, want 1", len(zr.File))
 	}
 
-	if rc, err := ziputil.OpenLimited(zr.File[0], config.DefaultConfig().MaxResourceSize); err == nil {
+	if rc, err := compressutil.OpenLimited(zr.File[0], config.DefaultConfig().MaxResourceSize); err == nil {
 		t.Fatalf("OpenLimited() expected error for oversized entry, got nil")
 	} else if !errors.Is(err, book.ErrLimitExceeded) {
 		t.Fatalf("OpenLimited() error = %v, want ErrLimitExceeded", err)
@@ -320,7 +320,7 @@ func TestOpenLimited_ConfigOverrideRejectsEntry(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.MaxResourceSize = 1
 
-	if rc, err := ziputil.OpenLimited(zr.File[0], cfg.MaxResourceSize); err == nil {
+	if rc, err := compressutil.OpenLimited(zr.File[0], cfg.MaxResourceSize); err == nil {
 		t.Fatalf("OpenLimited() expected error with reduced MaxResourceSize, got nil")
 	} else if !errors.Is(err, book.ErrLimitExceeded) {
 		t.Fatalf("OpenLimited() error = %v, want ErrLimitExceeded", err)
@@ -349,7 +349,7 @@ func TestOpenLimitedReadsNormalEntry(t *testing.T) {
 		t.Fatalf("zip.NewReader() error: %v", err)
 	}
 
-	rc, err := ziputil.OpenLimited(zr.File[0], config.DefaultConfig().MaxResourceSize)
+	rc, err := compressutil.OpenLimited(zr.File[0], config.DefaultConfig().MaxResourceSize)
 	if err != nil {
 		t.Fatalf("OpenLimited() unexpected error: %v", err)
 	}

@@ -1,9 +1,10 @@
-// Package zip provides format-independent helpers for working with ZIP
-// archives: signature sniffing, opening a blob as an archive, locating
-// entries by name, and reading entries with decompression-bomb protection.
-// E-book format readers (EPUB, FB2, …) share these instead of reimplementing
-// them per format.
-package zip
+// Package compress provides format-independent helpers for working with
+// compressed data: ZIP archive handling (signature sniffing, opening a blob
+// as an archive, locating entries by name, reading entries with
+// decompression-bomb protection) and general-purpose decompressors (e.g.
+// LZX) shared by the e-book format readers instead of reimplemented per
+// format.
+package compress
 
 import (
 	stdzip "archive/zip"
