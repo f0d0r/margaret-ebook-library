@@ -11,8 +11,8 @@
 // Metadata comes from the binary OPF; content and cover resources open
 // lazily through book.Resource. Only passport-locked containers
 // (/DRMStorage/Licenses/EUL) are rejected outright with book.ErrDRM:
-// sealed/inscribed sections whose keys don't verify stay listed but fail
-// with book.ErrDRM when opened. MS-era files with unbalanced binary markup
+// sealed content stays listed but fails with book.ErrDRM when opened,
+// because section decryption is out of scope. MS-era files with unbalanced binary markup
 // (stray closes, early package end) are tolerated the way MS Reader accepts
 // them, instead of failing like the reference decoders.
 package lit

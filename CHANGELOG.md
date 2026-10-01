@@ -7,8 +7,8 @@
 - LIT reading (`.lit`, MS Reader): normalized metadata, spine reading order
   and lazily-opened content/cover resources from OEB 1.x packages, following
   the ConvertLIT and calibre LIT readers (ITSF container, LZX sections,
-  binary OPF/content decoding). Sealed/inscribed sections whose keys don't
-  verify stay listed but fail with `ErrDRM` on `Open`; passport-locked
+  binary OPF/content decoding). Sealed content stays listed but fails with
+  `ErrDRM` on `Open` (section decryption is out of scope); passport-locked
   (`/DRMStorage/Licenses/EUL`) files are rejected outright. MS-era files
   with unbalanced binary markup are tolerated like MS Reader.
 - Shared `internal/opf` package: OPF parsing, metadata extraction and

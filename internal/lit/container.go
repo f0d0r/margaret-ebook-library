@@ -64,7 +64,6 @@ type container struct {
 	sectionNames  []string
 	sectionCache  [][][]byte // per-section assembled payload, nil until loaded
 	manifest      map[string]manifestItem
-	desKey        []byte // unwrapped section DES key, derived on first use
 
 	entryChunkLen uint32
 	countChunkLen uint32
@@ -444,11 +443,7 @@ func (c *container) sectionData(section int64) ([]byte, error) {
 		}
 		switch guid := formatGUID(transform[:16]); guid {
 		case desEncryptGUID:
-			key, err := c.desBookKey()
-			if err != nil {
-				return nil, err
-			}
-			content = desDecrypt(content, key)
+			return nil, fmt.Errorf("LIT content is sealed; decryption is out of scope: %w", book.ErrDRM)
 		case lzxCompressGUID:
 			reset, err := c.getFile(base + "/Transform/" + lzxCompressGUID + "/InstanceData/ResetTable")
 			if err != nil {

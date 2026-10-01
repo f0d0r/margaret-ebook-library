@@ -36,6 +36,11 @@ type Metadata struct {
 	Languages    []string  `xml:"language"`
 	Metas        []Meta    `xml:"meta"`
 
+	// DirectLanguages holds capitalized language elements placed directly
+	// under metadata, as found in unbalanced MS-era packages where they
+	// escape the dc-metadata wrapper.
+	DirectLanguages []string `xml:"Language"`
+
 	// Dc holds OEB 1.x metadata nested in a dc-metadata wrapper (LIT).
 	Dc *DcMetadata `xml:"dc-metadata"`
 	// XMeta holds OEB 1.x metadata nested in an x-metadata wrapper (LIT).
@@ -187,9 +192,11 @@ func (p Package) Languages() []string {
 		return langs
 	}
 	if p.Metadata.Dc != nil {
-		return validLanguages(p.Metadata.Dc.Languages)
+		if langs := validLanguages(p.Metadata.Dc.Languages); len(langs) > 0 {
+			return langs
+		}
 	}
-	return nil
+	return validLanguages(p.Metadata.DirectLanguages)
 }
 
 func validLanguages(values []string) []string {

@@ -117,3 +117,32 @@ func TestOEB10AuthorRoles(t *testing.T) {
 		t.Errorf("Authors() = %q, want %q", got, want)
 	}
 }
+
+func TestDirectCapitalLanguage(t *testing.T) {
+	// Unbalanced MS-era packages place dc:Language directly under
+	// metadata, outside the dc-metadata wrapper (observed in the
+	// Gutenberg corpus).
+	const doc = `<package><metadata><dc-metadata>` +
+		`<dc:Title>T</dc:Title></dc-metadata>` +
+		`<dc:Language>en</dc:Language></metadata></package>`
+	p, err := Parse(strings.NewReader(doc))
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if got := p.Languages(); !reflect.DeepEqual(got, []string{"en"}) {
+		t.Errorf("Languages() = %q, want [en]", got)
+	}
+}
+
+func TestWrappedLanguageBeatsDirectCapital(t *testing.T) {
+	const doc = `<package><metadata><dc-metadata>` +
+		`<dc:Language>hu</dc:Language></dc-metadata>` +
+		`<dc:Language>en</dc:Language></metadata></package>`
+	p, err := Parse(strings.NewReader(doc))
+	if err != nil {
+		t.Fatalf("Parse() error: %v", err)
+	}
+	if got := p.Languages(); !reflect.DeepEqual(got, []string{"hu"}) {
+		t.Errorf("Languages() = %q, want [hu]", got)
+	}
+}

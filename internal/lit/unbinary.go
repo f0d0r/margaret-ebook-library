@@ -123,7 +123,6 @@ type unbinFrame struct {
 	tagName    string
 	attrMap    map[int]string
 	dynamicTag int
-	errors     int
 	inCensor   bool
 	goingDown  bool
 	state      unbinState
@@ -164,7 +163,7 @@ func (u *unbinary) inner(stack []unbinFrame) ([]unbinFrame, error) {
 	fr := stack[len(stack)-1]
 	stack = stack[:len(stack)-1]
 	depth, tagName, currentMap := fr.depth, fr.tagName, fr.attrMap
-	dynamicTag, errors := fr.dynamicTag, fr.errors
+	dynamicTag := fr.dynamicTag
 	inCensor, goingDown := fr.inCensor, fr.goingDown
 	state, flags := fr.state, fr.flags
 	var count int
@@ -277,7 +276,7 @@ func (u *unbinary) inner(stack []unbinFrame) ([]unbinFrame, error) {
 				} else {
 					u.buf.WriteByte('>')
 					stack = append(stack,
-						unbinFrame{depth: depth, tagName: tagName, attrMap: currentMap, dynamicTag: dynamicTag, errors: errors, state: stCloseTag, flags: flags},
+						unbinFrame{depth: depth, tagName: tagName, attrMap: currentMap, dynamicTag: dynamicTag, state: stCloseTag, flags: flags},
 						unbinFrame{depth: depth + 1, state: stText},
 					)
 					return stack, nil

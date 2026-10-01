@@ -40,8 +40,8 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 > non-empty `rights.xml` with encrypted spine content (Kobo kdrm), and MOBI
 > files with DRM records or PalmDOC/MOBI text encryption. LIT files with a
 > passport-locked (`/DRMStorage/Licenses/EUL`) container are rejected outright;
-> sealed/inscribed LIT sections whose keys don't verify stay listed but fail
-> with `ErrDRM` when opened. Font obfuscation
+> sealed LIT content stays listed but fails with `ErrDRM` when opened
+> (section decryption is out of scope). Font obfuscation
 > (`adobe#RC`, `idpf.org/2008/embedding`) and leftover/empty `rights.xml`
 > files are not treated as DRM.
 

@@ -701,3 +701,46 @@ func TestLitLZXSection(t *testing.T) {
 		t.Errorf("content = %q, want %q", got, want)
 	}
 }
+
+func TestSplicePackageTail(t *testing.T) {
+	// Shape observed in the Gutenberg corpus: one unbalanced close ends
+	// the package early, leaving manifest and spine as trailing siblings.
+	// The splice moves the first </package> past them.
+	in := `<package unique-identifier="uid"><metadata>` +
+		`<dc-metadata><dc:Title>Gettysburg Address</dc:Title></dc-metadata>` +
+		`<dc:Language>en</dc:Language></metadata></package>` +
+		`<manifest><item id="cover" href="cover" media-type="text/x-oeb1-document" />` +
+		`<item id="Content" href="Content" media-type="text/x-oeb1-document" /></manifest>` +
+		`<spine><itemref idref="cover" /><itemref idref="Content" /></spine>` +
+		`<tours></tours><guide></guide>`
+	got := splicePackageTail([]byte(in))
+	p, err := opf.Parse(bytes.NewReader(got))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(p.Manifest.Items) != 2 {
+		t.Errorf("manifest items = %d, want 2", len(p.Manifest.Items))
+	}
+	if len(p.Spine.ItemRefs) != 2 {
+		t.Errorf("spine refs = %d, want 2", len(p.Spine.ItemRefs))
+	}
+	if gotTitle := p.Title(); gotTitle != "Gettysburg Address" {
+		t.Errorf("Title = %q", gotTitle)
+	}
+	if langs := p.Languages(); len(langs) != 1 || langs[0] != "en" {
+		t.Errorf("Languages = %q, want [en]", langs)
+	}
+}
+
+func TestSplicePackageTailBalanced(t *testing.T) {
+	// Balanced documents pass through byte-identical.
+	in := `<package><metadata><dc:title>T</dc:title></metadata></package>`
+	if got := splicePackageTail([]byte(in)); string(got) != in {
+		t.Errorf("splice changed balanced input: %q", got)
+	}
+	// Trailing content without manifest/spine is left alone.
+	in2 := `<package></package><tours></tours>`
+	if got := splicePackageTail([]byte(in2)); string(got) != in2 {
+		t.Errorf("splice changed manifest-less input: %q", got)
+	}
+}
