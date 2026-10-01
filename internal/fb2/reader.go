@@ -10,8 +10,9 @@ import (
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
-	ziputil "github.com/f0d0r/margaret-ebook-library/internal/zip"
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
 )
 
 type Fb2Reader struct {
@@ -49,7 +50,7 @@ func (r *Fb2Reader) Supports(b book.Blob) bool {
 	}
 	head = head[:n]
 
-	if ziputil.IsZip(head) {
+	if compressutil.IsZip(head) {
 		return r.supportsZipped(b)
 	}
 	return hasFictionBookRoot(head)
@@ -73,8 +74,8 @@ func (r *Fb2Reader) Read(b book.Blob) (book.Book, error) {
 	// The source stream is capped at maxSize, so materializing it below is
 	// bounded (transcoding may expand it slightly).
 	var raw io.ReadCloser
-	if ziputil.IsZip(head) {
-		zr, err := ziputil.Open(b)
+	if compressutil.IsZip(head) {
+		zr, err := compressutil.Open(b)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open fb2 archive: %w", err)
 		}
@@ -84,7 +85,7 @@ func (r *Fb2Reader) Read(b book.Blob) (book.Book, error) {
 		if f == nil {
 			return nil, fmt.Errorf("no readable entry in fb2 archive")
 		}
-		raw, err = ziputil.OpenLimited(f, maxSize)
+		raw, err = compressutil.OpenLimited(f, maxSize)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open fb2 entry: %w", err)
 		}
@@ -142,7 +143,7 @@ func (r *Fb2Reader) Read(b book.Blob) (book.Book, error) {
 //     maxZipEntries other entries in archive order, hoping one holds FB2
 //     content (more tolerant than calibre, which tries only the first).
 func (r *Fb2Reader) supportsZipped(b book.Blob) bool {
-	zr, err := ziputil.Open(b)
+	zr, err := compressutil.Open(b)
 	if err != nil {
 		return false
 	}
@@ -194,7 +195,7 @@ func firstFb2Entry(zr *zip.Reader) *zip.File {
 // sniffEntry decompresses at most probeSize bytes of a zip entry and reports
 // whether they look like the start of a FictionBook document.
 func sniffEntry(f *zip.File) bool {
-	buf, err := ziputil.ReadHead(f, probeSize)
+	buf, err := compressutil.ReadHead(f, probeSize)
 	if err != nil {
 		return false
 	}
@@ -234,7 +235,7 @@ func scanFictionBookTag(buf []byte) bool {
 			continue
 		}
 		k := j
-		for k < len(buf) && isNameChar(buf[k]) {
+		for k < len(buf) && util.IsXMLNameChar(buf[k]) {
 			k++
 		}
 		name := string(buf[j:k])
@@ -253,19 +254,6 @@ func scanFictionBookTag(buf []byte) bool {
 		}
 	}
 	return false
-}
-
-// isNameChar reports whether c may appear in an XML tag/namespace-prefix
-// name (ASCII subset; sufficient for matching the FictionBook literal).
-func isNameChar(c byte) bool {
-	switch {
-	case c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z', c >= '0' && c <= '9':
-		return true
-	case c == '_' || c == '-' || c == '.' || c == ':':
-		return true
-	default:
-		return false
-	}
 }
 
 func isSpace(c byte) bool {

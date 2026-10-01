@@ -53,6 +53,7 @@ func TestHtmlToTextTransformer_FindAndTransform(t *testing.T) {
 		{"doctype", mediatype.XHTML, "<!DOCTYPE html><p>Content</p>", "Content"},
 		{"html alias", mediatype.HTML, "<p>HTML</p>", "HTML"},
 		{"mobi alias", mediatype.MobiHTML, "<div>Mobi</div>", "Mobi"},
+		{"oeb1 alias", mediatype.OEB1Document, "<p>OEB1</p>", "OEB1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

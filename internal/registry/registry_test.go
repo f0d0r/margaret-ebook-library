@@ -11,6 +11,7 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/epub"
 	"github.com/f0d0r/margaret-ebook-library/internal/fb2"
+	"github.com/f0d0r/margaret-ebook-library/internal/lit"
 	"github.com/f0d0r/margaret-ebook-library/internal/mobi"
 )
 
@@ -28,6 +29,12 @@ func TestRegistry_ReaderForBlob(t *testing.T) {
 	unsupportedPath := filepath.Join(tmpDir, "book.txt")
 	if err := os.WriteFile(unsupportedPath, []byte("plain text"), 0644); err != nil {
 		t.Fatalf("failed to write text file: %v", err)
+	}
+
+	litPath := filepath.Join(tmpDir, "book.lit")
+	litMagic := append([]byte("ITOLITLS"), make([]byte, 32)...)
+	if err := os.WriteFile(litPath, litMagic, 0644); err != nil {
+		t.Fatalf("failed to write LIT file: %v", err)
 	}
 
 	fb2Path := filepath.Join(tmpDir, "book.fb2")
@@ -76,6 +83,16 @@ func TestRegistry_ReaderForBlob(t *testing.T) {
 		}
 		if _, ok := reader.(*fb2.Fb2Reader); !ok {
 			t.Errorf("ReaderForBlob() = %T, want *fb2.Fb2Reader", reader)
+		}
+	})
+
+	t.Run("LIT blob returns LitReader", func(t *testing.T) {
+		reader, err := r.ReaderForBlob(book.NewPathBlob(litPath))
+		if err != nil {
+			t.Fatalf("ReaderForBlob() error: %v", err)
+		}
+		if _, ok := reader.(*lit.LitReader); !ok {
+			t.Errorf("ReaderForBlob() = %T, want *lit.LitReader", reader)
 		}
 	})
 }

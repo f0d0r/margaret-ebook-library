@@ -2,6 +2,7 @@ package book
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
 )
@@ -38,3 +39,11 @@ var (
 	// fails due to invalid data or unexpected format variations.
 	ErrParseFailed = errors.New("parse failed")
 )
+
+// LimitError reports that the resource named name declares size bytes, over
+// the reader's configured maximum. Every format reader wraps the same
+// ErrLimitExceeded with this wording, so it lives here rather than at each
+// call site.
+func LimitError(name string, size, max int64) error {
+	return fmt.Errorf("%w: %q %d bytes exceeds MaxResourceSize %d", ErrLimitExceeded, name, size, max)
+}

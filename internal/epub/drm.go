@@ -10,7 +10,8 @@ import (
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
-	ziputil "github.com/f0d0r/margaret-ebook-library/internal/zip"
+	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
+	"github.com/f0d0r/margaret-ebook-library/internal/opf"
 )
 
 // Adobe/IDPF font obfuscation algorithms. These are the only
@@ -46,7 +47,7 @@ const koboDRMProbeSize = 8192
 //     content document (first 8 KiB contains neither <?xml, <html nor
 //     koboSpan) means DRM. A bare or leftover rights.xml alone is NOT
 //     definitive, exactly like in Calibre.
-func checkDRM(zr *zip.Reader, p Package) error {
+func checkDRM(zr *zip.Reader, p opf.Package) error {
 	if err := checkAdobeDRM(zr); err != nil {
 		return err
 	}
@@ -54,12 +55,12 @@ func checkDRM(zr *zip.Reader, p Package) error {
 }
 
 func checkAdobeDRM(zr *zip.Reader) error {
-	f := ziputil.Find(zr, "META-INF/encryption.xml")
+	f := compressutil.Find(zr, "META-INF/encryption.xml")
 	if f == nil {
 		return nil
 	}
 	// encryption.xml is tiny; cap the parse input.
-	raw, err := ziputil.ReadHead(f, 1<<20)
+	raw, err := compressutil.ReadHead(f, 1<<20)
 	if err != nil {
 		return fmt.Errorf("epub is DRM protected (META-INF/encryption.xml unreadable): %w", book.ErrDRM)
 	}
@@ -112,7 +113,7 @@ func encryptionAlgorithms(raw []byte) ([]string, error) {
 	return algos, nil
 }
 
-func checkKoboDRM(zr *zip.Reader, p Package) error {
+func checkKoboDRM(zr *zip.Reader, p opf.Package) error {
 	rights := findRightsXML(zr)
 	if rights == nil {
 		return nil
@@ -125,7 +126,7 @@ func checkKoboDRM(zr *zip.Reader, p Package) error {
 	if first == nil {
 		return nil
 	}
-	raw, err := ziputil.ReadHead(first, koboDRMProbeSize)
+	raw, err := compressutil.ReadHead(first, koboDRMProbeSize)
 	if err != nil {
 		return fmt.Errorf("kepub is DRM protected (rights.xml present, spine unreadable): %w", book.ErrDRM)
 	}
@@ -146,7 +147,7 @@ func checkKoboDRM(zr *zip.Reader, p Package) error {
 // name to tolerate leading ./ prefixes while staying case-sensitive on
 // the file name itself.
 func findRightsXML(zr *zip.Reader) *zip.File {
-	if f := ziputil.Find(zr, "rights.xml"); f != nil {
+	if f := compressutil.Find(zr, "rights.xml"); f != nil {
 		return f
 	}
 	for _, f := range zr.File {
@@ -163,10 +164,9 @@ func findRightsXML(zr *zip.Reader) *zip.File {
 // firstSpineContentFile returns the ZIP entry for the first spine item
 // whose manifest media type is a content document (OEB_DOCS). Missing
 // entries are skipped, like readResources does.
-func firstSpineContentFile(zr *zip.Reader, p Package) *zip.File {
-	r := OpfReader{}
+func firstSpineContentFile(zr *zip.Reader, p opf.Package) *zip.File {
 	for _, itemRef := range p.Spine.ItemRefs {
-		item := r.ItemById(p, itemRef.IdRef)
+		item := p.ItemById(itemRef.IdRef)
 		if item == nil {
 			continue
 		}
@@ -174,7 +174,7 @@ func firstSpineContentFile(zr *zip.Reader, p Package) *zip.File {
 			continue
 		}
 		resolved := p.ResolvePath(item.Href)
-		if f := ziputil.Find(zr, resolved); f != nil {
+		if f := compressutil.Find(zr, resolved); f != nil {
 			return f
 		}
 	}
