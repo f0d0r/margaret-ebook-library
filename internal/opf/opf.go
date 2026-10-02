@@ -7,6 +7,7 @@
 package opf
 
 import (
+	"bytes"
 	"encoding/xml"
 	"io"
 	"path"
@@ -117,6 +118,71 @@ func Parse(r io.Reader) (Package, error) {
 		return Package{}, err
 	}
 	return p, nil
+}
+
+// ParseMetadata decodes only the <metadata> element from an OEB 1.0 XHTML
+// payload as carried by PalmDOC text records (<HTML><HEAD><metadata>...
+// with dc-metadata/x-metadata wrappers). A full Package cannot decode such
+// a payload because its XMLName requires a <package> root.
+//
+// Before decoding, the first <metadata>...</metadata> fragment is sliced
+// out of the input at the byte level (case-insensitive, attributes
+// tolerated). This makes the parser immune to whatever surrounds the
+// fragment: leading record padding (0x0E), NULs, BOM, <HTML><HEAD> markup,
+// and trailing body markup with unclosed <BR>/<P>. Callers wrap the result
+// as Package{Metadata: m} to reuse Title/Authors/Description/Languages.
+//
+// It returns an empty Metadata with a nil error when no complete
+// <metadata>...</metadata> fragment is present; callers fall back to the
+// PDB name then.
+func ParseMetadata(r io.Reader) (Metadata, error) {
+	raw, err := io.ReadAll(r)
+	if err != nil {
+		return Metadata{}, err
+	}
+	frag, ok := sliceMetadataFragment(raw)
+	if !ok {
+		return Metadata{}, nil
+	}
+	dec := xml.NewDecoder(bytes.NewReader(frag))
+	dec.Strict = false
+	dec.Entity = xml.HTMLEntity
+	var m Metadata
+	if err := dec.Decode(&m); err != nil {
+		return Metadata{}, err
+	}
+	return m, nil
+}
+
+// sliceMetadataFragment returns the first <metadata>...</metadata> range
+// (closing tag included), matched case-insensitively. The opening tag may
+// carry attributes; the character after the name must be a tag delimiter so
+// that e.g. "<metadatax>" does not match.
+func sliceMetadataFragment(buf []byte) ([]byte, bool) {
+	lower := bytes.ToLower(buf)
+	const open, close = "<metadata", "</metadata>"
+	const closeLen = len(close)
+	for start := bytes.Index(lower, []byte(open)); start >= 0; {
+		after := start + len(open)
+		if after >= len(buf) {
+			return nil, false
+		}
+		if c := buf[after]; c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '>' && c != '/' {
+			next := bytes.Index(lower[after:], []byte(open))
+			if next < 0 {
+				return nil, false
+			}
+			start = after + next
+			continue
+		}
+		rest := lower[after:]
+		end := bytes.Index(rest, []byte(close))
+		if end < 0 {
+			return nil, false
+		}
+		return buf[start : after+end+closeLen], true
+	}
+	return nil, false
 }
 
 // Title extracts the title from a Package.

@@ -15,4 +15,9 @@ const (
 
 	// LIT represents the Microsoft Reader e-book format (.lit).
 	LIT FileType = "lit"
+
+	// PALMDOC represents the PalmDOC e-book format (.prc, .pdb).
+	// It shares the PDB container with MOBI but carries a 16-byte
+	// record 0 header and plain-text or OEB 1.0 HTML payloads.
+	PALMDOC FileType = "palmdoc"
 )

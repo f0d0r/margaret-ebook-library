@@ -14,7 +14,11 @@ type CompressionType uint16
 const (
 	CompressionNone    CompressionType = 1
 	CompressionPalmDOC CompressionType = 2
-	CompressionHUFF    CompressionType = 17480
+	// CompressionPalmDOCAlt is also PalmDOC (LZ77): calibre's
+	// pdb/palmdoc reader accepts compression in {2, 258}
+	// (src/calibre/ebooks/pdb/palmdoc/reader.py).
+	CompressionPalmDOCAlt CompressionType = 258
+	CompressionHUFF       CompressionType = 17480
 )
 
 type EncryptionType uint16
@@ -151,17 +155,41 @@ func ReadMobi(pdbDb *PdbDb, maxExthRecords int) (*Mobi, error) {
 	return mobi, nil
 }
 
-func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
+// newMobiDefaults returns a Mobi with the absent-optional fields set to
+// their "not present" sentinels, shared by the MOBI and PalmDOC headers.
+func newMobiDefaults() *Mobi {
+	return &Mobi{
+		DRMOffset:        0xFFFFFFFF,
+		FCISRecordOffset: 0xFFFFFFFF,
+		FLISRecordOffset: 0xFFFFFFFF,
+		ExtraRecordFlags: 0,
+		IndxRecordOffset: 0xFFFFFFFF,
+		NcxIdx:           NullIndex,
+		DivIdx:           NullIndex,
+		SkelIdx:          NullIndex,
+		DatpIdx:          NullIndex,
+		OthIdx:           NullIndex,
+		FdstIdx:          NullIndex,
+		FdstCount:        0,
+	}
+}
 
+// readBaseHeader reads the PalmDOC base header fields shared by the MOBI
+// and pure-PalmDOC record 0 layouts: compression, text length, text record
+// count, max text record size and encryption type.
+func (m *Mobi) readBaseHeader(data []byte) {
+	m.Compression = CompressionType(binary.BigEndian.Uint16(data[0:2]))
+	m.TextLength = binary.BigEndian.Uint32(data[4:8])
+	m.TextRecordCount = binary.BigEndian.Uint16(data[8:10])
+	m.MaxTextRecordSize = binary.BigEndian.Uint16(data[10:12])
+	m.Encryption = EncryptionType(binary.BigEndian.Uint16(data[12:14]))
+}
+
+func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
 	if len(data) < 96 {
 		return nil, fmt.Errorf("record 0 is too short")
 	}
 
-	compression := binary.BigEndian.Uint16(data[0:2])
-	textLength := binary.BigEndian.Uint32(data[4:8])
-	textRecordCount := binary.BigEndian.Uint16(data[8:10])
-	maxTextRecordSize := binary.BigEndian.Uint16(data[10:12])
-	encryption := binary.BigEndian.Uint16(data[12:14])
 	identifier := string(data[16:20])
 	headerLength := binary.BigEndian.Uint32(data[20:24])
 	mobiType := binary.BigEndian.Uint32(data[24:28])
@@ -183,36 +211,18 @@ func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
 		codec = "cp1252"
 	}
 
-	mobi := &Mobi{
-		Compression:        CompressionType(compression),
-		TextLength:         textLength,
-		TextRecordCount:    textRecordCount,
-		MaxTextRecordSize:  maxTextRecordSize,
-		Encryption:         EncryptionType(encryption),
-		Identifier:         identifier,
-		HeaderLength:       headerLength,
-		Type:               MobiType(mobiType),
-		TextEncoding:       TextEncodingType(textEncoding),
-		MobiVersion:        mobiVersion,
-		FirstNonTextRecord: firstNonTextRecord,
-		FullNameOffset:     fullNameOffset,
-		FullNameLength:     fullNameLength,
-		Locale:             locale,
-		Codec:              codec,
-
-		DRMOffset:        0xFFFFFFFF,
-		FCISRecordOffset: 0xFFFFFFFF,
-		FLISRecordOffset: 0xFFFFFFFF,
-		ExtraRecordFlags: 0,
-		IndxRecordOffset: 0xFFFFFFFF,
-		NcxIdx:           NullIndex,
-		DivIdx:           NullIndex,
-		SkelIdx:          NullIndex,
-		DatpIdx:          NullIndex,
-		OthIdx:           NullIndex,
-		FdstIdx:          NullIndex,
-		FdstCount:        0,
-	}
+	mobi := newMobiDefaults()
+	mobi.readBaseHeader(data)
+	mobi.Identifier = identifier
+	mobi.HeaderLength = headerLength
+	mobi.Type = MobiType(mobiType)
+	mobi.TextEncoding = TextEncodingType(textEncoding)
+	mobi.MobiVersion = mobiVersion
+	mobi.FirstNonTextRecord = firstNonTextRecord
+	mobi.FullNameOffset = fullNameOffset
+	mobi.FullNameLength = fullNameLength
+	mobi.Locale = locale
+	mobi.Codec = codec
 
 	if len(data) >= 184 {
 		mobi.InputLanguage = binary.BigEndian.Uint32(data[96:100])

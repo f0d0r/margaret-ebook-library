@@ -5,10 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	"github.com/f0d0r/margaret-ebook-library/internal/opf"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
 type MobiReader struct {
@@ -23,8 +26,10 @@ func NewMobiReader(cfg config.Config) *MobiReader {
 }
 
 func (r *MobiReader) Supports(b book.Blob) bool {
-	// The "BOOKMOBI" identifier starts at byte 60 and ends at byte 67.
-	// Therefore reading exactly 68 bytes is sufficient.
+	// The type/creator identifier sits at bytes 60-67 ("BOOKMOBI" for
+	// Mobipocket, "TEXtREAd" for PalmDOC). Reading exactly 68 bytes is
+	// sufficient. Like calibre the ident is uppercased, so TEXtREAd
+	// matches TEXTREAD.
 	buf := make([]byte, 68)
 	n, err := b.ReadAt(buf, 0)
 	if err != nil && err != io.EOF {
@@ -34,8 +39,13 @@ func (r *MobiReader) Supports(b book.Blob) bool {
 		return false
 	}
 
-	// Check whether bytes 60-67 contain the "BOOKMOBI" string.
-	return string(buf[60:68]) == "BOOKMOBI"
+	// Check whether bytes 60-67 contain a known identifier.
+	switch strings.ToUpper(string(buf[60:68])) {
+	case pdbIdentMobi, pdbIdentPalmDoc:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
@@ -43,6 +53,10 @@ func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 	pdbDb, err := ReadPdbDb(b, maxRecordSize)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to read PDB database: %w", book.ErrCorrupt, err)
+	}
+
+	if isPalmDocDb(pdbDb) {
+		return r.readPalmDoc(pdbDb)
 	}
 
 	mobiDoc, err := ReadMobi(pdbDb, r.cfg.MaxExthRecords)
@@ -75,6 +89,78 @@ func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 		resources: book.NewResourceSet(all, readingOrder, coverAliased),
 		version:   mobiDoc.Version(),
 		mobiDoc:   mobiDoc,
+	}, nil
+}
+
+// readPalmDoc reads a pure PalmDOC book (TEXtREAd container). The payload is
+// preserved as-is: a sniff on the decompressed prefix decides only the media
+// type (text/html vs text/plain) and, for HTML, the OEB dc-metadata source.
+// The content itself stays lazily-opened so MaxResourceSize surfaces from
+// Open like on the MOBI path. PalmDOC has no cover or image records.
+func (r *MobiReader) readPalmDoc(pdbDb *PdbDb) (book.Book, error) {
+	mobiDoc, err := readPalmDocHeader(pdbDb)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to read PalmDOC file: %w", book.ErrParseFailed, err)
+	}
+
+	if isDRMProtected(mobiDoc) {
+		return nil, fmt.Errorf("palmdoc is DRM protected: %w", book.ErrDRM)
+	}
+
+	// Best-effort prefix for the media type decision and the OEB metadata.
+	// A prefix failure must not fail the book: Open reports the real error.
+	prefix, _ := palmDocPrefixText(pdbDb, mobiDoc)
+	isHTML := isPalmDocHTML(prefix)
+
+	title := pdbDb.Name
+	var authors []string
+	var description string
+	var languages []string
+	if isHTML {
+		if meta, merr := opf.ParseMetadata(strings.NewReader(decodeString(prefix, CP1252))); merr == nil {
+			pkg := opf.Package{Metadata: meta}
+			if t := pkg.Title(); t != "" {
+				title = t
+			}
+			authors = pkg.Authors()
+			description = pkg.Description()
+			languages = pkg.Languages()
+		}
+	}
+
+	name, mediaType := "index.txt", mediatype.PlainText
+	if isHTML {
+		name, mediaType = "index.html", mediatype.HTML
+	}
+	maxResourceSize := r.cfg.MaxResourceSize
+	content := &book.Resource{
+		Id:           "content",
+		Name:         name,
+		Href:         name,
+		ResolvedHref: name,
+		MediaType:    mediaType,
+		Size:         int64(mobiDoc.TextLength),
+		Open: func() (io.ReadCloser, error) {
+			data, err := extractPalmDocText(pdbDb, mobiDoc, maxResourceSize)
+			if err != nil {
+				return nil, err
+			}
+			return io.NopCloser(bytes.NewReader(data)), nil
+		},
+	}
+	readingOrder := buildMobiReadingOrder([]*book.Resource{content})
+
+	return &mobiBook{
+		metadata: book.Metadata{
+			Title:       title,
+			Authors:     authors,
+			Description: description,
+			Languages:   languages,
+		},
+		resources: book.NewResourceSet([]*book.Resource{content}, readingOrder, nil),
+		version:   mobiDoc.Version(),
+		mobiDoc:   mobiDoc,
+		isPalmDoc: true,
 	}, nil
 }
 

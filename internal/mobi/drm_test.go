@@ -54,9 +54,7 @@ func TestIsDRMProtected(t *testing.T) {
 // is non-nil the record is extended to 184 bytes and the DRM offset field
 // is set, mirroring a DRMed file.
 func buildDRMTestMOBI(encryption uint16, drmOffset *uint32) []byte {
-	const pdbHeaderSize = 78
-
-	header := make([]byte, pdbHeaderSize)
+	header := make([]byte, PDB_HEADER_SIZE)
 	copy(header[0:], "TestBook")
 	copy(header[60:64], "BOOK")
 	copy(header[64:68], "MOBI")
@@ -64,7 +62,7 @@ func buildDRMTestMOBI(encryption uint16, drmOffset *uint32) []byte {
 	binary.BigEndian.PutUint16(header[76:78], 1)
 
 	recordInfo := make([]byte, 8)
-	binary.BigEndian.PutUint32(recordInfo[0:4], uint32(pdbHeaderSize+8))
+	binary.BigEndian.PutUint32(recordInfo[0:4], uint32(PDB_HEADER_SIZE+8))
 	copy(recordInfo[5:8], []byte{0x00, 0x00, 0x01})
 
 	size := 100

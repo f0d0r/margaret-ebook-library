@@ -15,6 +15,13 @@ import (
 const PDB_HEADER_SIZE = 78
 const PALM_EPOCH_OFFSET = 2082844800
 
+// PDB database idents (type+creator) recognized on the MOBI/PalmDOC path,
+// compared uppercased like calibre.
+const (
+	pdbIdentMobi    = "BOOKMOBI"
+	pdbIdentPalmDoc = "TEXTREAD"
+)
+
 const (
 	AttrReadOnly     uint16 = 0x0002
 	AttrDirtyAppInfo uint16 = 0x0004
