@@ -146,3 +146,40 @@ func TestWrappedLanguageBeatsDirectCapital(t *testing.T) {
 		t.Errorf("Languages() = %q, want [hu]", got)
 	}
 }
+
+func TestParseMetadataLeadingJunk(t *testing.T) {
+	// Real PalmDOC text records start with 0x0E padding (plus a NUL)
+	// before <HTML>. ParseMetadata must slice out the fragment instead
+	// of choking on the leading control bytes (aesop11p.prc regression:
+	// author Aesop was not detected).
+	const doc = "\x0e\x0e\x0e\x0e\x0e\x00<HTML><HEAD><metadata>" +
+		`<dc-metadata xmlns:dc="http://purl.org/metadata/dublin_core">` +
+		`<dc:Title>Aesop's Fables</dc:Title>` +
+		`<dc:Creator>Aesop</dc:Creator>` +
+		`<dc:Language>en</dc:Language>` +
+		`</dc-metadata></metadata></HEAD><BODY><P><BR><P>unclosed body</BODY></HTML>`
+	m, err := ParseMetadata(strings.NewReader(doc))
+	if err != nil {
+		t.Fatalf("ParseMetadata() error: %v", err)
+	}
+	pkg := Package{Metadata: m}
+	if got := pkg.Title(); got != "Aesop's Fables" {
+		t.Errorf("Title() = %q, want Aesop's Fables", got)
+	}
+	if got := pkg.Authors(); !reflect.DeepEqual(got, []string{"Aesop"}) {
+		t.Errorf("Authors() = %q, want [Aesop]", got)
+	}
+	if got := pkg.Languages(); !reflect.DeepEqual(got, []string{"en"}) {
+		t.Errorf("Languages() = %q, want [en]", got)
+	}
+}
+
+func TestParseMetadataNoFragment(t *testing.T) {
+	m, err := ParseMetadata(strings.NewReader("plain text, no metadata"))
+	if err != nil {
+		t.Fatalf("ParseMetadata() error: %v", err)
+	}
+	if !reflect.DeepEqual(m, Metadata{}) {
+		t.Errorf("ParseMetadata() = %+v, want empty", m)
+	}
+}

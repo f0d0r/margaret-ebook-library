@@ -162,9 +162,8 @@ func (m memBlob) Size() (int64, error) { return int64(len(m.data)), nil }
 
 func makeTestMobiBlobWithImage(t *testing.T, imageRecIdx int, imageData []byte) []byte {
 	t.Helper()
-	const pdbHeaderSize = 78
 	// Build minimal PDB with 3 records (0 header, 1 text, 2 image)
-	header := make([]byte, pdbHeaderSize)
+	header := make([]byte, PDB_HEADER_SIZE)
 	copy(header[0:], "TestBook")
 	binary.BigEndian.PutUint16(header[32:34], 0)
 	binary.BigEndian.PutUint16(header[34:36], 0)
@@ -180,7 +179,7 @@ func makeTestMobiBlobWithImage(t *testing.T, imageRecIdx int, imageData []byte) 
 	binary.BigEndian.PutUint32(header[72:76], 0)
 	binary.BigEndian.PutUint16(header[76:78], 3)
 	buf := append([]byte{}, header...)
-	off0 := uint32(pdbHeaderSize + 3*8)
+	off0 := uint32(PDB_HEADER_SIZE + 3*8)
 	// Need to compute offsets: record0 length 300 (mobi header), record1 length 20 (text), record2 = len(imageData)
 	rec0Len := 300
 	rec1Len := 20

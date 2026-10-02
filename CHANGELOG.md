@@ -4,6 +4,14 @@
 
 ### Added
 
+- PalmDOC reading (`.prc`, `.pdb`, `TEXtREAd`): normalized metadata, single
+  lazily-opened content resource and linear reading order from the 16-byte
+  record 0 header, following calibre's MOBI `TEXTREAD` path and the PDB
+  PalmDOC reader. The decompressed prefix decides only the media type
+  (`text/html` for OEB 1.0 payloads via the new `opf.ParseMetadata`, else
+  `text/plain` with the PDB name as title); payload bytes are preserved
+  as-is for the existing transformers. New `book.PALMDOC` file type
+  (`ebook.PALMDOC`); encrypted books report `book.ErrDRM`.
 - LIT reading (`.lit`, MS Reader): normalized metadata, spine reading order
   and lazily-opened content/cover resources from OEB 1.x packages, following
   the ConvertLIT and calibre LIT readers (ITSF container, LZX sections,

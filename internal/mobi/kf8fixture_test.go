@@ -1,6 +1,7 @@
 package mobi
 
 import (
+	"bytes"
 	"encoding/binary"
 	"testing"
 )
@@ -10,8 +11,6 @@ import (
 // PDB record table, a PalmDOC+MOBI header (with EXTH), FDST flow tables and
 // multi-record INDX indices (leading header record + TAGX section + one entry
 // record per entry + IDXT table).
-
-const testPdbHeaderSize = 78
 
 // recordSpec describes one PDB record. A non-negative size overrides the
 // declared record length (used to build records whose header claims more data
@@ -34,6 +33,31 @@ func (r recordSpec) emitted() []byte {
 	return out
 }
 
+// assemblePdb writes a PDB container header (name/type/creator/record
+// count) plus the record offset table, then the record payloads. Test
+// builders share it instead of duplicating the layout.
+func assemblePdb(name, dbType, creator string, records [][]byte) []byte {
+	header := make([]byte, PDB_HEADER_SIZE)
+	copy(header[0:], name)
+	copy(header[60:64], dbType)
+	copy(header[64:68], creator)
+	binary.BigEndian.PutUint16(header[76:78], uint16(len(records)))
+
+	var out bytes.Buffer
+	out.Write(header)
+	offset := uint32(PDB_HEADER_SIZE + len(records)*8)
+	for _, rec := range records {
+		entry := make([]byte, 8)
+		binary.BigEndian.PutUint32(entry[0:4], offset)
+		out.Write(entry)
+		offset += uint32(len(rec))
+	}
+	for _, rec := range records {
+		out.Write(rec)
+	}
+	return out.Bytes()
+}
+
 // makePdbBlob assembles a PDB container from the given records. Record 0 is
 // expected to be the MOBI header record.
 func makePdbBlob(t *testing.T, name string, records []recordSpec) []byte {
@@ -42,31 +66,17 @@ func makePdbBlob(t *testing.T, name string, records []recordSpec) []byte {
 		t.Fatal("makePdbBlob: no records")
 	}
 
-	header := make([]byte, testPdbHeaderSize)
-	copy(header[0:], name)
-	binary.BigEndian.PutUint32(header[36:40], 2082844800+1000)
-	binary.BigEndian.PutUint32(header[40:44], 2082844800+1000+86400)
-	binary.BigEndian.PutUint32(header[48:52], 1)
-	copy(header[60:64], "BOOK")
-	copy(header[64:68], "MOBI")
-	binary.BigEndian.PutUint32(header[68:72], 1)
-	binary.BigEndian.PutUint16(header[76:78], uint16(len(records)))
-
-	dataOffset := uint32(testPdbHeaderSize + len(records)*8)
-	table := make([]byte, 0, len(records)*8)
-	for i, rec := range records {
-		ri := make([]byte, 8)
-		binary.BigEndian.PutUint32(ri[0:4], dataOffset)
-		copy(ri[5:8], []byte{0, 0, byte(i + 1)})
-		table = append(table, ri...)
-		dataOffset += uint32(rec.declaredSize())
-	}
-
-	out := make([]byte, 0, dataOffset)
-	out = append(out, header...)
-	out = append(out, table...)
+	raw := make([][]byte, 0, len(records))
 	for _, rec := range records {
-		out = append(out, rec.emitted()...)
+		raw = append(raw, rec.emitted())
+	}
+	out := assemblePdb(name, "BOOK", "MOBI", raw)
+	binary.BigEndian.PutUint32(out[36:40], 2082844800+1000)
+	binary.BigEndian.PutUint32(out[40:44], 2082844800+1000+86400)
+	binary.BigEndian.PutUint32(out[48:52], 1)
+	binary.BigEndian.PutUint32(out[68:72], 1)
+	for i := range records {
+		copy(out[PDB_HEADER_SIZE+i*8+5:PDB_HEADER_SIZE+i*8+8], []byte{0, 0, byte(i + 1)})
 	}
 	return out
 }

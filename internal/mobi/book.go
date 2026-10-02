@@ -9,6 +9,11 @@ type mobiBook struct {
 	resources *domain.ResourceSet
 	version   string
 	mobiDoc   *Mobi
+	// isPalmDoc marks books read through the PalmDOC (TEXtREAd) path.
+	// It drives FileType, not the Mobi.Type header field (which a
+	// BOOKMOBI file could also set to the PalmDoc value), mirroring
+	// calibre which distinguishes by container ident.
+	isPalmDoc bool
 }
 
 func (b *mobiBook) Metadata() domain.Metadata {
@@ -20,6 +25,9 @@ func (b *mobiBook) Resources() *domain.ResourceSet {
 }
 
 func (b *mobiBook) FileType() domain.FileType {
+	if b.isPalmDoc {
+		return domain.PALMDOC
+	}
 	return domain.MOBI
 }
 

@@ -62,28 +62,9 @@ func extractTextWithOffset(pdbDb *PdbDb, mobi *Mobi, offset int, maxSize int64) 
 			}
 		}
 
-		var dec []byte
-		switch mobi.Compression {
-		case CompressionPalmDOC:
-			remain := int64(-1)
-			if maxSize > 0 {
-				remain = max(maxSize-int64(len(out)), 0)
-			}
-			dec, err = DecompressPalmDoc(section, remain)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decompress text record %d: %w", i, err)
-			}
-		case CompressionHUFF:
-			remain := int64(-1)
-			if maxSize > 0 {
-				remain = max(maxSize-int64(len(out)), 0)
-			}
-			dec, err = huff.Unpack(section, remain)
-			if err != nil {
-				return nil, fmt.Errorf("failed to decompress text record %d: %w", i, err)
-			}
-		default:
-			dec = section
+		dec, err := decompressTextSection(section, mobi.Compression, huff, remainingBudget(maxSize, len(out)), i)
+		if err != nil {
+			return nil, err
 		}
 
 		if maxSize > 0 && int64(len(out)+len(dec)) > maxSize {
@@ -92,15 +73,108 @@ func extractTextWithOffset(pdbDb *PdbDb, mobi *Mobi, offset int, maxSize int64) 
 		out = append(out, dec...)
 	}
 
+	return finishText(out, mobi.TextEncoding), nil
+}
+
+// extractPalmDocText returns the full text of a pure PalmDOC book.
+// Unlike MOBI6 it starts inside record 0 (past the 16-byte header) and
+// reads every record: PalmDOC has no image, HUFF, FCIS or FLIS records,
+// and real-world files set textRecordCount one short, so bounding by it
+// truncates mid-sentence. textLength is only a sanity bound (padding can
+// make the result slightly longer), never a truncation point.
+func extractPalmDocText(pdbDb *PdbDb, mobi *Mobi, maxSize int64) ([]byte, error) {
+	switch mobi.Compression {
+	case CompressionNone, 0, CompressionPalmDOC, CompressionPalmDOCAlt:
+		// handled per record below
+	default:
+		return nil, fmt.Errorf("unsupported PalmDOC compression type %d", mobi.Compression)
+	}
+
+	if len(pdbDb.PdbRecords) == 0 {
+		return nil, fmt.Errorf("no records in PDB database")
+	}
+
+	var out []byte
+	for i := range pdbDb.PdbRecords {
+		data, err := pdbDb.PdbRecords[i].Data()
+		if err != nil {
+			return nil, fmt.Errorf("failed to read text record %d: %w", i, err)
+		}
+		section := data
+		if i == 0 {
+			if len(data) < PALM_DOC_HEADER_SIZE {
+				return nil, fmt.Errorf("pdb record 0 is too short for PalmDOC header")
+			}
+			section = data[PALM_DOC_HEADER_SIZE:]
+		}
+
+		dec, err := decompressTextSection(section, mobi.Compression, nil, remainingBudget(maxSize, len(out)), i)
+		if err != nil {
+			return nil, err
+		}
+
+		if maxSize > 0 && int64(len(out)+len(dec)) > maxSize {
+			return nil, book.ErrLimitExceeded
+		}
+		out = append(out, dec...)
+	}
+
+	return finishText(out, mobi.TextEncoding), nil
+}
+
+// finishText applies the shared trailing hygiene to concatenated
+// decompressed text: a trailing '#' is removed, then NUL and
+// encoding-specific control bytes are dropped.
+func finishText(out []byte, enc TextEncodingType) []byte {
 	if len(out) > 0 && out[len(out)-1] == '#' {
 		out = out[:len(out)-1]
 	}
+	return cleanDecompressedText(out, enc)
+}
+
+// remainingBudget returns the decompression budget left for one record:
+// maxSize minus the bytes gathered so far, or -1 for unlimited.
+// A non-positive maxSize disables the limit.
+func remainingBudget(maxSize int64, have int) int64 {
+	if maxSize <= 0 {
+		return -1
+	}
+	return max(maxSize-int64(have), 0)
+}
+
+// decompressTextSection decompresses one text record section according to
+// the book's compression type, shared by the MOBI and PalmDOC extractors.
+func decompressTextSection(section []byte, compression CompressionType, huff *HuffCdicReader, remain int64, idx int) ([]byte, error) {
+	var dec []byte
+	var err error
+	switch compression {
+	case CompressionPalmDOC, CompressionPalmDOCAlt:
+		dec, err = DecompressPalmDoc(section, remain)
+	case CompressionHUFF:
+		if huff == nil {
+			return nil, fmt.Errorf("missing huffman table for text record %d", idx)
+		}
+		dec, err = huff.Unpack(section, remain)
+	default:
+		dec = section
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to decompress text record %d: %w", idx, err)
+	}
+	return dec, nil
+}
+
+// cleanDecompressedText applies the shared calibre-parity hygiene to
+// decompressed text: a trailing '#' is removed, NUL bytes are dropped,
+// and for cp1252 books the record separator (0x1E) and start-of-text
+// (0x02) control bytes are removed.
+func cleanDecompressedText(out []byte, enc TextEncodingType) []byte {
 	out = bytes.ReplaceAll(out, []byte{0}, nil)
-	if mobi.TextEncoding == CP1252 {
+	if enc == CP1252 {
 		out = bytes.ReplaceAll(out, []byte{0x1e}, nil)
 		out = bytes.ReplaceAll(out, []byte{0x02}, nil)
 	}
-	return out, nil
+	return out
 }
 
 // newHuffReader builds a HuffCdicReader from the book's HUFF table record and

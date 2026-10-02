@@ -226,36 +226,5 @@ func hasFictionBookRoot(buf []byte) bool {
 // and the character following the tag name must be a tag delimiter so that
 // e.g. "<FictionBookmark>" or prose mentioning FictionBook does not match.
 func scanFictionBookTag(buf []byte) bool {
-	for i := range len(buf) {
-		if buf[i] != '<' {
-			continue
-		}
-		j := i + 1
-		if j < len(buf) && (buf[j] == '/' || buf[j] == '?' || buf[j] == '!') {
-			continue
-		}
-		k := j
-		for k < len(buf) && util.IsXMLNameChar(buf[k]) {
-			k++
-		}
-		name := string(buf[j:k])
-		if idx := strings.LastIndexByte(name, ':'); idx >= 0 {
-			name = name[idx+1:]
-		}
-		if name != elFictionBook {
-			continue
-		}
-		if k >= len(buf) {
-			// Probe truncated mid-tag; the literal was still found.
-			return true
-		}
-		if buf[k] == '>' || buf[k] == '/' || isSpace(buf[k]) {
-			return true
-		}
-	}
-	return false
-}
-
-func isSpace(c byte) bool {
-	return c == ' ' || c == '\t' || c == '\n' || c == '\r'
+	return util.ScanOpenTag(buf, elFictionBook, false, true)
 }
