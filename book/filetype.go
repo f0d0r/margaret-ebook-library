@@ -10,8 +10,11 @@ const (
 	// MOBI represents the Mobipocket e-book format (.mobi).
 	MOBI FileType = "mobi"
 
-	// FB2 represents the FictionBook 2 e-book format (.fb2).
-	FB2 FileType = "fb2"
+	// FB represents the FictionBook e-book format family (.fb2, .fb3).
+	// Generations share the brand but not the container: FB2 is a
+	// single-XML document, FB3 an OPC ZIP container. Use Version to tell
+	// them apart ("2.x" for FB2, "3.0" for FB3).
+	FB FileType = "fb"
 
 	// LIT represents the Microsoft Reader e-book format (.lit).
 	LIT FileType = "lit"

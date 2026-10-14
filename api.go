@@ -23,7 +23,7 @@ type Blob = book.Blob
 const (
 	EPUB    = book.EPUB
 	MOBI    = book.MOBI
-	FB2     = book.FB2
+	FB      = book.FB
 	LIT     = book.LIT
 	PALMDOC = book.PALMDOC
 )

@@ -215,8 +215,8 @@ func TestKepubNotMisclassified(t *testing.T) {
 	if ebook.FileType() != book.EPUB {
 		t.Errorf("FileType = %q, want EPUB", ebook.FileType())
 	}
-	if ebook.FileType() == book.FB2 {
-		t.Errorf("KEPUB misclassified as FB2")
+	if ebook.FileType() == book.FB {
+		t.Errorf("KEPUB misclassified as FB")
 	}
 }
 

@@ -28,11 +28,22 @@
   spine-like reading order (notes bodies marked non-linear), transformer
   to plain text, embedded images and cover image. Detection and metadata
   follow calibre's `get_fb2_data` and `metadata/fb2.py` rules.
+- FB3 reading (`.fb3`, OPC ZIP container): format detection from
+  `[Content_Types].xml`, root relationships and `fb3-description`
+  sniffing; normalized metadata (title, authors, description, languages)
+  from the description part; lazily-opened body (`application/fb3-body+xml`,
+  with a plain-text transformer) and image resources plus thumbnail cover
+  from the body/root relationships.
 - `WithKF8FallbackToMOBI6` option controlling whether a KF8 parse failure in a
   joint MOBI6+KF8 file falls back to the MOBI6 content (default `true`).
 
 ### Changed
 
+- FictionBook generations share one file type: `book.FB2` and `book.FB3`
+  are replaced by a single `book.FB` (`ebook.FB`); `Version` tells the
+  generations apart ("2.x" from the FB2 namespace, "3.0" for FB3 — FB3
+  files declare no format version, so the reader reports the family
+  generation implied by the container).
 - KF8/MOBI8 reading is no longer experimental: parse failures no longer fall
   back silently, they are reported through the content resource's `Open` as
   `ErrCorrupt` / `ErrParseFailed` unless the MOBI6 fallback is enabled.

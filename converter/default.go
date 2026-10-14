@@ -20,4 +20,6 @@ func init() {
 	// fb2totext.go). Registered separately: unlike the HTML variants it
 	// needs its own implementation.
 	DefaultRegistry.Register(&fb2BodyToTextTransformer{from: mediatype.FB2Body, to: mediatype.PlainText})
+	// FB3 body parts -> plain text (block vocabulary differs from FB2).
+	DefaultRegistry.Register(&fb3BodyToTextTransformer{from: mediatype.FB3Body, to: mediatype.PlainText})
 }

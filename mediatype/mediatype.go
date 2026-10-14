@@ -9,6 +9,7 @@ const (
 	XHTML       = "application/xhtml+xml"
 	MobiHTML    = "application/x-mobipocket-html"
 	FB2Body     = "application/x-fictionbook-body+xml"
+	FB3Body     = "application/fb3-body+xml"
 	JPEG        = "image/jpeg"
 	JPG         = "image/jpg"
 	PNG         = "image/png"

@@ -5,6 +5,7 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
 	"github.com/f0d0r/margaret-ebook-library/internal/epub"
 	"github.com/f0d0r/margaret-ebook-library/internal/fb2"
+	"github.com/f0d0r/margaret-ebook-library/internal/fb3"
 	"github.com/f0d0r/margaret-ebook-library/internal/lit"
 	"github.com/f0d0r/margaret-ebook-library/internal/mobi"
 )
@@ -22,6 +23,7 @@ func New(cfg ...config.Config) *Registry {
 		readers: []Reader{
 			mobi.NewMobiReader(c),
 			epub.NewEpubReader(c),
+			fb3.NewFb3Reader(c),
 			fb2.NewFb2Reader(c),
 			lit.NewLitReader(c),
 		},

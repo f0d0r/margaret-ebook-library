@@ -66,8 +66,8 @@ func readRichBook(t *testing.T) book.Book {
 func TestFb2ReadRichStructure(t *testing.T) {
 	ebook := readRichBook(t)
 
-	if ebook.FileType() != book.FB2 {
-		t.Errorf("FileType() = %q, want fb2", ebook.FileType())
+	if ebook.FileType() != book.FB {
+		t.Errorf("FileType() = %q, want fb", ebook.FileType())
 	}
 	if ebook.Version() != "2.0" {
 		t.Errorf("Version() = %q, want 2.0", ebook.Version())
