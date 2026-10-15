@@ -132,7 +132,7 @@ func resolvePart(zr *zip.Reader, base, target string) *zip.File {
 func findPartWithRoot(zr *zip.Reader, root string) *zip.File {
 	want := []byte("<" + strings.ToLower(root))
 	for _, f := range zr.File {
-		if f.FileInfo().IsDir() || isNoiseEntry(f.Name) {
+		if f.FileInfo().IsDir() {
 			continue
 		}
 		head, err := compressutil.ReadHead(f, probeSize)

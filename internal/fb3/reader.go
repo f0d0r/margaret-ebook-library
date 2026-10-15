@@ -13,6 +13,14 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
 )
 
+const (
+	// probeSize bounds per-entry decompression during detection.
+	probeSize = 32 * 1024
+	// maxSniffEntries bounds the fallback entry sniff.
+	maxSniffEntries = 5
+	fb3Version      = "3.0"
+)
+
 // Fb3Reader detects FictionBook 3 (.fb3) books: OPC ZIP containers
 // holding a description part and a body part.
 type Fb3Reader struct {
@@ -25,12 +33,6 @@ func NewFb3Reader(cfg config.Config) *Fb3Reader {
 		cfg: cfg.Normalize(),
 	}
 }
-
-// probeSize bounds per-entry decompression during detection.
-const probeSize = 32 * 1024
-
-// maxSniffEntries bounds the fallback entry sniff.
-const maxSniffEntries = 5
 
 func (r *Fb3Reader) Supports(b book.Blob) bool {
 	size, err := b.Size()
@@ -116,12 +118,6 @@ func (r *Fb3Reader) Read(b book.Blob) (book.Book, error) {
 	}, nil
 }
 
-// fb3Version is the FictionBook generation reported by Version. FB3 files
-// declare no format version (the description version attribute counts
-// document revisions), so the reader reports the generation implied by
-// the container instead: a deliberate exception to declared-as-is.
-const fb3Version = "3.0"
-
 type fb3Book struct {
 	metadata  book.Metadata
 	resources *book.ResourceSet
@@ -184,7 +180,7 @@ func isFb3ContentTypes(head []byte) bool {
 func sniffFb3Roots(zr *zip.Reader) bool {
 	checked := 0
 	for _, f := range zr.File {
-		if f.FileInfo().IsDir() || isNoiseEntry(f.Name) {
+		if f.FileInfo().IsDir() {
 			continue
 		}
 		if checked >= maxSniffEntries {
@@ -208,12 +204,4 @@ func isFb3RootHead(head []byte) bool {
 	return bytes.Contains(lowered, []byte("<fb3-description")) ||
 		bytes.Contains(lowered, []byte("<fb3-body")) ||
 		bytes.Contains(head, []byte("FictionBook3/"))
-}
-
-// isNoiseEntry reports packaging noise (macOS forks, .DS_Store).
-func isNoiseEntry(name string) bool {
-	if strings.HasPrefix(name, "__MACOSX/") {
-		return true
-	}
-	return strings.EqualFold(path.Base(name), ".DS_Store")
 }
