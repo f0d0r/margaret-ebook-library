@@ -11,6 +11,7 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/epub"
+	"github.com/f0d0r/margaret-ebook-library/internal/ereader"
 	"github.com/f0d0r/margaret-ebook-library/internal/fb2"
 	"github.com/f0d0r/margaret-ebook-library/internal/fb3"
 	"github.com/f0d0r/margaret-ebook-library/internal/lit"
@@ -105,6 +106,18 @@ func TestRegistry_ReaderForBlob(t *testing.T) {
 		}
 		if _, ok := reader.(*fb3.Fb3Reader); !ok {
 			t.Errorf("ReaderForBlob() = %T, want *fb3.Fb3Reader", reader)
+		}
+	})
+
+	t.Run("EREADER blob returns EreaderReader", func(t *testing.T) {
+		hdr := make([]byte, 80)
+		copy(hdr[60:68], "PNRdPPrs")
+		reader, err := r.ReaderForBlob(book.NewBytesBlob(hdr))
+		if err != nil {
+			t.Fatalf("ReaderForBlob() error: %v", err)
+		}
+		if _, ok := reader.(*ereader.EreaderReader); !ok {
+			t.Errorf("ReaderForBlob() = %T, want *ereader.EreaderReader", reader)
 		}
 	})
 }

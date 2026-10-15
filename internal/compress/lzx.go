@@ -1,8 +1,4 @@
 // LZX decompressor.
-//
-// The decoder is streaming and lazy: NewLZXReader performs no input reads,
-// and decompression advances only as the caller reads. Output is bounded by
-// maxOut with book.ErrLimitExceeded on overflow.
 
 package compress
 
@@ -30,8 +26,7 @@ const (
 	lzxBlockAligned      = 2
 	lzxBlockUncompressed = 3
 
-	// Direct lookup widths for the Huffman fast path. Symbols with longer
-	// codes (up to 16 bits) resolve by walking extension nodes.
+	// Direct lookup widths for the Huffman fast path.
 	lzxPretreeBits = 6
 	lzxMainBits    = 12
 	lzxLengthBits  = 12
@@ -41,9 +36,7 @@ const (
 	lzxAlignedSyms = 8
 )
 
-// lzxExtraBits and lzxPositionBase map a match position slot to its base
-// offset and the number of trailing verbatim offset bits, per the LZX slot
-// table definition.
+// Slot table per the LZX spec.
 var lzxExtraBits [51]uint8
 var lzxPositionBase [51]uint32
 
@@ -62,8 +55,6 @@ func init() {
 	}
 }
 
-// lzxPositionSlots reports how many position slots a window of windowBits
-// carries.
 func lzxPositionSlots(windowBits int) int {
 	switch windowBits {
 	case 21:
@@ -79,9 +70,7 @@ func lzxPositionSlots(windowBits int) int {
 // Canonical Huffman tables with a direct-lookup fast path.
 // ---------------------------------------------------------------------------
 
-// lzxHuffman decodes symbols MSB-first from the bitstream. Codes of
-// tableBits or fewer bits resolve with a single table lookup; longer codes
-// (up to 16 bits) resolve by walking extension nodes.
+// lzxHuffman decodes symbols MSB-first; short codes via table lookup, long codes via extension nodes.
 type lzxHuffman struct {
 	nSyms int
 	bits  uint
@@ -104,7 +93,6 @@ func newLzxHuffman(nSyms int, tableBits uint, lens []uint8) (*lzxHuffman, error)
 		h.empty = true
 		return h, nil
 	}
-	// Canonical code assignment from the length counts.
 	var count [lzxMaxCodeLen + 1]int
 	for _, l := range lens {
 		if l > lzxMaxCodeLen {
@@ -112,8 +100,7 @@ func newLzxHuffman(nSyms int, tableBits uint, lens []uint8) (*lzxHuffman, error)
 		}
 		count[l]++
 	}
-	// Canonical code assignment. Zero-length (unused) symbols consume no
-	// code space, so count[0] is excluded per the standard algorithm.
+	// Unused symbols consume no code space, so count[0] is excluded.
 	count[0] = 0
 	start := make([]int, lzxMaxCodeLen+2)
 	code := 0
@@ -162,8 +149,7 @@ func newLzxHuffman(nSyms int, tableBits uint, lens []uint8) (*lzxHuffman, error)
 			}
 			continue
 		}
-		// Long code: walk/create extension nodes past the direct prefix,
-		// consuming the remaining bits most-significant first.
+		// Long code: walk/create extension nodes past the direct prefix.
 		idx := c >> (uint(l) - tableBits)
 		var node int
 		switch e := h.table[idx]; {
@@ -204,9 +190,7 @@ func newLzxHuffman(nSyms int, tableBits uint, lens []uint8) (*lzxHuffman, error)
 // Bit reader: MSB-first symbols out of 16-bit little-endian units.
 // ---------------------------------------------------------------------------
 
-// lzxBitReader feeds the decoder pulling byte pairs from src on demand.
-// Past the end of src it yields up to 16 zero padding bits once (covering
-// overshooting 16-bit reads) and reports truncation afterwards.
+// lzxBitReader pulls byte pairs from src on demand; past EOF it yields 16 zero padding bits once, then reports truncation.
 type lzxBitReader struct {
 	src      io.Reader
 	pending  []byte
@@ -242,7 +226,6 @@ func (b *lzxBitReader) fill() error {
 	return err
 }
 
-// ensure makes n bits available, loading input as needed.
 func (b *lzxBitReader) ensure(n int) error {
 	for b.nbits < n {
 		if b.pos+2 > len(b.pending) {
@@ -321,8 +304,6 @@ func (b *lzxBitReader) alignToUnit() error {
 	return nil
 }
 
-// readRaw copies n bytes straight from the byte stream: pending bytes
-// first, then directly from src.
 func (b *lzxBitReader) readRaw(dst []byte) error {
 	for len(dst) > 0 {
 		if b.pos < len(b.pending) {
@@ -368,9 +349,7 @@ func (b *lzxBitReader) skipRaw(n int) error {
 // Streaming LZX decoder state machine.
 // ---------------------------------------------------------------------------
 
-// lzxDecoder holds the full state of one LZX chunk stream. Fresh R0-R2,
-// zeroed Huffman lengths and an empty window match one reference-decode
-// call, which is exactly how LIT reset-window chunks are consumed.
+// lzxDecoder holds one LZX chunk stream; fresh state matches LIT reset-window chunks.
 type lzxDecoder struct {
 	bits       *lzxBitReader
 	windowSize int
@@ -408,18 +387,8 @@ type lzxDecoder struct {
 	limitErr  error
 }
 
-// NewLZXReader returns a streaming LZX decompressor over in.
-//
-// windowBits must be in [15,21] and selects the 2^windowBits history window.
-// expectOut is the exact decompressed byte count when known (always known
-// for LIT reset-window chunks via the reset table); pass a negative value
-// to decode until a clean input end on a block boundary instead. maxOut
-// bounds the total output (use the format reader's MaxResourceSize); a
-// non-positive maxOut resolves to the library default. Streams promising or
-// producing more than maxOut fail with book.ErrLimitExceeded.
-//
-// No input is consumed until the first Read. The returned reader must be
-// closed by the caller; Close does not close in.
+// NewLZXReader returns a streaming LZX decompressor over in (windowBits in [15,21]).
+// Negative expectOut decodes to clean input end; output capped at maxOut; no input consumed until first Read.
 func NewLZXReader(in io.Reader, windowBits int, expectOut int64, maxOut int64) (io.ReadCloser, error) {
 	if in == nil {
 		return nil, fmt.Errorf("compress: lzx nil input: %w", book.ErrCorrupt)
@@ -487,7 +456,6 @@ func (d *lzxDecoder) Read(p []byte) (int, error) {
 	}
 }
 
-// frameBudget reports how many output bytes the next frame may hold.
 func (d *lzxDecoder) frameBudget() int {
 	if d.expectOut >= 0 {
 		if left := d.expectOut - d.emitted; left < lzxFrameSize {
@@ -497,8 +465,6 @@ func (d *lzxDecoder) frameBudget() int {
 	return lzxFrameSize
 }
 
-// decodeFrame decodes one 32KB frame (or the final partial frame) and
-// stages its E8-processed bytes for Read.
 func (d *lzxDecoder) decodeFrame() error {
 	if d.expectOut >= 0 && d.emitted >= d.expectOut {
 		return io.EOF
@@ -512,8 +478,7 @@ func (d *lzxDecoder) decodeFrame() error {
 	if frameSize <= 0 {
 		return io.EOF
 	}
-	// A previous match may have overrun into this frame; those carried
-	// bytes are already decoded and must be emitted, not re-decoded.
+	// Carried overrun bytes are already decoded; emit, don't re-decode.
 	frameBase := d.framePosn
 	carried := d.windowPosn - frameBase
 	if carried < 0 || frameBase+frameSize > d.windowSize {
@@ -529,9 +494,7 @@ func (d *lzxDecoder) decodeFrame() error {
 			if done {
 				break
 			}
-			// Zero-length blocks carry no data yet cost a full table
-			// rebuild each; cap consecutive ones against crafted streams.
-			// (Valid encoders never emit them.)
+			// Cap consecutive zero-length blocks; valid encoders never emit them.
 			if d.blockRemain == 0 {
 				d.zeroBlocks++
 				if d.zeroBlocks > 16 {
@@ -557,9 +520,8 @@ func (d *lzxDecoder) decodeFrame() error {
 	}
 	produced := d.windowPosn - frameBase
 	if produced < frameSize {
-		// The input ended mid-frame: a clean end for unknown lengths,
-		// truncation for known ones. No realignment applies past the
-		// end of input.
+		// Mid-frame end: clean for unknown lengths, truncation for known ones.
+		// No realignment past end of input.
 		if d.expectOut >= 0 && d.emitted+int64(produced) < d.expectOut {
 			return fmt.Errorf("compress: lzx truncated stream: %w", book.ErrCorrupt)
 		}
@@ -578,9 +540,7 @@ func (d *lzxDecoder) decodeFrame() error {
 	return d.stageFrame(frameBase, frameSize)
 }
 
-// stageFrame copies a decoded frame out of the window, applies the E8
-// transform when active, and stages the result for Read. The window keeps
-// the untransformed bytes so later matches see the true history.
+// stageFrame stages E8-processed output for Read; the window keeps untransformed bytes for later matches.
 func (d *lzxDecoder) stageFrame(start, size int) error {
 	if d.emitted+int64(size) > d.maxOut {
 		d.finished = true
@@ -633,8 +593,6 @@ func (d *lzxDecoder) stageFrame(start, size int) error {
 	return nil
 }
 
-// readStreamHeader reads the one-bit E8 prelude plus the optional 32-bit
-// file size. It runs once per stream.
 func (d *lzxDecoder) readStreamHeader() error {
 	d.headerSeen = true
 	flag, err := d.bits.bits(1)
@@ -661,9 +619,7 @@ func (d *lzxDecoder) readStreamHeader() error {
 	return nil
 }
 
-// readBlockHeader parses the next block header when the current block is
-// drained. It reports done=true when the input ends cleanly on a block
-// boundary (only possible with unknown output length).
+// done=true only on clean input end with unknown output length.
 func (d *lzxDecoder) readBlockHeader() (done bool, err error) {
 	if d.needPadSkip {
 		d.needPadSkip = false
@@ -681,10 +637,7 @@ func (d *lzxDecoder) readBlockHeader() (done bool, err error) {
 		}
 		return true, nil
 	}
-	// The pending queue may be drained while src EOF is not yet observed
-	// (raw block bodies bypass the bit buffer). Probe once so a clean
-	// input end is recognized instead of decoding padding zeros as a
-	// bogus header.
+	// Raw bodies bypass the bit buffer; probe once so clean end isn't decoded as a bogus header.
 	if d.bits.pos >= len(d.bits.pending) && d.bits.realBits == 0 && !d.bits.eof {
 		if err := d.bits.fill(); err != nil {
 			return false, err
@@ -761,9 +714,7 @@ func (d *lzxDecoder) readBlockHeader() (done bool, err error) {
 	return false, nil
 }
 
-// readLens reads Huffman code lengths for symbols [first,last) using the
-// LZX pretree delta encoding. Bounds are enforced: corrupt runs fail with
-// book.ErrCorrupt instead of panicking.
+// Bounds enforced: corrupt runs fail with ErrCorrupt, not panic.
 func (d *lzxDecoder) readLens(lens []uint8, first, last int) error {
 	pre := make([]uint8, lzxPretreeSyms)
 	for i := range pre {
@@ -883,9 +834,7 @@ func (d *lzxDecoder) decodeSym(h *lzxHuffman) (int, error) {
 	}
 }
 
-// decodeRun decodes up to run output bytes of the current block. It returns
-// the overrun (negative when the final match extends past run while staying
-// within the block) so the caller can reconcile the block budget.
+// Negative return is match overrun past run; caller reconciles the block budget.
 func (d *lzxDecoder) decodeRun(run int) (int, error) {
 	switch d.blockType {
 	case lzxBlockVerbatim:

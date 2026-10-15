@@ -21,10 +21,7 @@ type huffEntry struct {
 	flag  bool
 }
 
-// HuffCdicReader decompresses HUFF/CDIC (Mobipocket Huffman) compressed
-// records. It is a faithful port of the reference mobi_uncompress
-// HuffcdicReader. Call LoadHuff with the HUFF table, LoadCdic (possibly
-// multiple times) with the CDIC dictionaries, then Unpack on each record.
+// HuffCdicReader decompresses HUFF/CDIC records. Load tables with LoadHuff/LoadCdic, then Unpack each record.
 type HuffCdicReader struct {
 	dict1      [256]huffDict
 	mincode    [33]uint64
@@ -89,9 +86,7 @@ func (h *HuffCdicReader) LoadCdic(cdic []byte) error {
 		return fmt.Errorf("invalid cdic: truncated length table")
 	}
 	for i := range n {
-		// Each entry in the table at offset 16 is a byte offset relative to
-		// the start of the table, not a length. At that offset a 16-bit
-		// length (with the high bit as a literal flag) precedes the slice.
+		// Entries are offsets from the table start to a 16-bit length (high bit = literal flag) plus slice.
 		off := int(binary.BigEndian.Uint16(cdic[16+i*2:]))
 		if 16+off+2 > len(cdic) {
 			return fmt.Errorf("invalid cdic: entry %d out of range", i)
@@ -110,10 +105,7 @@ func (h *HuffCdicReader) LoadCdic(cdic []byte) error {
 	return nil
 }
 
-// Unpack decompresses a single HUFF/CDIC compressed record.
-// remain is the remaining budget for decompressed bytes. If remain >=0,
-// decompression fails with book.ErrLimitExceeded when the output would exceed
-// the remaining budget. Pass remain <0 for unlimited.
+// Unpack decompresses one record; remain caps output bytes, or <0 for unlimited.
 func (h *HuffCdicReader) Unpack(data []byte, remain int64) ([]byte, error) {
 	return h.unpack(data, remain, 0)
 }
@@ -126,10 +118,7 @@ func (h *HuffCdicReader) unpack(data []byte, remain int64, depth int) ([]byte, e
 	}
 
 	bitsleft := len(data) * 8
-	// Pad into a fresh buffer: calibre does data += b'\0'*8 which allocates a
-	// new immutable bytes object. Growing the input in place with append would
-	// clobber the shared backing array of the CDIC record and corrupt other
-	// dictionary slices that alias it.
+	// Fresh buffer: growing in place would corrupt aliased CDIC slices.
 	buf := make([]byte, len(data)+8)
 	copy(buf, data)
 	data = buf

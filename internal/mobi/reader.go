@@ -10,6 +10,8 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
 	"github.com/f0d0r/margaret-ebook-library/internal/opf"
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
+	"github.com/f0d0r/margaret-ebook-library/internal/sections"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
 	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
@@ -18,18 +20,14 @@ type MobiReader struct {
 	cfg config.Config
 }
 
-// NewMobiReader creates a new MOBI reader instance with the given
-// safety limits. A zero Config is normalized to [config.DefaultConfig] so that
-// a hand-built struct cannot silently disable the limits or the KF8 fallback.
+// NewMobiReader creates a new MOBI reader with the given safety limits.
+// A zero Config normalizes to [config.DefaultConfig].
 func NewMobiReader(cfg config.Config) *MobiReader {
 	return &MobiReader{cfg: cfg.Normalize()}
 }
 
 func (r *MobiReader) Supports(b book.Blob) bool {
-	// The type/creator identifier sits at bytes 60-67 ("BOOKMOBI" for
-	// Mobipocket, "TEXtREAd" for PalmDOC). Reading exactly 68 bytes is
-	// sufficient. Like calibre the ident is uppercased, so TEXtREAd
-	// matches TEXTREAD.
+	// PDB type/creator ident at bytes 60-67, uppercased like calibre.
 	buf := make([]byte, 68)
 	n, err := b.ReadAt(buf, 0)
 	if err != nil && err != io.EOF {
@@ -39,7 +37,6 @@ func (r *MobiReader) Supports(b book.Blob) bool {
 		return false
 	}
 
-	// Check whether bytes 60-67 contain a known identifier.
 	switch strings.ToUpper(string(buf[60:68])) {
 	case pdbIdentMobi, pdbIdentPalmDoc:
 		return true
@@ -50,7 +47,7 @@ func (r *MobiReader) Supports(b book.Blob) bool {
 
 func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 	maxRecordSize := r.cfg.MaxRecordSize
-	pdbDb, err := ReadPdbDb(b, maxRecordSize)
+	pdbDb, err := pdb.ReadPdbDb(b, maxRecordSize)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to read PDB database: %w", book.ErrCorrupt, err)
 	}
@@ -76,7 +73,6 @@ func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 	cover := r.cover(b, pdbDb, mobiDoc)
 	content := r.content(pdbDb, mobiDoc)
 
-	// Build All + ReadingOrder for ResourceSet (cover alias handled internally)
 	all, readingOrder, coverAliased := r.buildMobiResources(b, pdbDb, mobiDoc, cover, content, r.cfg.MaxResourceSize, maxRecordSize)
 
 	return &mobiBook{
@@ -93,11 +89,9 @@ func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 }
 
 // readPalmDoc reads a pure PalmDOC book (TEXtREAd container). The payload is
-// preserved as-is: a sniff on the decompressed prefix decides only the media
-// type (text/html vs text/plain) and, for HTML, the OEB dc-metadata source.
-// The content itself stays lazily-opened so MaxResourceSize surfaces from
-// Open like on the MOBI path. PalmDOC has no cover or image records.
-func (r *MobiReader) readPalmDoc(pdbDb *PdbDb) (book.Book, error) {
+// preserved as-is; a prefix sniff decides only the media type and, for HTML,
+// the OEB metadata source. PalmDOC has no cover or image records.
+func (r *MobiReader) readPalmDoc(pdbDb *pdb.PdbDb) (book.Book, error) {
 	mobiDoc, err := readPalmDocHeader(pdbDb)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to read PalmDOC file: %w", book.ErrParseFailed, err)
@@ -107,8 +101,7 @@ func (r *MobiReader) readPalmDoc(pdbDb *PdbDb) (book.Book, error) {
 		return nil, fmt.Errorf("palmdoc is DRM protected: %w", book.ErrDRM)
 	}
 
-	// Best-effort prefix for the media type decision and the OEB metadata.
-	// A prefix failure must not fail the book: Open reports the real error.
+	// Best-effort sniff: a prefix failure surfaces from Open instead.
 	prefix, _ := palmDocPrefixText(pdbDb, mobiDoc)
 	isHTML := isPalmDocHTML(prefix)
 
@@ -164,7 +157,7 @@ func (r *MobiReader) readPalmDoc(pdbDb *PdbDb) (book.Book, error) {
 	}, nil
 }
 
-func (r *MobiReader) cover(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi) *book.Resource {
+func (r *MobiReader) cover(b book.Blob, pdbDb *pdb.PdbDb, mobiDoc *Mobi) *book.Resource {
 	coverIdx := mobiDoc.CoverRecordIdx()
 	if coverIdx == 0 || int(coverIdx) >= len(pdbDb.PdbRecords) {
 		return nil
@@ -177,7 +170,7 @@ func (r *MobiReader) cover(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi) *book.Resou
 	maxCoverSize := r.cfg.MaxResourceSize
 	maxRecordSize := r.cfg.MaxRecordSize
 	coverOffset := coverRecord.Offset
-	// Try to detect media; for oversized records DataSlice will fail due to limit check, so fallback to direct read.
+	// DataSlice honors record limits, so oversized records need a direct read.
 	magicData, err := coverRecord.DataSlice(8)
 	var media *util.Media
 	if err == nil {
@@ -185,7 +178,6 @@ func (r *MobiReader) cover(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi) *book.Resou
 	}
 	if media == nil {
 		if coverLength > uint32(maxCoverSize) || coverLength > uint32(maxRecordSize) {
-			// Oversized: try direct read without limit for magic detection
 			buf := make([]byte, 8)
 			if n, rerr := b.ReadAt(buf, int64(coverOffset)); rerr == nil || rerr == io.EOF {
 				media = util.DetectImageMedia(buf[:n])
@@ -208,27 +200,12 @@ func (r *MobiReader) cover(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi) *book.Resou
 		Properties:   "cover-image",
 		Size:         int64(coverLength),
 		Open: func() (io.ReadCloser, error) {
-			if maxCoverSize > 0 && int64(coverLength) > maxCoverSize {
-				return nil, book.LimitError(href, int64(coverLength), maxCoverSize)
-			}
-			if maxRecordSize > 0 && int64(coverLength) > maxRecordSize {
-				return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxRecordSize %d", book.ErrLimitExceeded, href, coverLength, maxRecordSize)
-			}
-			sr := io.NewSectionReader(b, int64(coverOffset), int64(coverLength))
-			limit := maxCoverSize
-			if maxRecordSize > 0 && (limit <= 0 || maxRecordSize < limit) {
-				limit = maxRecordSize
-			}
-			if limit > 0 {
-				return io.NopCloser(util.LimitReader(sr, limit)), nil
-			}
-			return io.NopCloser(sr), nil
+			return sections.Open(b, int64(coverOffset), int64(coverLength), maxCoverSize, maxRecordSize, href)
 		},
 	}
 }
 
-func (r *MobiReader) buildMobiResources(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi, cover *book.Resource, content []book.Resource, maxResourceSize, maxRecordSize int64) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource) {
-	// Content pointers (for reading order)
+func (r *MobiReader) buildMobiResources(b book.Blob, pdbDb *pdb.PdbDb, mobiDoc *Mobi, cover *book.Resource, content []book.Resource, maxResourceSize, maxRecordSize int64) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource) {
 	var contentPtrs []*book.Resource
 	for i := range content {
 		c := content[i]
@@ -265,8 +242,7 @@ func (r *MobiReader) buildMobiResources(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi
 		}
 	}
 
-	// All: reading order first, then images not already in reading order + cover if not in images.
-	// Deduplicate by canonical ResolvedHref.
+	// Merge in order, collapsing duplicates by canonical ResolvedHref.
 	seen := make(map[string]bool)
 	all := make([]*book.Resource, 0, len(contentPtrs)+len(images)+1)
 	for _, ptr := range contentPtrs {
@@ -293,25 +269,18 @@ func (r *MobiReader) buildMobiResources(b book.Blob, pdbDb *PdbDb, mobiDoc *Mobi
 	return all, readingOrder, cover
 }
 
-// content returns the book's text as HTML resources.
-// For MOBI6 it is a single index.html; for MOBI8/KF8 it is multiple part files in correct order.
-//
-// A KF8 parse failure never fails the whole read silently: the returned
-// resource carries the error on Open, so the caller sees it explicitly. The
-// only exception is a dual MOBI6+KF8 file with KF8FallbackToMOBI6 enabled
-// (the default), where the intact MOBI6 content is served instead.
-func (r *MobiReader) content(pdbDb *PdbDb, mobiDoc *Mobi) []book.Resource {
+// content returns the book's text as HTML resources: a single index.html for
+// MOBI6, ordered parts for MOBI8/KF8. A KF8 parse failure surfaces from Open,
+// except in dual files with KF8FallbackToMOBI6 where MOBI6 is served instead.
+func (r *MobiReader) content(pdbDb *pdb.PdbDb, mobiDoc *Mobi) []book.Resource {
 	maxResourceSize := r.cfg.MaxResourceSize
 
-	// Try the MOBI8 path first. It only returns an error when the KF8 content
-	// could not be produced at all (DRM, unusable indices, limit exceeded);
-	// readMobi8Indices already degrades to a single raw-ML resource when the
-	// index tables are broken.
+	// Broken indices degrade to a single raw-ML resource; only DRM, unusable
+	// content or limit errors reach the switch below.
 	if isMobi8(mobiDoc) {
 		resources, err := r.contentMobi8(pdbDb, mobiDoc, maxResourceSize)
 		if err == nil && resources == nil {
-			// No KF8 content at all: treat it as a parse failure so the
-			// fallback/strict handling below applies.
+			// Empty success counts as failure for the fallback handling below.
 			err = fmt.Errorf("no KF8 content produced")
 		}
 		if err == nil {
@@ -319,29 +288,23 @@ func (r *MobiReader) content(pdbDb *PdbDb, mobiDoc *Mobi) []book.Resource {
 		}
 		switch {
 		case errors.Is(err, book.ErrLimitExceeded):
-			// Surface the limit on Open instead of hiding it behind the MOBI6
-			// fallback, which would silently return different content.
+			// Report limits from Open; falling back would silently serve different content.
 			return []book.Resource{failingResource("part0000.html", err)}
 		case errors.Is(err, book.ErrDRM):
-			// A DRM-protected KF8 part cannot be read, and the MOBI6 part of a
-			// dual file is DRM protected as well; never fall back here.
+			// A dual file's MOBI6 part is DRM protected too; never fall back.
 			return []book.Resource{failingResource("part0000.html", err)}
 		case !r.cfg.KF8Fallback() || mobiDoc.KF8 == nil:
-			// Fallback disabled, or no MOBI6 content to fall back to: a
-			// standalone KF8 file has no second rendering to serve.
+			// No MOBI6 rendering to fall back to.
 			return []book.Resource{failingResource("part0000.html", kf8ContentError(err))}
 		}
-		// A joint MOBI6+KF8 file with the fallback enabled: serve the intact
-		// MOBI6 content when it exists, otherwise report the KF8 failure.
+		// Otherwise serve the intact MOBI6 content, or report the KF8 failure.
 		if mobiDoc.TextRecordCount == 0 || 1 >= len(pdbDb.PdbRecords) {
 			return []book.Resource{failingResource("part0000.html", kf8ContentError(err))}
 		}
 	}
 
-	// MOBI6 text records always start at record 1 (calibre:
-	// range(offset, min(records+offset, len)) with offset=1). The
-	// FirstTextRecord header field is ignored because real-world files
-	// may leave it as the 0xFFFF sentinel.
+	// Text records start at record 1; FirstTextRecord may hold the 0xFFFF
+	// sentinel in real-world files and must be ignored.
 	if mobiDoc.TextRecordCount == 0 || 1 >= len(pdbDb.PdbRecords) {
 		return nil
 	}
@@ -372,7 +335,7 @@ func isMobi8(mobiDoc *Mobi) bool {
 	return false
 }
 
-func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobiDoc *Mobi, maxResourceSize int64) (resources []book.Resource, err error) {
+func (r *MobiReader) contentMobi8(pdbDb *pdb.PdbDb, mobiDoc *Mobi, maxResourceSize int64) (resources []book.Resource, err error) {
 	err = withRecover("contentMobi8", func() error {
 		rawML, kf8, offset, err := extractMobi8Raw(pdbDb, mobiDoc, -1)
 		if err != nil || len(rawML) == 0 {
@@ -395,10 +358,9 @@ func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobiDoc *Mobi, maxResourceSize i
 			if len(rawML) == 0 {
 				return err
 			}
-			// The index tables are unusable but the raw markup was decompressed:
-			// serve it as a single resource instead of dropping the content.
-			// This message names a KF8 part rather than a manifest resource, so
-			// it does not use book.LimitError.
+			// Broken indices still yield the decompressed raw markup as one
+			// resource. It names a synthetic part, so book.LimitError (for
+			// manifest resources) does not apply.
 			if maxResourceSize > 0 && int64(len(rawML)) > maxResourceSize {
 				return fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, "part0000.html", len(rawML), maxResourceSize)
 			}
@@ -411,8 +373,7 @@ func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobiDoc *Mobi, maxResourceSize i
 			return err
 		}
 
-		// Same wording as above: these name synthetic KF8 parts, not manifest
-		// resources, so book.LimitError does not apply.
+		// Synthetic part names again, not manifest resources.
 		for i, p := range parts {
 			if maxResourceSize > 0 && int64(len(p)) > maxResourceSize {
 				name := partInfos[i].Filename
@@ -437,9 +398,7 @@ func (r *MobiReader) contentMobi8(pdbDb *PdbDb, mobiDoc *Mobi, maxResourceSize i
 	return
 }
 
-// htmlResource builds a KF8 content resource that serves data on Open.
-// KF8 parts are bounded at parse time (MaxResourceSize is checked before the
-// resource is handed out), so Open simply returns the bytes.
+// htmlResource serves already-bounded KF8 bytes; Open just returns them.
 func htmlResource(name string, data []byte) book.Resource {
 	return book.Resource{
 		Name:      name,
@@ -451,8 +410,7 @@ func htmlResource(name string, data []byte) book.Resource {
 	}
 }
 
-// failingResource builds a KF8 content resource that reports err on Open, so a
-// parse failure reaches the caller through the normal resource API.
+// failingResource reports err from Open, routing parse failures through the resource API.
 func failingResource(name string, err error) book.Resource {
 	return book.Resource{
 		Name:      name,

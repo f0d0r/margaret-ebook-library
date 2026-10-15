@@ -6,8 +6,6 @@ import (
 )
 
 // parseFDST parses the FDST record.
-// data is the raw FDST record (sections[fdstidx]).
-// Returns flow table as slice of [start,end] pairs.
 func parseFDST(data []byte) (flowTable [][2]int, err error) {
 	return flowTable, withRecover("parseFDST", func() error {
 		if len(data) < 8 || string(data[:4]) != "FDST" {

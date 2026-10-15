@@ -6,6 +6,8 @@ import (
 	"path"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
+	"github.com/f0d0r/margaret-ebook-library/internal/sections"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
 )
 
@@ -17,7 +19,7 @@ type mobiImageResource struct {
 
 // imageResources extracts image resources from PDB records between FirstImageRecord and LastContentRecord.
 // It returns synthetic Resources with ResolvedHref like "images/00001.jpg" plus the underlying record index.
-func imageResources(b book.Blob, pdbDb *PdbDb, mobi *Mobi, maxResourceSize, maxRecordSize int64) []mobiImageResource {
+func imageResources(b book.Blob, pdbDb *pdb.PdbDb, mobi *Mobi, maxResourceSize, maxRecordSize int64) []mobiImageResource {
 	if pdbDb == nil || mobi == nil {
 		return nil
 	}
@@ -74,21 +76,7 @@ func imageResources(b book.Blob, pdbDb *PdbDb, mobi *Mobi, maxResourceSize, maxR
 				Properties:   "",
 				Size:         int64(recLength),
 				Open: func() (io.ReadCloser, error) {
-					if maxRes > 0 && int64(recLength) > maxRes {
-						return nil, book.LimitError(hrefCopy, int64(recLength), maxRes)
-					}
-					if maxRec > 0 && int64(recLength) > maxRec {
-						return nil, fmt.Errorf("%w: %q %d bytes exceeds MaxRecordSize %d", book.ErrLimitExceeded, hrefCopy, recLength, maxRec)
-					}
-					sr := io.NewSectionReader(b, int64(recOffset), int64(recLength))
-					limit := maxRes
-					if maxRec > 0 && (limit <= 0 || maxRec < limit) {
-						limit = maxRec
-					}
-					if limit > 0 {
-						return io.NopCloser(util.LimitReader(sr, limit)), nil
-					}
-					return io.NopCloser(sr), nil
+					return sections.Open(b, int64(recOffset), int64(recLength), maxRes, maxRec, hrefCopy)
 				},
 			},
 		})
@@ -96,8 +84,7 @@ func imageResources(b book.Blob, pdbDb *PdbDb, mobi *Mobi, maxResourceSize, maxR
 	return out
 }
 
-// buildMobiReadingOrder builds ReadingOrderItems from content resources (text parts).
-// All MOBI reading order items are Linear=true.
+// buildMobiReadingOrder lists content resources; MOBI items are always Linear.
 func buildMobiReadingOrder(content []*book.Resource) []book.ReadingOrderItem {
 	out := make([]book.ReadingOrderItem, 0, len(content))
 	for _, r := range content {

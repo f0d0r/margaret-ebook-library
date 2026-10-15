@@ -5,33 +5,22 @@ import (
 	"fmt"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 )
 
-// extractText returns the raw HTML markup of a MOBI6 (KF7) book, obtained by
-// concatenating and decompressing its text records. The algorithm mirrors
-// calibre's mobi6.py extract_text: trailing-data entries are stripped from
-// each record, every record is decompressed according to the book's
-// compression type, the pieces are concatenated, a trailing '#' is removed,
-// NUL bytes are dropped, and for cp1252-encoded books the record separator
-// (\x1e) and start-of-text (\x02) control bytes are removed.
-func extractText(pdbDb *PdbDb, mobi *Mobi, maxSize int64) ([]byte, error) {
+// extractText returns the raw MOBI6 markup, mirroring calibre's mobi6.py extract_text.
+func extractText(pdbDb *pdb.PdbDb, mobi *Mobi, maxSize int64) ([]byte, error) {
 	return extractTextWithOffset(pdbDb, mobi, 1, maxSize)
 }
 
-// extractTextWithOffset is the offset-aware variant used for KF8.
-// For MOBI6, offset is 1 (calibre default). For joint MOBI6/KF8, KF8 text starts at kf8_boundary+2.
-// It mirrors calibre's MobiReader.extract_text(offset=...):
-// text_sections = [text_section(i) for i in range(offset, min(records+offset, len(sections)))].
-// Like calibre, the FirstTextRecord header field is intentionally ignored:
-// some real-world MOBI6 files (e.g. calibre-generated) leave it as the
-// 0xFFFF sentinel, which must not be treated as a record index.
-func extractTextWithOffset(pdbDb *PdbDb, mobi *Mobi, offset int, maxSize int64) ([]byte, error) {
+// extractTextWithOffset is the offset-aware variant (1 for MOBI6, kf8_boundary+2 for joint KF8).
+// FirstTextRecord is ignored like calibre: real-world files may leave it as the 0xFFFF sentinel.
+func extractTextWithOffset(pdbDb *pdb.PdbDb, mobi *Mobi, offset int, maxSize int64) ([]byte, error) {
 	var huff *HuffCdicReader
 	switch mobi.Compression {
 	case CompressionNone, 0:
-		// identity unpacker
 	case CompressionPalmDOC:
-		// handled per record
 	case CompressionHUFF:
 		var err error
 		huff, err = newHuffReader(pdbDb, mobi)
@@ -76,16 +65,11 @@ func extractTextWithOffset(pdbDb *PdbDb, mobi *Mobi, offset int, maxSize int64) 
 	return finishText(out, mobi.TextEncoding), nil
 }
 
-// extractPalmDocText returns the full text of a pure PalmDOC book.
-// Unlike MOBI6 it starts inside record 0 (past the 16-byte header) and
-// reads every record: PalmDOC has no image, HUFF, FCIS or FLIS records,
-// and real-world files set textRecordCount one short, so bounding by it
-// truncates mid-sentence. textLength is only a sanity bound (padding can
-// make the result slightly longer), never a truncation point.
-func extractPalmDocText(pdbDb *PdbDb, mobi *Mobi, maxSize int64) ([]byte, error) {
+// extractPalmDocText returns the full PalmDOC text starting past the record 0 header.
+// It reads every record: textRecordCount may be one short, textLength is only a sanity bound.
+func extractPalmDocText(pdbDb *pdb.PdbDb, mobi *Mobi, maxSize int64) ([]byte, error) {
 	switch mobi.Compression {
 	case CompressionNone, 0, CompressionPalmDOC, CompressionPalmDOCAlt:
-		// handled per record below
 	default:
 		return nil, fmt.Errorf("unsupported PalmDOC compression type %d", mobi.Compression)
 	}
@@ -122,9 +106,6 @@ func extractPalmDocText(pdbDb *PdbDb, mobi *Mobi, maxSize int64) ([]byte, error)
 	return finishText(out, mobi.TextEncoding), nil
 }
 
-// finishText applies the shared trailing hygiene to concatenated
-// decompressed text: a trailing '#' is removed, then NUL and
-// encoding-specific control bytes are dropped.
 func finishText(out []byte, enc TextEncodingType) []byte {
 	if len(out) > 0 && out[len(out)-1] == '#' {
 		out = out[:len(out)-1]
@@ -132,9 +113,6 @@ func finishText(out []byte, enc TextEncodingType) []byte {
 	return cleanDecompressedText(out, enc)
 }
 
-// remainingBudget returns the decompression budget left for one record:
-// maxSize minus the bytes gathered so far, or -1 for unlimited.
-// A non-positive maxSize disables the limit.
 func remainingBudget(maxSize int64, have int) int64 {
 	if maxSize <= 0 {
 		return -1
@@ -142,14 +120,12 @@ func remainingBudget(maxSize int64, have int) int64 {
 	return max(maxSize-int64(have), 0)
 }
 
-// decompressTextSection decompresses one text record section according to
-// the book's compression type, shared by the MOBI and PalmDOC extractors.
 func decompressTextSection(section []byte, compression CompressionType, huff *HuffCdicReader, remain int64, idx int) ([]byte, error) {
 	var dec []byte
 	var err error
 	switch compression {
 	case CompressionPalmDOC, CompressionPalmDOCAlt:
-		dec, err = DecompressPalmDoc(section, remain)
+		dec, err = compressutil.DecompressPalmDoc(section, remain)
 	case CompressionHUFF:
 		if huff == nil {
 			return nil, fmt.Errorf("missing huffman table for text record %d", idx)
@@ -164,10 +140,7 @@ func decompressTextSection(section []byte, compression CompressionType, huff *Hu
 	return dec, nil
 }
 
-// cleanDecompressedText applies the shared calibre-parity hygiene to
-// decompressed text: a trailing '#' is removed, NUL bytes are dropped,
-// and for cp1252 books the record separator (0x1E) and start-of-text
-// (0x02) control bytes are removed.
+// cleanDecompressedText applies calibre-parity hygiene to decompressed text.
 func cleanDecompressedText(out []byte, enc TextEncodingType) []byte {
 	out = bytes.ReplaceAll(out, []byte{0}, nil)
 	if enc == CP1252 {
@@ -177,9 +150,8 @@ func cleanDecompressedText(out []byte, enc TextEncodingType) []byte {
 	return out
 }
 
-// newHuffReader builds a HuffCdicReader from the book's HUFF table record and
-// its CDIC dictionary records, mirroring calibre's HuffReader.
-func newHuffReader(pdbDb *PdbDb, mobi *Mobi) (*HuffCdicReader, error) {
+// newHuffReader builds a HuffCdicReader, mirroring calibre's HuffReader.
+func newHuffReader(pdbDb *pdb.PdbDb, mobi *Mobi) (*HuffCdicReader, error) {
 	off := int(mobi.HuffmanRecordOffset)
 	cnt := int(mobi.HuffmanRecordCount)
 	if off < 0 || off >= len(pdbDb.PdbRecords) || cnt <= 0 || off+cnt > len(pdbDb.PdbRecords) {
@@ -206,9 +178,7 @@ func newHuffReader(pdbDb *PdbDb, mobi *Mobi) (*HuffCdicReader, error) {
 	return h, nil
 }
 
-// sizeofTrailingEntries returns the number of trailing-data bytes at the end
-// of a text record as described by the MOBI ExtraRecordFlags field. The
-// algorithm mirrors calibre's sizeof_trailing_entries.
+// sizeofTrailingEntries mirrors calibre's sizeof_trailing_entries.
 func sizeofTrailingEntries(data []byte, extraFlags uint32) int {
 	num := 0
 	size := len(data)
@@ -228,12 +198,7 @@ func sizeofTrailingEntries(data []byte, extraFlags uint32) int {
 	return min(num, size)
 }
 
-// sizeofTrailingEntry returns the size of a single trailing-data entry,
-// encoded as a Mobipocket backward-encoded variable-width integer. In this
-// encoding the least significant 7 bits are stored in the byte closest to the
-// end of the record and only the highest-order byte has bit 8 set; reading
-// backward, a byte with bit 0x80 set terminates the value. It mirrors
-// calibre's sizeof_trailing_entry.
+// sizeofTrailingEntry decodes one backward-encoded trailing entry, mirroring calibre.
 func sizeofTrailingEntry(data []byte, psize int) int {
 	if psize <= 0 {
 		return 0

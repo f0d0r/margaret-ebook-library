@@ -8,10 +8,11 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 )
 
 func TestExtractTextNone(t *testing.T) {
-	pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 		createMockPdbRecord(make([]byte, 100)),
 		createMockPdbRecord([]byte("<html>hello world</html>")),
 		createMockPdbRecord([]byte("<p>second</p>#")),
@@ -33,7 +34,7 @@ func TestExtractTextNone(t *testing.T) {
 
 func TestExtractTextPalmDoc(t *testing.T) {
 	text := "<html>hello world</html>"
-	pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 		createMockPdbRecord(make([]byte, 100)),
 		createMockPdbRecord(palmDocEncode([]byte(text))),
 	}}
@@ -52,7 +53,7 @@ func TestExtractTextPalmDoc(t *testing.T) {
 }
 
 func TestExtractTextHUFF(t *testing.T) {
-	pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 		createMockPdbRecord(make([]byte, 100)),
 		createMockPdbRecord(bytes.Repeat([]byte{0xFF}, 8)),
 		createMockPdbRecord(buildTestHuff()),
@@ -81,7 +82,7 @@ func TestExtractTextTrailingData(t *testing.T) {
 	// 0x85 (bit 8 set on the only, and therefore highest-order, byte).
 	// extraFlags bit 1 set means one varint trailing entry.
 	rec := append([]byte("<html>hello</html>"), 0xde, 0xad, 0xbe, 0xef, 0x85)
-	pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 		createMockPdbRecord(make([]byte, 100)),
 		createMockPdbRecord(rec),
 	}}
@@ -104,7 +105,7 @@ func TestExtractTextMultibyteTrailingData(t *testing.T) {
 	// Bit 0 (multibyte) trailing entry: 1 byte of overlap data plus the count
 	// byte. (count & 0x3) + 1 bytes are stripped, i.e. 2 bytes here.
 	rec := append([]byte("<html>hello</html>"), 0x00, 0x01)
-	pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 		createMockPdbRecord(make([]byte, 100)),
 		createMockPdbRecord(rec),
 	}}
@@ -124,7 +125,7 @@ func TestExtractTextMultibyteTrailingData(t *testing.T) {
 }
 
 func TestExtractTextStripsCP1252ControlBytes(t *testing.T) {
-	pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 		createMockPdbRecord(make([]byte, 100)),
 		createMockPdbRecord([]byte("<html>a\x1eb\x02c</html>#")),
 	}}
@@ -144,7 +145,7 @@ func TestExtractTextStripsCP1252ControlBytes(t *testing.T) {
 }
 
 func TestExtractTextRemovesNulBytes(t *testing.T) {
-	pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 		createMockPdbRecord(make([]byte, 100)),
 		createMockPdbRecord([]byte("<html>\x00body</html>")),
 	}}
@@ -163,7 +164,7 @@ func TestExtractTextRemovesNulBytes(t *testing.T) {
 }
 
 func TestExtractTextLimitExceeded(t *testing.T) {
-	pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 		createMockPdbRecord(make([]byte, 100)),
 		createMockPdbRecord([]byte("<html>hello world</html>")),
 	}}
@@ -179,7 +180,7 @@ func TestExtractTextLimitExceeded(t *testing.T) {
 }
 
 func TestExtractTextUnknownCompression(t *testing.T) {
-	pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 		createMockPdbRecord(make([]byte, 100)),
 	}}
 	mobi := &Mobi{
@@ -196,7 +197,7 @@ func TestMobiReaderContent(t *testing.T) {
 	reader := NewMobiReader(config.DefaultConfig())
 
 	t.Run("no text records returns nil", func(t *testing.T) {
-		pdbDb := &PdbDb{PdbRecords: []PdbRecord{createMockPdbRecord(make([]byte, 100))}}
+		pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{createMockPdbRecord(make([]byte, 100))}}
 		mobi := &Mobi{TextRecordCount: 0}
 		if got := reader.content(pdbDb, mobi); got != nil {
 			t.Errorf("content() = %v, want nil", got)
@@ -204,7 +205,7 @@ func TestMobiReaderContent(t *testing.T) {
 	})
 
 	t.Run("builds lazy resource", func(t *testing.T) {
-		pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+		pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 			createMockPdbRecord(make([]byte, 100)),
 			createMockPdbRecord([]byte("<html>hello</html>#")),
 		}}
@@ -246,7 +247,7 @@ func TestMobiReaderContent(t *testing.T) {
 		// Real-world MOBI6 files (e.g. calibre-generated) leave
 		// FirstTextRecord/LastContentRecord as the 0xFFFF sentinel.
 		// Calibre ignores the field and reads range(1, records+1).
-		pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+		pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 			createMockPdbRecord(make([]byte, 100)),
 			createMockPdbRecord([]byte("<html>hello</html>#")),
 		}}
@@ -276,7 +277,7 @@ func TestMobiReaderContent(t *testing.T) {
 	})
 
 	t.Run("extractText ignores FirstTextRecord sentinel", func(t *testing.T) {
-		pdbDb := &PdbDb{PdbRecords: []PdbRecord{
+		pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 			createMockPdbRecord(make([]byte, 100)),
 			createMockPdbRecord([]byte("<html>hello</html>#")),
 		}}

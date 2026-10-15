@@ -9,6 +9,7 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 )
 
 // The TAGX tables mirror the tags calibre reads from the SKEL and DIV indices:
@@ -276,7 +277,7 @@ func TestKF8StandaloneEmptyContentReportsError(t *testing.T) {
 func TestKF8RecoveredPanicIsClassifiedCorrupt(t *testing.T) {
 	// A nil dereference inside the KF8 reader must come back as an error
 	// classified as ErrCorrupt, never as a panic.
-	raw, kf8, offset, err := extractMobi8Raw(&PdbDb{}, &Mobi{KF8: &Mobi{}}, -1)
+	raw, kf8, offset, err := extractMobi8Raw(&pdb.PdbDb{}, &Mobi{KF8: &Mobi{}}, -1)
 	if err == nil {
 		t.Fatalf("extractMobi8Raw() = (%v, %v, %d, nil), want an error", raw, kf8, offset)
 	}

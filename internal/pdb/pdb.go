@@ -1,4 +1,4 @@
-package mobi
+package pdb
 
 import (
 	"bytes"
@@ -15,13 +15,6 @@ import (
 const PDB_HEADER_SIZE = 78
 const PALM_EPOCH_OFFSET = 2082844800
 
-// PDB database idents (type+creator) recognized on the MOBI/PalmDOC path,
-// compared uppercased like calibre.
-const (
-	pdbIdentMobi    = "BOOKMOBI"
-	pdbIdentPalmDoc = "TEXTREAD"
-)
-
 const (
 	AttrReadOnly     uint16 = 0x0002
 	AttrDirtyAppInfo uint16 = 0x0004
@@ -36,11 +29,11 @@ const (
 	RecordAttrBusy    uint8 = 0x20
 	RecordAttrDirty   uint8 = 0x40
 	RecordAttrDelete  uint8 = 0x80
-	RecordAttrCatMask uint8 = 0x0F // The lower 4 bits mask for the category
+	RecordAttrCatMask uint8 = 0x0F
 )
 
 type PdbAttributes struct {
-	Raw        uint16 // The original raw attribute value
+	Raw        uint16
 	ReadOnly   bool
 	Dirty      bool
 	Backup     bool
@@ -55,7 +48,7 @@ type RecordAttributes struct {
 	Busy     bool
 	Dirty    bool
 	Delete   bool
-	Category uint8 // value between 0 and 15
+	Category uint8
 }
 
 type PdbRecord struct {
@@ -75,13 +68,13 @@ type PdbDb struct {
 	UpdatedAt          time.Time
 	BackupAt           time.Time
 	ModificationNumber uint32
-	AppInfoOffset      uint32 // offset to start of Application Info (if present) or null
-	SortInfoOffset     uint32 // offset to start of Sort Info (if present) or null
-	Type               string // type of the database (e.g. "BOOK", "appl", "TEXt")
-	Creator            string // creator of the database (e.g, "MOBI", "REAd", "zTXT, "Pdoc", "PRC)
-	UniqueIdSeed       uint32 // used internally to identify record
-	NextRecordListId   uint32 // Only used when in-memory on Palm OS. Always set to zero in stored files.
-	NumberOfRecords    uint16 // number of records in the database
+	AppInfoOffset      uint32
+	SortInfoOffset     uint32
+	Type               string
+	Creator            string
+	UniqueIdSeed       uint32
+	NextRecordListId   uint32 // Always zero in stored files.
+	NumberOfRecords    uint16
 	PdbRecords         []PdbRecord
 }
 
@@ -190,10 +183,7 @@ func parseRecordInfo(raw []byte) (*PdbRecord, error) {
 func parsePdbRecords(fileSize uint32, numberOfRecords uint16, b book.Blob, maxRecordSize int64) ([]PdbRecord, error) {
 	pdbRecords := make([]PdbRecord, numberOfRecords)
 
-	// The record info table is contiguous: one 8-byte entry per record,
-	// starting right after the PDB header. Read it in a single random-access
-	// read to avoid one syscall (and, for path-based blobs, one file open)
-	// per record.
+	// Read the contiguous record info table in one read to avoid a syscall per record.
 	tableLen := int(numberOfRecords) * 8
 	table := make([]byte, tableLen)
 	if err := util.ReadAtFull(b, table, int64(PDB_HEADER_SIZE)); err != nil {
@@ -248,13 +238,10 @@ func readRecordData(b book.Blob, offset uint32, length uint32, maxRecordSize, fi
 		return nil, fmt.Errorf("record length %d exceeds maximum %d", length, maxRecordSize)
 	}
 	if int64(offset) >= fileSize {
-		// Calibre parity: record offsets fully beyond EOF (truncated file)
-		// yield empty data instead of an error, mirroring calibre's
-		// section() slicing which never fails.
+		// Calibre parity: offsets beyond EOF yield empty data instead of an error.
 		return []byte{}, nil
 	}
 	if int64(offset)+int64(length) > fileSize {
-		// Truncated record: return the available prefix.
 		length = uint32(fileSize - int64(offset))
 	}
 

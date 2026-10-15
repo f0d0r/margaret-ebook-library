@@ -23,4 +23,10 @@ const (
 	// It shares the PDB container with MOBI but carries a 16-byte
 	// record 0 header and plain-text or OEB 1.0 HTML payloads.
 	PALMDOC FileType = "palmdoc"
+
+	// EREADER represents the Peanut Press eReader format (.pdb).
+	// It shares the PDB container with MOBI/PalmDOC but carries the
+	// "PNRdPPrs"/"PNPdPPrs" type/creator ident and PML payloads
+	// (Makebook 116/202-byte vs Dropbook 132-byte record 0 headers).
+	EREADER FileType = "ereader"
 )

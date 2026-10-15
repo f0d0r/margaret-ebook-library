@@ -22,4 +22,6 @@ func init() {
 	DefaultRegistry.Register(&fb2BodyToTextTransformer{from: mediatype.FB2Body, to: mediatype.PlainText})
 	// FB3 body parts -> plain text (block vocabulary differs from FB2).
 	DefaultRegistry.Register(&fb3BodyToTextTransformer{from: mediatype.FB3Body, to: mediatype.PlainText})
+	// eReader PML -> plain text (backslash markup, cp1252 payload).
+	DefaultRegistry.Register(&pmlToTextTransformer{from: mediatype.EreaderPML, to: mediatype.PlainText})
 }

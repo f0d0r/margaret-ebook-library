@@ -4,6 +4,13 @@
 
 ### Added
 
+- eReader reading (`.pdb`, Peanut Press `PNRdPPrs`/`PNPdPPrs`): new
+  `book.EREADER` file type (`ebook.EREADER`) with title/author metadata from
+  the Dropbook (132-byte record 0) metadata record, PDB name fallback for
+  Makebook files, and `book.ErrDRM` for encrypted books. Lazily-opened
+  content (`index.pml`), non-linear footnote/sidebar resources and images
+  with `cover.png` cover detection; PML bytes are served as stored and a
+  `converter` transformer renders them to plain text on demand.
 - PalmDOC reading (`.prc`, `.pdb`, `TEXtREAd`): normalized metadata, single
   lazily-opened content resource and linear reading order from the 16-byte
   record 0 header, following calibre's MOBI `TEXTREAD` path and the PDB

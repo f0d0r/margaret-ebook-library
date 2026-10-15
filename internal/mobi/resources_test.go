@@ -8,6 +8,7 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 )
 
 func TestImageResources_CoverAliasIdentity(t *testing.T) {
@@ -31,7 +32,7 @@ func TestImageResources_CoverAliasIdentity(t *testing.T) {
 		FirstNonTextRecord: 1,
 	}
 	// Need TextRecordCount etc to avoid panic in CoverRecordIdx? Set FirstImageRecord check passes.
-	pdbDb, err := ReadPdbDb(b, cfg.MaxRecordSize)
+	pdbDb, err := pdb.ReadPdbDb(b, cfg.MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb: %v", err)
 	}
@@ -90,7 +91,7 @@ func TestImageResources_NonImageSkipped(t *testing.T) {
 	b := newMemBlob(data)
 	cfg := config.DefaultConfig()
 	mobi := &Mobi{FirstImageRecord: 2, LastContentRecord: 2, recordCount: 3}
-	pdbDb, err := ReadPdbDb(b, cfg.MaxRecordSize)
+	pdbDb, err := pdb.ReadPdbDb(b, cfg.MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb: %v", err)
 	}
@@ -107,7 +108,7 @@ func TestImageResources_MaxLimits(t *testing.T) {
 	b := newMemBlob(data)
 	cfg := config.DefaultConfig()
 	mobi := &Mobi{FirstImageRecord: 2, LastContentRecord: 2, recordCount: 3}
-	pdbDb, _ := ReadPdbDb(b, cfg.MaxRecordSize)
+	pdbDb, _ := pdb.ReadPdbDb(b, cfg.MaxRecordSize)
 
 	// MaxResourceSize exceeded
 	images := imageResources(b, pdbDb, mobi, 10, cfg.MaxRecordSize)
@@ -163,7 +164,7 @@ func (m memBlob) Size() (int64, error) { return int64(len(m.data)), nil }
 func makeTestMobiBlobWithImage(t *testing.T, imageRecIdx int, imageData []byte) []byte {
 	t.Helper()
 	// Build minimal PDB with 3 records (0 header, 1 text, 2 image)
-	header := make([]byte, PDB_HEADER_SIZE)
+	header := make([]byte, pdb.PDB_HEADER_SIZE)
 	copy(header[0:], "TestBook")
 	binary.BigEndian.PutUint16(header[32:34], 0)
 	binary.BigEndian.PutUint16(header[34:36], 0)
@@ -179,7 +180,7 @@ func makeTestMobiBlobWithImage(t *testing.T, imageRecIdx int, imageData []byte) 
 	binary.BigEndian.PutUint32(header[72:76], 0)
 	binary.BigEndian.PutUint16(header[76:78], 3)
 	buf := append([]byte{}, header...)
-	off0 := uint32(PDB_HEADER_SIZE + 3*8)
+	off0 := uint32(pdb.PDB_HEADER_SIZE + 3*8)
 	// Need to compute offsets: record0 length 300 (mobi header), record1 length 20 (text), record2 = len(imageData)
 	rec0Len := 300
 	rec1Len := 20

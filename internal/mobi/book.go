@@ -2,17 +2,13 @@ package mobi
 
 import domain "github.com/f0d0r/margaret-ebook-library/book"
 
-// mobiBook represents a parsed MOBI e-book implementing domain.Book.
-// It is an internal implementation detail; callers should use the Book interface via the root ebook package.
+// mobiBook is the domain.Book implementation for MOBI.
 type mobiBook struct {
 	metadata  domain.Metadata
 	resources *domain.ResourceSet
 	version   string
 	mobiDoc   *Mobi
-	// isPalmDoc marks books read through the PalmDOC (TEXtREAd) path.
-	// It drives FileType, not the Mobi.Type header field (which a
-	// BOOKMOBI file could also set to the PalmDoc value), mirroring
-	// calibre which distinguishes by container ident.
+	// isPalmDoc drives FileType by container ident, not the Mobi.Type header field (like calibre).
 	isPalmDoc bool
 }
 

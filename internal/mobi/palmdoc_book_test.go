@@ -11,6 +11,7 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
@@ -88,7 +89,7 @@ func buildPalmDocBookFile(name string, payload []byte, opt palmDocBookOpt) []byt
 
 func TestReadPalmDocBookHeader(t *testing.T) {
 	raw := buildPalmDocBookFile("MyPalm", []byte("hello"), palmDocBookOpt{})
-	pdb, err := ReadPdbDb(book.NewBytesBlob(raw), config.DefaultConfig().MaxRecordSize)
+	pdb, err := pdb.ReadPdbDb(book.NewBytesBlob(raw), config.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}
@@ -134,7 +135,7 @@ func TestIsPalmDocBookHTML(t *testing.T) {
 func TestExtractPalmDocBookTextBoundary(t *testing.T) {
 	payload := []byte(strings.Repeat("A", 50) + "</BODY></HTML>")
 	raw := buildPalmDocBookFile("Bound", payload, palmDocBookOpt{chunkSize: 32})
-	pdb, err := ReadPdbDb(book.NewBytesBlob(raw), config.DefaultConfig().MaxRecordSize)
+	pdb, err := pdb.ReadPdbDb(book.NewBytesBlob(raw), config.DefaultConfig().MaxRecordSize)
 	if err != nil {
 		t.Fatalf("ReadPdbDb() error: %v", err)
 	}

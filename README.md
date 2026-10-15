@@ -5,7 +5,7 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.26.8-blue)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI, KF8/AZW3, PalmDOC or FictionBook (FB2, FB3) — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB, MOBI, PalmDOC, FB and LIT reading.
+Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI, KF8/AZW3, PalmDOC, eReader or FictionBook (FB2, FB3) — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB, MOBI, PalmDOC, FB, LIT and eReader reading.
 
 ## Features
 
@@ -28,6 +28,7 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 | FB2 / FBZ (`.fb2`, `.fbz`, `.fb2.zip`) | ✅   | —     |
 | FB3 (`.fb3`) | ✅  | — |
 | LIT (`.lit`)       | ✅  | — |
+| eReader (`.pdb`) | ✅ (as `EREADER`) | — |
 
 > **KEPUB status:** a KEPUB is a valid EPUB archive whose content documents
 > carry Kobo rendering markup (`div#book-columns`/`div#book-inner` wrappers,
@@ -39,8 +40,9 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 > **DRM status:** DRM-protected books cannot be read and are rejected with
 > `ebook.ErrDRM` (matched with `errors.Is`): EPUB/KEPUB files with a
 > non-font-obfuscation `META-INF/encryption.xml` entry (Adobe ADEPT) or a
-> non-empty `rights.xml` with encrypted spine content (Kobo kdrm), and MOBI
-> files with DRM records or PalmDOC/MOBI text encryption. LIT files with a
+> non-empty `rights.xml` with encrypted spine content (Kobo kdrm), MOBI
+> files with DRM records or PalmDOC/MOBI text encryption, and eReader files
+> with DRM compression markers. LIT files with a
 > passport-locked (`/DRMStorage/Licenses/EUL`) container are rejected outright;
 > sealed LIT content stays listed but fails with `ErrDRM` when opened
 > (section decryption is out of scope). Font obfuscation
@@ -333,7 +335,7 @@ import (
 
 ctx := context.Background()
 
-// Single resource: XHTML/HTML/MobiHTML/FB2Body -> plain text
+// Single resource: XHTML/HTML/MobiHTML/FB2Body/EreaderPML -> plain text
 // MediaType can include charset params; they are normalized (case-insensitive,
 // "; charset=..." stripped).
 for _, r := range b.Resources().All() {
@@ -370,7 +372,7 @@ fmt.Println(string(plain))
 ```
 
 Constants are compile-time safe: `mediatype.PlainText`, `mediatype.XHTML`,
-`mediatype.HTML`, `mediatype.MobiHTML`, `mediatype.FB2Body`, etc.
+`mediatype.HTML`, `mediatype.MobiHTML`, `mediatype.FB2Body`, `mediatype.EreaderPML`, etc.
 
 #### Custom transformers and isolated registries
 
@@ -385,7 +387,7 @@ type Transformer interface {
 ```
 
 `Resource.OpenAs` uses the global `converter.DefaultRegistry` (pre-populated with
-`application/xhtml+xml`, `text/html`, `application/x-mobipocket-html`, `application/x-fictionbook-body+xml` -> `text/plain`). For tests or custom DI, use an isolated registry:
+`application/xhtml+xml`, `text/html`, `application/x-mobipocket-html`, `application/x-fictionbook-body+xml`, `application/x-ereader-pml` -> `text/plain`). For tests or custom DI, use an isolated registry:
 
 ```go
 import "github.com/f0d0r/margaret-ebook-library/converter"
