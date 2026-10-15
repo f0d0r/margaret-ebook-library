@@ -105,8 +105,8 @@ func TestReadFromFile_ValidFB2(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFromFile() error: %v", err)
 	}
-	if ebook.FileType() != book.FB2 {
-		t.Errorf("FileType = %v, want %v", ebook.FileType(), book.FB2)
+	if ebook.FileType() != book.FB {
+		t.Errorf("FileType = %v, want %v", ebook.FileType(), book.FB)
 	}
 	if ebook.Metadata().Title != "API Test Book" {
 		t.Errorf("Title = %q, want %q", ebook.Metadata().Title, "API Test Book")
@@ -151,8 +151,8 @@ func TestRead_ValidFB2Zipped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read() error: %v", err)
 	}
-	if ebook.FileType() != book.FB2 {
-		t.Errorf("FileType = %v, want %v", ebook.FileType(), book.FB2)
+	if ebook.FileType() != book.FB {
+		t.Errorf("FileType = %v, want %v", ebook.FileType(), book.FB)
 	}
 	if ebook.Metadata().Title != "Zipped Test Book" {
 		t.Errorf("Title = %q, want %q", ebook.Metadata().Title, "Zipped Test Book")

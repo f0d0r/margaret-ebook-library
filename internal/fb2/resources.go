@@ -16,7 +16,6 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
-// binaryFile is one decoded <binary> payload.
 type binaryFile struct {
 	id        string // FB2 binary id
 	href      string // images/<sanitized-id>.<ext>
@@ -24,9 +23,7 @@ type binaryFile struct {
 	data      []byte
 }
 
-// collectBinaries streams the document once, decoding every image <binary>
-// payload. Non-image binaries are skipped, corrupt payloads are skipped
-// (calibre parity: log-and-ignore, here silent to keep Read total).
+// collectBinaries decodes every image <binary> payload, skipping the rest.
 func collectBinaries(data []byte) ([]*binaryFile, error) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	dec.CharsetReader = charsetReader
@@ -54,9 +51,7 @@ func collectBinaries(data []byte) ([]*binaryFile, error) {
 	}
 }
 
-// decodeBinary consumes one <binary> element (decoder positioned after its
-// start tag). It returns nil, nil for skipped payloads (non-image declared
-// type, undecodable data, unidentifiable type).
+// decodeBinary decodes one <binary> element; skips return nil, nil.
 func decodeBinary(dec *xml.Decoder, start xml.StartElement, used map[string]int) (*binaryFile, error) {
 	var id, contentType string
 	for _, a := range start.Attr {
@@ -106,9 +101,7 @@ func decodeBinary(dec *xml.Decoder, start xml.StartElement, used map[string]int)
 	}, nil
 }
 
-// decodeBase64 decodes a base64 payload tolerantly: surrounding and embedded
-// whitespace is ignored (pretty-printed binaries) and missing padding is
-// restored, mirroring Python's non-validating b64decode that calibre uses.
+// decodeBase64 decodes base64 tolerantly: whitespace ignored, padding restored.
 func decodeBase64(payload string) ([]byte, error) {
 	s := strings.Map(func(r rune) rune {
 		if unicode.IsSpace(r) {
@@ -122,9 +115,7 @@ func decodeBase64(payload string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(s)
 }
 
-// sanitizeImageID maps a binary id to a safe file name stem (calibre's
-// sanitize_file_name parity): letters and digits are kept, the rest becomes
-// '_'.
+// sanitizeImageID maps a binary id to a safe file name stem.
 func sanitizeImageID(id string) string {
 	var sb strings.Builder
 	for _, r := range id {
@@ -141,10 +132,8 @@ func sanitizeImageID(id string) string {
 	return sb.String()
 }
 
-// findBodyRanges returns [start, end) byte ranges of every top-level body's
-// inner content in document order. Offsets index data, so data must be
-// normalized UTF-8 with an honest declaration (see normalizeFB2):
-// transcoding shifts offsets, and stale declarations would double-decode.
+// findBodyRanges returns [start, end) ranges of top-level body contents.
+// Offsets index data, so data must be normalized UTF-8 (see normalizeFB2).
 func findBodyRanges(data []byte) ([][2]int64, error) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	dec.CharsetReader = charsetReader
@@ -158,8 +147,7 @@ func findBodyRanges(data []byte) ([][2]int64, error) {
 			break
 		}
 		if isTruncated(err) && start >= 0 {
-			// Truncated inside a body: extend to end of input (tolerant,
-			// matching the library's truncated-MOBI behavior).
+			// Truncated inside a body: extend to end of input.
 			out = append(out, [2]int64{start, int64(len(data))})
 			break
 		}
@@ -183,8 +171,7 @@ func findBodyRanges(data []byte) ([][2]int64, error) {
 	return out, nil
 }
 
-// isTruncated reports truncation errors: raw ErrUnexpectedEOF or the
-// SyntaxError("unexpected EOF") that encoding/xml returns mid-document.
+// isTruncated reports raw and mid-document truncation errors.
 func isTruncated(err error) bool {
 	if err == io.ErrUnexpectedEOF {
 		return true
@@ -193,10 +180,8 @@ func isTruncated(err error) bool {
 	return errors.As(err, &syntaxErr) && strings.Contains(syntaxErr.Msg, "unexpected EOF")
 }
 
-// buildFb2Resources assembles body-slice content resources, image
-// resources, the reading order and the cover from the normalized FB2
-// document buffer and parsed metadata. Body slices are zero-copy views into
-// data; only decoded image payloads add to the memory footprint.
+// buildFb2Resources assembles content resources, reading order and cover.
+// Body slices are zero-copy views; only decoded images add footprint.
 func buildFb2Resources(data []byte, pm parsedMeta, ranges [][2]int64, maxSize int64) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource, error) {
 	bins, err := collectBinaries(data)
 	if err != nil {
@@ -206,8 +191,7 @@ func buildFb2Resources(data []byte, pm parsedMeta, ranges [][2]int64, maxSize in
 	var all []*book.Resource
 	readingOrder := make([]book.ReadingOrderItem, 0, len(ranges))
 	for i, r := range ranges {
-		// The slice shares the document buffer (zero-copy); capturing
-		// only the slice keeps nothing else alive.
+		// Zero-copy: only the slice is captured.
 		name := fmt.Sprintf("body%04d.xml", i+1)
 		content := data[r[0]:r[1]]
 		linear := i == 0
@@ -240,7 +224,6 @@ func buildFb2Resources(data []byte, pm parsedMeta, ranges [][2]int64, maxSize in
 	return all, readingOrder, cover, nil
 }
 
-// imageResources builds lazily-opened image resources from decoded binaries.
 func imageResources(bins []*binaryFile, maxSize int64) []*book.Resource {
 	out := make([]*book.Resource, 0, len(bins))
 	for _, bf := range bins {

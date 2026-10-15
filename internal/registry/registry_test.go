@@ -2,6 +2,7 @@ package registry
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/epub"
 	"github.com/f0d0r/margaret-ebook-library/internal/fb2"
+	"github.com/f0d0r/margaret-ebook-library/internal/fb3"
 	"github.com/f0d0r/margaret-ebook-library/internal/lit"
 	"github.com/f0d0r/margaret-ebook-library/internal/mobi"
 )
@@ -95,6 +97,16 @@ func TestRegistry_ReaderForBlob(t *testing.T) {
 			t.Errorf("ReaderForBlob() = %T, want *lit.LitReader", reader)
 		}
 	})
+
+	t.Run("FB3 blob returns Fb3Reader", func(t *testing.T) {
+		reader, err := r.ReaderForBlob(buildMinimalFB3Blob(t))
+		if err != nil {
+			t.Fatalf("ReaderForBlob() error: %v", err)
+		}
+		if _, ok := reader.(*fb3.Fb3Reader); !ok {
+			t.Errorf("ReaderForBlob() = %T, want *fb3.Fb3Reader", reader)
+		}
+	})
 }
 
 // createTestEPUB writes a minimal but valid EPUB file to path.
@@ -150,6 +162,48 @@ func createTestEPUB(t *testing.T, path, title string) {
 			t.Fatalf("failed to write zip entry: %v", err)
 		}
 	}
+}
+
+// buildMinimalFB3Blob returns an in-memory minimal FB3 package: content
+// types declaring FB3 parts plus description and body parts.
+func buildMinimalFB3Blob(t *testing.T) book.Blob {
+	t.Helper()
+
+	files := []struct {
+		name    string
+		content string
+	}{
+		{"[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8"?>` +
+			`<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
+			`<Override PartName="/fb3/description.xml" ContentType="application/fb3-description+xml"/>` +
+			`<Override PartName="/fb3/body.xml" ContentType="application/fb3-body+xml"/>` +
+			`</Types>`},
+		{"fb3/description.xml", `<?xml version="1.0" encoding="UTF-8"?>` +
+			`<fb3-description xmlns="http://www.fictionbook.org/FictionBook3/description">` +
+			`<title><main>Test</main></title>` +
+			`<fb3-relations><subject link="author"><last-name>A</last-name></subject></fb3-relations>` +
+			`<fb3-classification><subject>s</subject></fb3-classification>` +
+			`<lang>en</lang></fb3-description>`},
+		{"fb3/body.xml", `<?xml version="1.0" encoding="UTF-8"?>` +
+			`<fb3-body xmlns="http://www.fictionbook.org/FictionBook3/body">` +
+			`<section><p>Hello</p></section></fb3-body>`},
+	}
+
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+	for _, file := range files {
+		fw, err := w.Create(file.name)
+		if err != nil {
+			t.Fatalf("failed to create zip entry: %v", err)
+		}
+		if _, err := fw.Write([]byte(file.content)); err != nil {
+			t.Fatalf("failed to write zip entry: %v", err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close zip writer: %v", err)
+	}
+	return book.NewBytesBlob(buf.Bytes())
 }
 
 // buildMinimalMOBI returns the bytes of a minimal but parseable MOBI (PDB) file.

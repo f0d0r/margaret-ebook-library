@@ -19,7 +19,7 @@ func (b *fb2Book) Resources() *domain.ResourceSet {
 }
 
 func (b *fb2Book) FileType() domain.FileType {
-	return domain.FB2
+	return domain.FB
 }
 
 func (b *fb2Book) Version() string {

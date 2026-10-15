@@ -145,8 +145,8 @@ func TestFb2ReaderRead(t *testing.T) {
 
 	checkBook := func(t *testing.T, ebook book.Book) {
 		t.Helper()
-		if ebook.FileType() != book.FB2 {
-			t.Errorf("FileType() = %q, want %q", ebook.FileType(), book.FB2)
+		if ebook.FileType() != book.FB {
+			t.Errorf("FileType() = %q, want %q", ebook.FileType(), book.FB)
 		}
 		if ebook.Version() != "2.0" {
 			t.Errorf("Version() = %q, want %q", ebook.Version(), "2.0")
@@ -186,9 +186,9 @@ func TestFb2ReaderRead(t *testing.T) {
 		checkBook(t, ebook)
 	})
 
-	t.Run("non-fb2 blob errors", func(t *testing.T) {
+	t.Run("non-fb blob errors", func(t *testing.T) {
 		if _, err := reader.Read(book.NewBytesBlob([]byte("<html><body>hi</body></html>"))); err == nil {
-			t.Error("Read() expected error for non-FB2 blob, got nil")
+			t.Error("Read() expected error for non-FB blob, got nil")
 		}
 	})
 

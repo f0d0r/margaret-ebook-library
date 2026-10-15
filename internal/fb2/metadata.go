@@ -17,17 +17,13 @@ import (
 )
 
 // FictionBook namespace family prefix. The declared version suffix is
-// reported as-is (like EPUB/MOBI report their declared versions): Version()
-// is descriptive, the parser itself is namespace-agnostic.
+// reported as-is; the parser itself is namespace-agnostic.
 const fb2NSPrefix = "http://www.gribuser.ru/xml/fictionbook/"
 
-// fbVersionSuffix only accepts a dotted numeric version ("2.0", "8.9",
-// ...), so lookalikes like ".../2beta" or ".../2.0/" fall through to "".
+// fbVersionSuffix accepts dotted numeric versions only; lookalikes fall through to "".
 var fbVersionSuffix = regexp.MustCompile(`^\d+(\.\d+)*$`)
 
-// FictionBook element and attribute local names (matched
-// namespace-agnostically, so prefixed and 2.0/2.1/namespace-less variants
-// all parse identically).
+// FictionBook element and attribute local names (matched namespace-agnostically).
 const (
 	elFictionBook  = "FictionBook"
 	elDescription  = "description"
@@ -60,21 +56,15 @@ const (
 	xlinkNS         = "http://www.w3.org/1999/xlink"
 )
 
-// parsedMeta is the result of parsing an FB2 description: normalized
-// metadata, the format version from the root namespace, and the cover image
-// binary id referenced by coverpage ("" when absent).
+// parsedMeta is the parsed description: metadata, version and cover binary id.
 type parsedMeta struct {
 	metadata book.Metadata
 	version  string
 	coverID  string
 }
 
-// parseMetadata extracts the description metadata (title, authors,
-// description, languages) from raw FB2 bytes following calibre's
-// metadata/fb2.py fallback rules. The input is normalized first
-// (idempotent, so already-normalized buffers pass through untouched). On XML
-// syntax errors it retries once with bare ampersands fixed (calibre's
-// `raw.replace('& ', '&amp;')` parity).
+// parseMetadata extracts metadata from raw FB2 bytes, normalizing first,
+// retrying once with bare ampersands fixed.
 func parseMetadata(data []byte) (parsedMeta, error) {
 	norm, err := normalizeFB2(data)
 	if err != nil {
@@ -98,10 +88,8 @@ func parseDoc(data []byte) (parsedMeta, error) {
 	return parseDocument(dec)
 }
 
-// declPattern finds the XML encoding declaration in the prolog.
 var declPattern = regexp.MustCompile(`(?i)encoding\s*=\s*['"][^'"]*['"]`)
 
-// XML encoding labels (lowercase, compared after normalization).
 const (
 	encUTF8     = "utf-8"
 	encUTF8Alt  = "utf8"
@@ -112,20 +100,12 @@ const (
 	encUTF16BE  = "utf-16be"
 )
 
-// prologScanLimit bounds prolog scanning (encoding declaration): the XML
-// spec requires the declaration first, so 2KB is ample headroom while
-// guaranteeing body text (which may literally discuss encodings) is never
-// rewritten. declLabel and rewriteDecl must share this limit: if the label
-// were found where the rewrite cannot reach, transcoded bytes would keep a
-// lying declaration and double-decode downstream.
+// prologScanLimit bounds prolog scanning. declLabel and rewriteDecl must
+// share this limit, or transcoded bytes would keep a lying declaration.
 const prologScanLimit = 2048
 
-// normalizeFB2 converts raw FB2 bytes to UTF-8 for encoding/xml, which only
-// accepts UTF-8: UTF-16 (BOM-detected) is transcoded, a declared single-byte
-// encoding is transcoded via the x/text index, a UTF-8 BOM is stripped, and
-// stray NUL bytes are removed (calibre strips them before parsing). After a
-// transcode the declaration is rewritten to UTF-8 so downstream decoders
-// never double-decode. The result is idempotent: re-normalizing is a no-op.
+// normalizeFB2 converts raw FB2 bytes to UTF-8 (transcoding UTF-16 and
+// declared single-byte encodings, stripping BOM and NUL bytes). Idempotent.
 func normalizeFB2(raw []byte) ([]byte, error) {
 	if len(raw) >= 2 && raw[0] == 0xFF && raw[1] == 0xFE {
 		if len(raw) >= 4 && raw[2] == 0x00 && raw[3] == 0x00 {
@@ -171,9 +151,7 @@ func normalizeFB2(raw []byte) ([]byte, error) {
 	}
 }
 
-// declLabel returns the encoding label from the XML prolog (""),
-// or "" when absent. Only the head is scanned: the declaration, if present,
-// must appear there.
+// declLabel returns the encoding label from the XML prolog, or "".
 func declLabel(data []byte) string {
 	head := data[:min(prologScanLimit, len(data))]
 	m := declPattern.Find(head)
@@ -187,8 +165,7 @@ func declLabel(data []byte) string {
 	return strings.TrimRight(s, `"'`)
 }
 
-// rewriteDecl sets the prolog encoding declaration to UTF-8. Only the head
-// is touched so identical strings in the document body are left alone.
+// rewriteDecl sets the prolog encoding declaration to UTF-8.
 func rewriteDecl(data []byte) []byte {
 	headLen := min(prologScanLimit, len(data))
 	loc := declPattern.FindIndex(data[:headLen])
@@ -201,8 +178,6 @@ func rewriteDecl(data []byte) []byte {
 	return append(out, data[loc[1]:]...)
 }
 
-// canonicalizeFB2 reads the (already size-capped) source and normalizes it
-// via normalizeFB2.
 func canonicalizeFB2(r io.Reader) ([]byte, error) {
 	raw, err := io.ReadAll(r)
 	if err != nil {
@@ -211,11 +186,8 @@ func canonicalizeFB2(r io.Reader) ([]byte, error) {
 	return normalizeFB2(raw)
 }
 
-// charsetReader resolves the XML encoding declaration. UTF-8/16 and ASCII
-// are passed through (UTF-16 was already transcoded by toUTF8Reader);
-// anything else goes through x/text's encoding index, which covers the
-// single-byte encodings common in FB2 files (windows-1251, koi8-r,
-// iso-8859-*, ...).
+// charsetReader resolves the XML encoding declaration via x/text,
+// passing UTF-8/16 and ASCII through.
 func charsetReader(label string, input io.Reader) (io.Reader, error) {
 	switch strings.ToLower(strings.TrimSpace(label)) {
 	case "", encUTF8, encUTF8Alt, encASCII, encASCIIAlt:
@@ -231,8 +203,7 @@ func charsetReader(label string, input io.Reader) (io.Reader, error) {
 	}
 }
 
-// infoSection holds the metadata collected from one description subsection
-// (title-info, src-title-info; document-info contributes authors only).
+// infoSection holds metadata collected from one description subsection.
 type infoSection struct {
 	title      string
 	authors    []string
@@ -241,10 +212,8 @@ type infoSection struct {
 	coverID    string
 }
 
-// parseDocument streams the XML until the description is consumed (or the
-// first body starts), then applies calibre's fallback rules. Element matching
-// uses local names only, so prefixed, 2.0/2.1 and namespace-less documents
-// all parse identically.
+// parseDocument streams the XML until the description is consumed,
+// then applies the section fallback rules.
 func parseDocument(dec *xml.Decoder) (parsedMeta, error) {
 	var titleInfo, srcTitleInfo, docInfo infoSection
 	var version string
@@ -291,8 +260,7 @@ func parseDocument(dec *xml.Decoder) (parsedMeta, error) {
 	return assemble(titleInfo, srcTitleInfo, docInfo, version), nil
 }
 
-// parseDescriptionChildren consumes the description element, filling the
-// first occurrence of each subsection kind.
+// parseDescriptionChildren fills the first occurrence of each subsection.
 func parseDescriptionChildren(dec *xml.Decoder, titleInfo, srcTitleInfo, docInfo *infoSection) error {
 	seen := map[string]bool{}
 	for {
@@ -334,8 +302,7 @@ func parseDescriptionChildren(dec *xml.Decoder, titleInfo, srcTitleInfo, docInfo
 	}
 }
 
-// parseInfoSection consumes one title-info/src-title-info/document-info
-// element (decoder positioned after its start tag).
+// parseInfoSection consumes one info subsection.
 func parseInfoSection(dec *xml.Decoder, name string, dst *infoSection) error {
 	for {
 		tok, err := dec.Token()
@@ -398,10 +365,8 @@ func parseInfoSection(dec *xml.Decoder, name string, dst *infoSection) error {
 	}
 }
 
-// parseAuthor consumes one author element: "first [middle] last", falling
-// back to nickname (calibre parity) and finally to the element's direct
-// text for non-standard files like <author>Lev Tolstoy</author> (tolerance
-// beyond calibre, which ignores such content). Empty authors return "".
+// parseAuthor formats one author as "first [middle] last", falling back
+// to nickname, then to direct text. Empty authors return "".
 func parseAuthor(dec *xml.Decoder) (string, error) {
 	var first, middle, last, nickname string
 	var direct strings.Builder
@@ -456,9 +421,7 @@ func parseAuthor(dec *xml.Decoder) (string, error) {
 	}
 }
 
-// parseCoverpage consumes one coverpage element and returns the referenced
-// binary id (the coverpage/image href without its leading '#', calibre
-// parity), or "" when there is none.
+// parseCoverpage returns the referenced binary id (href without '#'), or "".
 func parseCoverpage(dec *xml.Decoder) (string, error) {
 	for {
 		tok, err := dec.Token()
@@ -485,8 +448,7 @@ func parseCoverpage(dec *xml.Decoder) (string, error) {
 	}
 }
 
-// hrefAttr returns the xlink href attribute, falling back to a plain href
-// attribute (calibre parity).
+// hrefAttr returns the href attribute, preferring xlink.
 func hrefAttr(attrs []xml.Attr) string {
 	for _, a := range attrs {
 		if a.Name.Space == xlinkNS && a.Name.Local == attrHref {
@@ -511,11 +473,8 @@ func blockEndFlush(local string) bool {
 	}
 }
 
-// parseAnnotation consumes one annotation element, joining block-level
-// children (paragraphs, poem lines, cites, table cells, ...) with newlines
-// while leaving the text inside blocks character-for-character intact.
-// Formatting whitespace between blocks is dropped; empty-line elements yield
-// blank lines.
+// parseAnnotation joins annotation blocks with newlines; empty-line
+// elements yield blank lines.
 func parseAnnotation(dec *xml.Decoder) (string, error) {
 	var lines []string
 	var cur strings.Builder
@@ -558,8 +517,7 @@ func parseAnnotation(dec *xml.Decoder) (string, error) {
 	}
 }
 
-// textOf consumes the current element and returns its concatenated text,
-// trimmed of surrounding whitespace.
+// textOf returns an element's concatenated text, trimmed.
 func textOf(dec *xml.Decoder) (string, error) {
 	var sb strings.Builder
 	depth := 1
@@ -580,8 +538,7 @@ func textOf(dec *xml.Decoder) (string, error) {
 	return strings.TrimSpace(sb.String()), nil
 }
 
-// skipElement consumes the rest of the current element (decoder positioned
-// after its start tag).
+// skipElement consumes the rest of the current element.
 func skipElement(dec *xml.Decoder) error {
 	depth := 1
 	for depth > 0 {
@@ -599,9 +556,8 @@ func skipElement(dec *xml.Decoder) error {
 	return nil
 }
 
-// assemble applies calibre's fallback rules across the collected sections:
-// title-info wins, then src-title-info (document-info contributes authors
-// only). Missing values stay empty, matching the EPUB/MOBI readers.
+// assemble merges sections: title-info wins, then src-title-info;
+// authors may come from document-info. Missing values stay empty.
 func assemble(titleInfo, srcTitleInfo, docInfo infoSection, version string) parsedMeta {
 	pm := parsedMeta{version: version}
 	for _, s := range []infoSection{titleInfo, srcTitleInfo} {
@@ -631,9 +587,7 @@ func assemble(titleInfo, srcTitleInfo, docInfo infoSection, version string) pars
 	return pm
 }
 
-// fbVersion maps the root namespace to the declared format version.
-// Anything else yields "" (unknown), matching the "missing values stay
-// empty" convention.
+// fbVersion maps the root namespace to the declared version, else "".
 func fbVersion(space string) string {
 	rest, ok := strings.CutPrefix(space, fb2NSPrefix)
 	if !ok || !fbVersionSuffix.MatchString(rest) {
