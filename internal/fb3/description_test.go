@@ -133,6 +133,17 @@ func TestParseDescriptionEdge(t *testing.T) {
 					t.Errorf("Title = %q, want C", md.Title)
 				}
 			}},
+		{"co_author counts as author", `<fb3-description><title><main>T</main></title>` +
+			`<fb3-relations>` +
+			`<subject link="author"><last-name>A</last-name></subject>` +
+			`<subject link="co_author"><first-name>Co</first-name><last-name>B</last-name></subject>` +
+			`<subject link="editor"><last-name>E</last-name></subject>` +
+			`</fb3-relations><lang>en</lang></fb3-description>`,
+			func(t *testing.T, md book.Metadata) {
+				if strings.Join(md.Authors, "|") != "A|Co B" {
+					t.Errorf("Authors = %q, want [A Co B]", md.Authors)
+				}
+			}},
 	}
 
 	for _, tt := range tests {
@@ -153,7 +164,7 @@ func TestParseDescriptionErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			parseFB3Err(t, []byte(tt.data))
+			_ = parseFB3Err(t, []byte(tt.data))
 		})
 	}
 }

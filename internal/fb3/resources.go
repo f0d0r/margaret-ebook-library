@@ -37,6 +37,15 @@ func buildFb3Resources(zr *zip.Reader, body *zip.File, images []imageRef, media 
 			cover = res
 		}
 	}
+	if cover == nil && coverPath != "" {
+		// The thumbnail is not a body image (e.g. a root cover.jpg):
+		// list it as the cover anyway.
+		if f := resolvePart(zr, "", coverPath); f != nil {
+			cover = lazyZipResource(path.Base(coverPath), f, media.mediaFor(f.Name), maxSize)
+			cover.Properties = "cover-image"
+			all = append(all, cover)
+		}
+	}
 	return all, readingOrder, cover
 }
 

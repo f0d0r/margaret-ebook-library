@@ -34,6 +34,8 @@ const (
 
 	// linkAuthor is the only subject role mapped to authors.
 	linkAuthor = "author"
+	// linkCoAuthor marks co-authors, likewise mapped to authors.
+	linkCoAuthor = "co_author"
 )
 
 // parsedMeta is the parsed description metadata.
@@ -203,7 +205,7 @@ func parseRelations(dec *xml.Decoder) ([]string, error) {
 			if err != nil {
 				return authors, err
 			}
-			if link == linkAuthor && author != "" {
+			if isAuthorRole(link) && author != "" {
 				authors = append(authors, author)
 			}
 		case xml.EndElement:
@@ -221,6 +223,11 @@ func subjectLink(attrs []xml.Attr) string {
 		}
 	}
 	return ""
+}
+
+// isAuthorRole reports author-like subject roles (authors and co-authors).
+func isAuthorRole(link string) bool {
+	return link == linkAuthor || link == linkCoAuthor
 }
 
 // parseSubject formats one subject as "first [middle] last",

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net/url"
 	"path"
 	"strings"
@@ -52,16 +53,16 @@ type contentOverride struct {
 // findDescriptionPart locates the description part: root .rels Book
 // target, [Content_Types] override, then root-tag scan. Later layers
 // run only when earlier ones resolve nothing.
-func findDescriptionPart(zr *zip.Reader) (*zip.File, error) {
+func findDescriptionPart(zr *zip.Reader, maxSize int64) (*zip.File, error) {
 	if f := findRootRels(zr); f != nil {
-		if target := bookTarget(f); target != "" {
+		if target := bookTarget(f, maxSize); target != "" {
 			if resolved := resolvePart(zr, "", target); resolved != nil {
 				return resolved, nil
 			}
 		}
 	}
 	if f := findContentTypes(zr); f != nil {
-		if part := descriptionOverride(f); part != "" {
+		if part := descriptionOverride(f, maxSize); part != "" {
 			if resolved := resolvePart(zr, "", part); resolved != nil {
 				return resolved, nil
 			}
@@ -74,13 +75,13 @@ func findDescriptionPart(zr *zip.Reader) (*zip.File, error) {
 }
 
 // bookTarget returns the first Book relationship target, or "".
-func bookTarget(f *zip.File) string {
-	return relTarget(f, relBook)
+func bookTarget(f *zip.File, maxSize int64) string {
+	return relTarget(f, relBook, maxSize)
 }
 
 // descriptionOverride returns the PartName declaring the description content type, or "".
-func descriptionOverride(f *zip.File) string {
-	head, err := compressutil.ReadHead(f, probeSize)
+func descriptionOverride(f *zip.File, maxSize int64) string {
+	head, err := readPartFull(f, maxSize)
 	if err != nil {
 		return ""
 	}
@@ -147,9 +148,9 @@ func findPartWithRoot(zr *zip.Reader, root string) *zip.File {
 
 // resolveBodyPart locates the body part via the description's sibling
 // rels, then by root-tag scan.
-func resolveBodyPart(zr *zip.Reader, descPath string) (*zip.File, error) {
+func resolveBodyPart(zr *zip.Reader, descPath string, maxSize int64) (*zip.File, error) {
 	if f := siblingRels(zr, descPath); f != nil {
-		if target := relTarget(f, relBody); target != "" {
+		if target := relTarget(f, relBody, maxSize); target != "" {
 			if resolved := resolvePart(zr, path.Dir(descPath), target); resolved != nil {
 				return resolved, nil
 			}
@@ -177,8 +178,8 @@ func siblingRels(zr *zip.Reader, partPath string) *zip.File {
 }
 
 // relTarget returns the first relationship target of the given type, or "".
-func relTarget(f *zip.File, relType string) string {
-	head, err := compressutil.ReadHead(f, probeSize)
+func relTarget(f *zip.File, relType string, maxSize int64) string {
+	head, err := readPartFull(f, maxSize)
 	if err != nil {
 		return ""
 	}
@@ -202,12 +203,12 @@ type imageRef struct {
 
 // bodyImageRels returns the body image relationships in order.
 // A missing part means no images, not an error.
-func bodyImageRels(zr *zip.Reader, bodyPath string) []imageRef {
+func bodyImageRels(zr *zip.Reader, bodyPath string, maxSize int64) []imageRef {
 	f := siblingRels(zr, bodyPath)
 	if f == nil {
 		return nil
 	}
-	head, err := compressutil.ReadHead(f, probeSize)
+	head, err := readPartFull(f, maxSize)
 	if err != nil {
 		return nil
 	}
@@ -232,12 +233,12 @@ func bodyImageRels(zr *zip.Reader, bodyPath string) []imageRef {
 
 // rootThumbnailPath resolves the root thumbnail relationship, or "".
 // Only an explicit thumbnail yields a cover.
-func rootThumbnailPath(zr *zip.Reader) string {
+func rootThumbnailPath(zr *zip.Reader, maxSize int64) string {
 	f := findRootRels(zr)
 	if f == nil {
 		return ""
 	}
-	target := relTarget(f, relThumbnail)
+	target := relTarget(f, relThumbnail, maxSize)
 	if target == "" {
 		return ""
 	}
@@ -255,13 +256,13 @@ type mediaMap struct {
 
 // parseMediaMap reads [Content_Types].xml; a missing or unreadable part
 // yields an empty map.
-func parseMediaMap(zr *zip.Reader) *mediaMap {
+func parseMediaMap(zr *zip.Reader, maxSize int64) *mediaMap {
 	m := &mediaMap{byExt: map[string]string{}, byPart: map[string]string{}}
 	f := findContentTypes(zr)
 	if f == nil {
 		return m
 	}
-	head, err := compressutil.ReadHead(f, probeSize)
+	head, err := readPartFull(f, maxSize)
 	if err != nil {
 		return m
 	}
@@ -318,6 +319,19 @@ var imageExtMedia = map[string]string{
 	"svg":  mediatype.SVG,
 	"webp": mediatype.WEBP,
 	"bmp":  mediatype.BMP,
+}
+
+// readPartFull reads a small OPC part (rels, content types) in full,
+// bounded by maxSize. Unlike the probeSize head sniff used for detection,
+// resolution needs complete documents: truncated XML would silently drop
+// entries.
+func readPartFull(f *zip.File, maxSize int64) ([]byte, error) {
+	rc, err := compressutil.OpenLimited(f, maxSize)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }()
+	return io.ReadAll(rc)
 }
 
 // cleanPartPath normalizes a part reference to a slash path.

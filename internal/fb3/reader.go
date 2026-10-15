@@ -83,7 +83,7 @@ func (r *Fb3Reader) Read(b book.Blob) (book.Book, error) {
 		return nil, fmt.Errorf("failed to open fb3: %w", err)
 	}
 
-	descFile, err := findDescriptionPart(zr)
+	descFile, err := findDescriptionPart(zr, maxSize)
 	if err != nil {
 		return nil, err
 	}
@@ -102,13 +102,13 @@ func (r *Fb3Reader) Read(b book.Blob) (book.Book, error) {
 		return nil, fmt.Errorf("failed to read fb3 metadata: %w", err)
 	}
 
-	bodyFile, err := resolveBodyPart(zr, descFile.Name)
+	bodyFile, err := resolveBodyPart(zr, descFile.Name, maxSize)
 	if err != nil {
 		return nil, err
 	}
 
-	images := bodyImageRels(zr, bodyFile.Name)
-	all, readingOrder, cover := buildFb3Resources(zr, bodyFile, images, parseMediaMap(zr), rootThumbnailPath(zr), maxSize)
+	images := bodyImageRels(zr, bodyFile.Name, maxSize)
+	all, readingOrder, cover := buildFb3Resources(zr, bodyFile, images, parseMediaMap(zr, maxSize), rootThumbnailPath(zr, maxSize), maxSize)
 
 	return &fb3Book{
 		metadata:  pm.metadata,

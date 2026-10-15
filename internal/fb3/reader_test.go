@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -271,6 +272,66 @@ func TestFb3ReaderRead(t *testing.T) {
 		small := NewFb3Reader(config.Config{MaxResourceSize: 10})
 		if _, err := small.Read(buildFb3Blob(t, minimalFb3Files())); err == nil {
 			t.Error("Read() expected limit error, got nil")
+		}
+	})
+
+	t.Run("large body rels resolve fully", func(t *testing.T) {
+		const n = 300
+		var rels strings.Builder
+		rels.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` +
+			`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">`)
+		files := []fb3File{
+			{"[Content_Types].xml", minimalContentTypes},
+			{"_rels/.rels", strings.Replace(minimalRootRels,
+				`<Relationship Id="rId0" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail" Target="fb3/img/cover.png"/>`, "", 1)},
+			{"fb3/description.xml", minimalDescription},
+			{"fb3/_rels/description.xml.rels", minimalDescRels},
+			{"fb3/body.xml", minimalBody},
+		}
+		for i := 0; i < n; i++ {
+			id := "img" + strconv.Itoa(i)
+			rels.WriteString(`<Relationship Id="` + id + `" Type="http://www.fictionbook.org/FictionBook3/relationships/image" Target="img/` + id + `.jpg"/>`)
+			files = append(files, fb3File{"fb3/img/" + id + ".jpg", "x"})
+		}
+		rels.WriteString(`</Relationships>`)
+		if rels.Len() <= 32*1024 {
+			t.Fatalf("fixture too small (%d bytes), want >32KB", rels.Len())
+		}
+		files = append(files, fb3File{"fb3/_rels/body.xml.rels", rels.String()})
+
+		ebook, err := reader.Read(buildFb3Blob(t, files))
+		if err != nil {
+			t.Fatalf("Read() error: %v", err)
+		}
+		if got := ebook.Resources().Len(); got != n+1 {
+			t.Errorf("Len() = %d, want %d (body + images)", got, n+1)
+		}
+		if _, ok := ebook.Resources().GetByID("img42"); !ok {
+			t.Error("GetByID(img42) missing")
+		}
+	})
+
+	t.Run("thumbnail outside body rels becomes cover", func(t *testing.T) {
+		files := minimalFb3Files()
+		files[1] = fb3File{"_rels/.rels", strings.Replace(minimalRootRels, "fb3/img/cover.png", "cover.jpg", 1)}
+		files = append(files, fb3File{"cover.jpg", "JPGDATA"})
+		ebook, err := reader.Read(buildFb3Blob(t, files))
+		if err != nil {
+			t.Fatalf("Read() error: %v", err)
+		}
+		rs := ebook.Resources()
+		if got := rs.Len(); got != 4 {
+			t.Fatalf("Len() = %d, want 4 (body + 2 images + cover)", got)
+		}
+		cover, ok := rs.CoverImage()
+		if !ok {
+			t.Fatalf("CoverImage() missing")
+		}
+		if cover.Properties != "cover-image" || cover.Href != "cover.jpg" {
+			t.Errorf("cover = %+v, want cover.jpg with cover-image", cover)
+		}
+		if cover.MediaType != mediatype.JPEG {
+			t.Errorf("cover type = %q, want jpeg", cover.MediaType)
 		}
 	})
 }
