@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 )
 
 func TestDecodeString(t *testing.T) {
@@ -386,8 +387,8 @@ func TestReadMobiValidHeader(t *testing.T) {
 	// Create a minimal valid MOBI record (96+ bytes)
 	data := buildValidMobiData()
 
-	pdbDb := &PdbDb{
-		PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{
+		PdbRecords: []pdb.PdbRecord{
 			createMockPdbRecord(data),
 		},
 	}
@@ -409,8 +410,8 @@ func TestReadMobiValidHeader(t *testing.T) {
 }
 
 func TestReadMobiNoRecords(t *testing.T) {
-	pdbDb := &PdbDb{
-		PdbRecords: []PdbRecord{},
+	pdbDb := &pdb.PdbDb{
+		PdbRecords: []pdb.PdbRecord{},
 	}
 
 	_, err := ReadMobi(pdbDb, config.DefaultConfig().MaxExthRecords)
@@ -420,8 +421,8 @@ func TestReadMobiNoRecords(t *testing.T) {
 }
 
 func TestReadMobiTooShort(t *testing.T) {
-	pdbDb := &PdbDb{
-		PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{
+		PdbRecords: []pdb.PdbRecord{
 			createMockPdbRecord(make([]byte, 50)), // Too short
 		},
 	}
@@ -448,8 +449,8 @@ func TestReadMobiExtendedHeader(t *testing.T) {
 	binary.BigEndian.PutUint32(data[96:100], 1033) // InputLanguage (US English)
 	// Don't set EXTHFlags (0x40) to avoid EXTH parsing with insufficient data
 
-	pdbDb := &PdbDb{
-		PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{
+		PdbRecords: []pdb.PdbRecord{
 			createMockPdbRecord(data),
 		},
 	}
@@ -481,8 +482,8 @@ func TestReadMobiFullHeader(t *testing.T) {
 	binary.BigEndian.PutUint32(data[200:204], 10)   // FCISRecordOffset
 	binary.BigEndian.PutUint32(data[244:248], 5000) // IndxRecordOffset
 
-	pdbDb := &PdbDb{
-		PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{
+		PdbRecords: []pdb.PdbRecord{
 			createMockPdbRecord(data),
 		},
 	}
@@ -504,8 +505,8 @@ func TestReadMobiDRMDefaults(t *testing.T) {
 	// Create minimal MOBI record
 	data := buildValidMobiData()
 
-	pdbDb := &PdbDb{
-		PdbRecords: []PdbRecord{
+	pdbDb := &pdb.PdbDb{
+		PdbRecords: []pdb.PdbRecord{
 			createMockPdbRecord(data),
 		},
 	}
@@ -539,8 +540,8 @@ func TestReadMobiCompressionTypes(t *testing.T) {
 			data := buildValidMobiData()
 			binary.BigEndian.PutUint16(data[0:2], uint16(tt.compression))
 
-			pdbDb := &PdbDb{
-				PdbRecords: []PdbRecord{
+			pdbDb := &pdb.PdbDb{
+				PdbRecords: []pdb.PdbRecord{
 					createMockPdbRecord(data),
 				},
 			}
@@ -831,11 +832,11 @@ func TestMobiCoverRecordIdx(t *testing.T) {
 
 // Helper functions
 
-func createMockPdbRecord(data []byte) PdbRecord {
+func createMockPdbRecord(data []byte) pdb.PdbRecord {
 	dataCopy := make([]byte, len(data))
 	copy(dataCopy, data)
 
-	return PdbRecord{
+	return pdb.PdbRecord{
 		Offset: 0,
 		Length: uint32(len(data)),
 		Data: func() ([]byte, error) {

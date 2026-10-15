@@ -26,6 +26,7 @@ const (
 	FB      = book.FB
 	LIT     = book.LIT
 	PALMDOC = book.PALMDOC
+	EREADER = book.EREADER
 )
 
 var (

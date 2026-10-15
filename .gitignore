@@ -29,3 +29,6 @@ go.work.sum
 .aider*
 .vscode*
 .zed/
+.agents/
+.gemini/
+AGENTS.md

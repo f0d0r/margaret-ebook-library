@@ -14,7 +14,6 @@ type TagX struct {
 	Eof         uint8
 }
 
-// PTagX is internal parsed tag.
 type PTagX struct {
 	Tag         uint8
 	ValueCount  *int
@@ -41,9 +40,7 @@ func parseIndxHeader(data []byte) (*indxHeader, error) {
 	if len(data) < 4 || string(data[:4]) != "INDX" {
 		return nil, fmt.Errorf("not a valid INDX section")
 	}
-	// INDEX_HEADER_FIELDS has 45 fields = 45*4=180 bytes after 4 byte signature -> total 184
-	// But we may have shorter data; calibre unpacks exactly 45 Ls from offset 4.
-	// We'll handle truncated data gracefully.
+	// 45 fields x 4 bytes after the 4-byte signature; shorter data is rejected.
 	const numFields = 45
 	if len(data) < 4+numFields*4 {
 		return nil, fmt.Errorf("INDX header too short: %d < %d", len(data), 4+numFields*4)
@@ -68,13 +65,9 @@ func parseIndxHeader(data []byte) (*indxHeader, error) {
 		IdxHeaderEndPos: 4 + numFields*4,
 		OrdtMap:         "",
 	}
-	// Handle ORDT maps (rare, calibre handles ebcdic 65002)
-	// We only need OrdtMap for decode_string ordt mapping; for most books it's empty.
-	// Check ordt1
+	// ORDT maps matter only for code 65002; ordt1 uses the '?' fallback.
 	if h.Ordt1 > 0 && h.Ordt1+4 <= len(data) && string(data[h.Ordt1:h.Ordt1+4]) == "ORDT" {
 		if h.Code == 65002 {
-			// calibre builds parsed map from every second byte; for ordt1 we
-			// use the fallback '?' * oentries (ordt2 below handles the real map)
 			h.OrdtMap = string(bytes.Repeat([]byte{'?'}, h.Oentries))
 		}
 	}
@@ -125,7 +118,6 @@ func parseTagxSection(data []byte) (int, []TagX, error) {
 }
 
 func getTagMap(controlByteCount int, tagx []TagX, data []byte) (map[uint32][]int, []byte, error) {
-	// Mirrors calibre's get_tag_map
 	ans := make(map[uint32][]int)
 	if controlByteCount > len(data) {
 		return ans, data, nil
@@ -196,7 +188,6 @@ func getTagMap(controlByteCount int, tagx []TagX, data []byte) (map[uint32][]int
 		}
 		ans[uint32(x.Tag)] = values
 	}
-	// Ignore leftover bytes warning
 	return ans, rest, nil
 }
 
@@ -226,10 +217,8 @@ func parseIndexRecord(table map[string]map[uint32][]int, ordered *[]string, data
 			continue
 		}
 		rec := data[startPos:endPos]
-		// decode ident
 		ident, consumed, err := decodeIdent(rec, codec, ordtMap)
 		if err != nil {
-			// try utf-16 fallback?
 			continue
 		}
 		rec = rec[consumed:]
@@ -251,25 +240,15 @@ func decodeIdent(rec []byte, codec string, ordtMap string) (string, int, error) 
 	if len(rec) == 0 {
 		return "", 0, fmt.Errorf("empty rec")
 	}
-	// calibre's decode_string: first byte via decint? Actually for INDX ident it's utils.decode_string which uses '>B' length.
-	// But we have ordtMap handling: if ordtMap != "" then mapping.
-	// For simplicity, we implement both: try decInt length if ordt? No, calibre uses decode_string with '>B'.
-	// Let's use byte length as in varint.go decodeStringWithByteLength, but with ordt support.
-	// For ordtMap case, we need to map bytes via ordtMap.
+	// Ident length is a single byte, not a varint; with ORDT, bytes map through ordtMap.
 	if ordtMap != "" {
-		// ordtMap is string of length oentries, mapping byte values
-		length, consumed := decInt(rec, true) // Actually calibre uses decint? Check: decode_string uses '>B' but with ordt it uses mapped bytes
-		// In calibre's parse_index_record they call decode_string(rec, codec, ordt_map)
-		// decode_string does: length = unpack('>B', raw[0:1]); raw = raw[1:1+length]; if ordt_map: return ''.join(ordt_map[x] for x in bytearray(raw)), consumed
-		// So it's byte length, not varint.
-		// We'll do byte length.
+		length, consumed := decInt(rec, true)
 		lengthB := int(rec[0])
 		if 1+lengthB > len(rec) {
 			return "", 0, fmt.Errorf("ident length exceeds rec")
 		}
 		raw := rec[1 : 1+lengthB]
 		consumedB := 1 + lengthB
-		// map via ordt
 		out := make([]byte, len(raw))
 		for i, b := range raw {
 			if int(b) < len(ordtMap) {
@@ -282,7 +261,6 @@ func decodeIdent(rec []byte, codec string, ordtMap string) (string, int, error) 
 		_ = consumed
 		return string(out), consumedB, nil
 	}
-	// Normal path: codec decode with byte length
 	s, consumed, err := decodeStringWithByteLength(rec, codec)
 	if err != nil {
 		return "", 0, err
@@ -300,7 +278,6 @@ func getTagSectionStart(data []byte, hdr *indxHeader) int {
 	if tagSectionStart+4 <= len(data) && string(data[tagSectionStart:tagSectionStart+4]) == "TAGX" {
 		return tagSectionStart
 	}
-	// search from idxHeaderEndPos
 	searchStart := hdr.IdxHeaderEndPos
 	if searchStart < 0 {
 		searchStart = 0
@@ -315,10 +292,7 @@ func getTagSectionStart(data []byte, hdr *indxHeader) int {
 	return tagSectionStart
 }
 
-// ReadIndex mirrors calibre's read_index(sections, idx, codec)
-// sections is slice of raw PDB record data (ordered), idx is 0-based PDB record index (KF8-relative).
-// codec is "utf-8" or "cp1252".
-// Returns ordered table (map + ordered keys) and CNCX.
+// ReadIndex mirrors calibre's read_index; idx is a KF8-relative PDB record index.
 func ReadIndex(sections [][]byte, idx int, codec string) (table map[string]map[uint32][]int, ordered []string, cncx CNCX, err error) {
 	table = make(map[string]map[uint32][]int)
 	cncx = make(CNCX)

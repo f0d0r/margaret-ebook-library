@@ -10,47 +10,8 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 )
-
-func TestMobiReaderLoadRecord(t *testing.T) {
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "record.bin")
-	content := []byte("0123456789ABCDEFGHIJ")
-	if err := os.WriteFile(path, content, 0644); err != nil {
-		t.Fatalf("WriteFile error: %v", err)
-	}
-
-	tests := []struct {
-		name    string
-		offset  uint32
-		length  uint32
-		want    string
-		wantErr bool
-	}{
-		{"valid read from start", 0, 5, "01234", false},
-		{"valid read from middle", 4, 4, "4567", false},
-		{"read entire file", 0, 20, "0123456789ABCDEFGHIJ", false},
-		{"offset past file end returns empty (calibre parity)", 100, 5, "", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			data, err := readRecordData(book.NewPathBlob(path), tt.offset, tt.length, config.DefaultConfig().MaxRecordSize, int64(len(content)))
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("readRecordData() expected error, got nil")
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("readRecordData() unexpected error: %v", err)
-			}
-			if string(data) != tt.want {
-				t.Errorf("readRecordData() = %q, want %q", string(data), tt.want)
-			}
-		})
-	}
-}
 
 func TestMobiReaderCover(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -58,7 +19,7 @@ func TestMobiReaderCover(t *testing.T) {
 
 	t.Run("CoverRecordIdx returns 0", func(t *testing.T) {
 		mobi := &Mobi{}
-		result := reader.cover(book.NewPathBlob("/fake/path"), &PdbDb{}, mobi)
+		result := reader.cover(book.NewPathBlob("/fake/path"), &pdb.PdbDb{}, mobi)
 		if result != nil {
 			t.Errorf("cover() = %v, want nil", result)
 		}
@@ -78,7 +39,7 @@ func TestMobiReaderCover(t *testing.T) {
 			FirstImageRecord: 10,
 			recordCount:      20,
 		}
-		pdbDb := &PdbDb{PdbRecords: make([]PdbRecord, 5)}
+		pdbDb := &pdb.PdbDb{PdbRecords: make([]pdb.PdbRecord, 5)}
 		// coverIdx = 10 + 5 = 15, len(PdbRecords) = 5 → out of bounds
 		result := reader.cover(book.NewPathBlob("/fake/path"), pdbDb, mobi)
 		if result != nil {
@@ -100,8 +61,8 @@ func TestMobiReaderCover(t *testing.T) {
 			FirstImageRecord: 1,
 			recordCount:      10,
 		}
-		pdbDb := &PdbDb{
-			PdbRecords: []PdbRecord{
+		pdbDb := &pdb.PdbDb{
+			PdbRecords: []pdb.PdbRecord{
 				{},
 				{
 					Offset: 0,
@@ -132,8 +93,8 @@ func TestMobiReaderCover(t *testing.T) {
 			FirstImageRecord: 1,
 			recordCount:      10,
 		}
-		pdbDb := &PdbDb{
-			PdbRecords: []PdbRecord{
+		pdbDb := &pdb.PdbDb{
+			PdbRecords: []pdb.PdbRecord{
 				{},
 				{
 					Offset: 0,
@@ -164,8 +125,8 @@ func TestMobiReaderCover(t *testing.T) {
 			FirstImageRecord: 1,
 			recordCount:      10,
 		}
-		pdbDb := &PdbDb{
-			PdbRecords: []PdbRecord{
+		pdbDb := &pdb.PdbDb{
+			PdbRecords: []pdb.PdbRecord{
 				{},
 				{
 					Offset: 0,
@@ -193,8 +154,8 @@ func TestMobiReaderCover(t *testing.T) {
 			FirstImageRecord: 1,
 			recordCount:      10,
 		}
-		pdbDb := &PdbDb{
-			PdbRecords: []PdbRecord{
+		pdbDb := &pdb.PdbDb{
+			PdbRecords: []pdb.PdbRecord{
 				{},
 				{
 					Offset: 0,
@@ -232,8 +193,8 @@ func TestMobiReaderCover(t *testing.T) {
 			FirstImageRecord: 1,
 			recordCount:      10,
 		}
-		pdbDb := &PdbDb{
-			PdbRecords: []PdbRecord{
+		pdbDb := &pdb.PdbDb{
+			PdbRecords: []pdb.PdbRecord{
 				{},
 				{
 					Offset: 0,
@@ -277,8 +238,8 @@ func TestMobiReaderCover(t *testing.T) {
 			FirstImageRecord: 1,
 			recordCount:      10,
 		}
-		pdbDb := &PdbDb{
-			PdbRecords: []PdbRecord{
+		pdbDb := &pdb.PdbDb{
+			PdbRecords: []pdb.PdbRecord{
 				{},
 				{
 					Offset: 0,
@@ -346,8 +307,8 @@ func TestMobiReaderCover(t *testing.T) {
 			FirstImageRecord: 1,
 			recordCount:      10,
 		}
-		pdbDb := &PdbDb{
-			PdbRecords: []PdbRecord{
+		pdbDb := &pdb.PdbDb{
+			PdbRecords: []pdb.PdbRecord{
 				{},
 				{
 					Offset: 0,

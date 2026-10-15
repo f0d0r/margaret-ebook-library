@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"testing"
+
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 )
 
 // This file builds KF8/MOBI8 test files programmatically, mirroring the real
@@ -37,7 +39,7 @@ func (r recordSpec) emitted() []byte {
 // count) plus the record offset table, then the record payloads. Test
 // builders share it instead of duplicating the layout.
 func assemblePdb(name, dbType, creator string, records [][]byte) []byte {
-	header := make([]byte, PDB_HEADER_SIZE)
+	header := make([]byte, pdb.PDB_HEADER_SIZE)
 	copy(header[0:], name)
 	copy(header[60:64], dbType)
 	copy(header[64:68], creator)
@@ -45,7 +47,7 @@ func assemblePdb(name, dbType, creator string, records [][]byte) []byte {
 
 	var out bytes.Buffer
 	out.Write(header)
-	offset := uint32(PDB_HEADER_SIZE + len(records)*8)
+	offset := uint32(pdb.PDB_HEADER_SIZE + len(records)*8)
 	for _, rec := range records {
 		entry := make([]byte, 8)
 		binary.BigEndian.PutUint32(entry[0:4], offset)
@@ -76,7 +78,7 @@ func makePdbBlob(t *testing.T, name string, records []recordSpec) []byte {
 	binary.BigEndian.PutUint32(out[48:52], 1)
 	binary.BigEndian.PutUint32(out[68:72], 1)
 	for i := range records {
-		copy(out[PDB_HEADER_SIZE+i*8+5:PDB_HEADER_SIZE+i*8+8], []byte{0, 0, byte(i + 1)})
+		copy(out[pdb.PDB_HEADER_SIZE+i*8+5:pdb.PDB_HEADER_SIZE+i*8+8], []byte{0, 0, byte(i + 1)})
 	}
 	return out
 }

@@ -8,20 +8,17 @@ import (
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 )
 
-// panicError marks an error produced by recovering a panic while parsing a
-// malformed file. It lets callers classify such failures as [book.ErrCorrupt]
-// instead of a generic parse error.
+// panicError marks failures recovered from panics on malformed input.
 type panicError struct {
 	msg string
 }
 
 func (e *panicError) Error() string { return e.msg }
 
-// withRecover wraps a function with panic recovery, converting a panic into an
-// error. Parsing untrusted book files must never take the caller down, so every
-// function that indexes into raw file data runs through this helper.
+// withRecover converts panics on untrusted input into errors.
 func withRecover(name string, fn func() error) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -31,9 +28,7 @@ func withRecover(name string, fn func() error) (err error) {
 	return fn()
 }
 
-// kf8ContentError wraps a KF8 content failure for the caller. Recovered panics
-// point at malformed structures, so they are reported as [book.ErrCorrupt];
-// everything else is a generic parse failure.
+// kf8ContentError reports recovered panics as corruption, other failures as parse errors.
 func kf8ContentError(err error) error {
 	var pe *panicError
 	if errors.As(err, &pe) {
@@ -71,7 +66,7 @@ type FileInfo struct {
 	Length     int
 }
 
-// FlowInfo mirrors calibre's FlowInfo (not needed for raw text, kept for completeness).
+// FlowInfo mirrors calibre's FlowInfo.
 type FlowInfo struct {
 	Type   string
 	Format string
@@ -79,13 +74,9 @@ type FlowInfo struct {
 	Fname  string
 }
 
-// readMobi8Indices reads FDST, SKEL, DIV tables.
-// sections must be the KF8-relative slice (sections[offset-1:] for joint, full for standalone).
-// codec is "utf-8" or "cp1252".
-// mobi is the KF8 Mobi header with KF8-relative indices.
+// readMobi8Indices reads the FDST, SKEL and DIV tables from KF8-relative sections.
 func readMobi8Indices(sections [][]byte, mobi *Mobi, codec string) (flowTable [][2]int, files []FileInfo, elems []Elem, err error) {
 	err = withRecover("readMobi8Indices", func() error {
-		// FDST
 		if mobi.FdstIdx != NullIndex {
 			if int(mobi.FdstIdx) < len(sections) {
 				fdstData := sections[mobi.FdstIdx]
@@ -99,13 +90,11 @@ func readMobi8Indices(sections [][]byte, mobi *Mobi, codec string) (flowTable []
 			}
 		}
 
-		// SKEL
 		if mobi.SkelIdx != NullIndex && int(mobi.SkelIdx) < len(sections) {
 			table, ordered, _, err := ReadIndex(sections, int(mobi.SkelIdx), codec)
 			if err != nil {
 				return fmt.Errorf("SKEL read failed: %w", err)
 			}
-			// ordered preserves enumeration order; table keys are file names
 			for i, name := range ordered {
 				tagMap := table[name]
 				// Tag 1: div count, Tag 6: start, length
@@ -130,7 +119,6 @@ func readMobi8Indices(sections [][]byte, mobi *Mobi, codec string) (flowTable []
 			}
 		}
 
-		// DIV
 		if mobi.DivIdx != NullIndex && int(mobi.DivIdx) < len(sections) {
 			table, ordered, cncx, err := ReadIndex(sections, int(mobi.DivIdx), codec)
 			if err != nil {
@@ -155,8 +143,7 @@ func readMobi8Indices(sections [][]byte, mobi *Mobi, codec string) (flowTable []
 					startPos = v[0]
 					length = v[1]
 				}
-				// key is the text id, calibre does int(text); we keep the
-				// enumeration order and only convert for the insert position.
+				// key is the text id; only the insert position needs its integer value.
 				elems = append(elems, Elem{
 					InsertPos:      atoiOrZero(key),
 					TocText:        tocText,
@@ -185,10 +172,7 @@ func atoiOrZero(s string) int {
 	return n
 }
 
-// buildMobi8Parts mirrors calibre's build_parts flow split + skeleton/div reconstruction.
-// rawML is the decompressed KF8 HTML (mobi_html).
-// flowTable is from FDST or nil (fallback to single flow).
-// files and elems from SKEL/DIV.
+// buildMobi8Parts mirrors calibre's build_parts: flow split plus skeleton/div reconstruction.
 func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems []Elem) (parts [][]byte, partInfos []Part, err error) {
 	err = withRecover("buildMobi8Parts", func() error {
 		flows := [][]byte{}
@@ -214,9 +198,8 @@ func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems [
 		}
 		// first flow is xhtml text
 		text := flows[0]
-		flows[0] = nil // will be replaced
+		flows[0] = nil
 
-		// Walk skeleton/div to build parts
 		parts = [][]byte{}
 		partInfos = []Part{}
 		divPtr := 0
@@ -226,7 +209,6 @@ func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems [
 			skelPos, skelLen := f.StartPos, f.Length
 			basePtr = skelPos + skelLen
 			if skelPos < 0 || basePtr > len(text) {
-				// clamp
 				if skelPos < 0 {
 					skelPos = 0
 				}
@@ -259,8 +241,6 @@ func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems [
 					}
 				}
 				insertPos := e.InsertPos - skelPos
-				// skeleton is mutable, need to adjust for already inserted parts earlier in this file
-				// calibre does skeleton = skeleton[0:insertpos] + part + skeleton[insertpos:] and basePtr += length
 				part := []byte{}
 				partStart := basePtr
 				partEnd := basePtr + e.Length
@@ -281,12 +261,10 @@ func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems [
 				}
 				head := skeleton[:insertPos]
 				tail := skeleton[insertPos:]
-				// Check incomplete tag
 				if (bytes.Index(tail, []byte(">")) < bytes.Index(tail, []byte("<")) && bytes.Contains(tail, []byte("<"))) || (bytes.LastIndex(head, []byte(">")) < bytes.LastIndex(head, []byte("<"))) {
 					if !insposWarned {
 						insposWarned = true
 					}
-					// locate_beg_end_of_tag fallback
 					if aidText != "" {
 						bp, ep := locateBegEndOfTag(skeleton, []byte(aidText))
 						if bp != 0 || ep != 0 {
@@ -302,7 +280,6 @@ func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems [
 						}
 					}
 				}
-				// rebuild skeleton
 				newSkeleton := make([]byte, 0, len(skeleton)+len(part))
 				newSkeleton = append(newSkeleton, head...)
 				newSkeleton = append(newSkeleton, part...)
@@ -313,7 +290,6 @@ func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems [
 			}
 			parts = append(parts, skeleton)
 			if divCnt < 1 {
-				// Empty file
 				aidText = fmt.Sprintf("empty-%d", skelNum)
 				filename = aidText + ".html"
 			}
@@ -339,8 +315,7 @@ func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems [
 }
 
 // loadSections loads all PDB records as raw bytes for INDX parsing.
-// It returns a slice where index i corresponds to PDB record i.
-func loadSections(pdbDb *PdbDb) (sections [][]byte, err error) {
+func loadSections(pdbDb *pdb.PdbDb) (sections [][]byte, err error) {
 	err = withRecover("loadSections", func() error {
 		sections = make([][]byte, len(pdbDb.PdbRecords))
 		for i, rec := range pdbDb.PdbRecords {
@@ -358,9 +333,8 @@ func loadSections(pdbDb *PdbDb) (sections [][]byte, err error) {
 	return
 }
 
-// extractMobi8Raw extracts the decompressed KF8 rawML.
-// It handles joint vs standalone. Returns rawML, the KF8 Mobi header to use, and the offset used.
-func extractMobi8Raw(pdbDb *PdbDb, mobi *Mobi, maxSize int64) (rawML []byte, kf8Mobi *Mobi, offset int, err error) {
+// extractMobi8Raw extracts the decompressed KF8 rawML, handling joint vs standalone.
+func extractMobi8Raw(pdbDb *pdb.PdbDb, mobi *Mobi, maxSize int64) (rawML []byte, kf8Mobi *Mobi, offset int, err error) {
 	err = withRecover("extractMobi8Raw", func() error {
 		var offsetVal int
 		if mobi.KF8 != nil {
@@ -383,15 +357,10 @@ func extractMobi8Raw(pdbDb *PdbDb, mobi *Mobi, maxSize int64) (rawML []byte, kf8
 	return
 }
 
-// aidTagRe matches an HTML/XML tag carrying an aid attribute and captures the
-// attribute value. calibre compiles the same pattern per call with the aid
-// interpolated into it; we compile it once and compare the captured value,
-// which is equivalent (and keeps calibre's case-insensitivity).
+// aidTagRe matches a tag carrying an aid attribute and captures its value (case-insensitive like calibre).
 var aidTagRe = regexp.MustCompile(`(?i)<[^>]*\said\s*=\s*['"]([^'"]*)['"][^>]*>`)
 
-// locateBegEndOfTag mirrors calibre's locate_beg_end_of_tag: it returns the
-// start and end positions of the first tag whose aid attribute equals aid, or
-// (0, 0) when no such tag exists.
+// locateBegEndOfTag returns the bounds of the first tag with the given aid, or (0, 0).
 func locateBegEndOfTag(ml []byte, aid []byte) (int, int) {
 	want := string(aid)
 	for _, m := range aidTagRe.FindAllSubmatchIndex(ml, -1) {

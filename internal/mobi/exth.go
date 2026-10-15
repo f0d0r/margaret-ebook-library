@@ -17,10 +17,10 @@ const (
 )
 
 type Exth struct {
-	Identifier   string              // Identifier for the EXTH record: "EXTH"
-	HeaderLength uint32              // the length of the EXTH header, including the previous 4 bytes - but not including the final padding.
-	RecordCount  uint32              // the number of records in the EXTH block
-	Records      map[uint32][][]byte // the records in the EXTH block, indexed by their type, the same type can have multiple values
+	Identifier   string
+	HeaderLength uint32
+	RecordCount  uint32
+	Records      map[uint32][][]byte // Indexed by type; one type can hold multiple values.
 	textEncoding TextEncodingType
 }
 
@@ -63,8 +63,6 @@ func ReadExth(offset uint32, data []byte, textEncoding TextEncodingType, maxExth
 }
 
 // UpdatedTitle returns the updated title from the EXTH record.
-// The title is decoded according to the text encoding specified in the MOBI header.
-// If the updated title record is not present, an empty string is returned.
 func (e *Exth) UpdatedTitle() string {
 	titleData := e.Records[UPDATED_TITLE]
 	if len(titleData) == 0 {
@@ -73,9 +71,7 @@ func (e *Exth) UpdatedTitle() string {
 	return decodeString(titleData[0], e.textEncoding)
 }
 
-// KF8HeaderIndex returns the offset of the KF8 header within the MOBI header.
-// The offset is stored in the EXTH record type 121 (KF8_HEADER_INDEX).
-// If the record is not present, 0 is returned.
+// KF8HeaderIndex returns the KF8 header offset (type 121), or 0 if absent.
 func (e *Exth) KF8HeaderIndex() uint32 {
 	d := e.Records[KF8_HEADER_INDEX]
 	if len(d) == 0 || len(d[0]) < 4 {
@@ -84,9 +80,7 @@ func (e *Exth) KF8HeaderIndex() uint32 {
 	return binary.BigEndian.Uint32(d[0])
 }
 
-// Authors returns the author names from the EXTH record in a slice of strings.
-// The author is decoded according to the text encoding specified in the MOBI header.
-// If the author record is not present, nil is returned.
+// Authors returns the author names from the EXTH record.
 func (e *Exth) Authors() []string {
 	d := e.Records[AUTHOR]
 	if len(d) == 0 {
@@ -103,8 +97,6 @@ func (e *Exth) Authors() []string {
 }
 
 // Description returns the description from the EXTH record.
-// The description is decoded according to the text encoding specified in the MOBI header.
-// If the description record is not present, an empty string is returned.
 func (e *Exth) Description() string {
 	d := e.Records[DESCRIPTION]
 	if len(d) == 0 {
@@ -114,7 +106,6 @@ func (e *Exth) Description() string {
 }
 
 // Language returns the language code from the EXTH record.
-// If the language record is not present, an empty string is returned.
 func (e *Exth) Language() string {
 	d := e.Records[LANGUAGE]
 	if len(d) == 0 {
@@ -123,9 +114,7 @@ func (e *Exth) Language() string {
 	return decodeString(d[0], e.textEncoding)
 }
 
-// CoverOffset returns the cover image record offset from the EXTH record.
-// The offset is stored in the EXTH record type 201 (COVER_OFFSET).
-// If the record is not present or contains less than 4 bytes, 0 is returned.
+// CoverOffset returns the cover image record offset (type 201), or 0 if absent.
 func (e *Exth) CoverOffset() uint32 {
 	d := e.Records[COVER_OFFSET]
 	if len(d) == 0 || len(d[0]) < 4 {
@@ -134,9 +123,7 @@ func (e *Exth) CoverOffset() uint32 {
 	return binary.BigEndian.Uint32(d[0])
 }
 
-// ThumbnailOffset returns the thumbnail image record offset from the EXTH record.
-// The offset is stored in the EXTH record type 202 (THUMBNAIL_OFFSET).
-// If the record is not present or contains less than 4 bytes, 0 is returned.
+// ThumbnailOffset returns the thumbnail record offset (type 202), or 0 if absent.
 func (e *Exth) ThumbnailOffset() uint32 {
 	d := e.Records[THUMBNAIL_OFFSET]
 	if len(d) == 0 || len(d[0]) < 4 {

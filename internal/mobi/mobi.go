@@ -3,20 +3,26 @@ package mobi
 import (
 	"encoding/binary"
 	"fmt"
+
+	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 )
 
 const PALM_DOC_HEADER_SIZE = 16
 
 const NullIndex uint32 = 0xFFFFFFFF
 
+// PDB idents recognized on the MOBI/PalmDOC path (uppercased like calibre).
+const (
+	pdbIdentMobi    = "BOOKMOBI"
+	pdbIdentPalmDoc = "TEXTREAD"
+)
+
 type CompressionType uint16
 
 const (
 	CompressionNone    CompressionType = 1
 	CompressionPalmDOC CompressionType = 2
-	// CompressionPalmDOCAlt is also PalmDOC (LZ77): calibre's
-	// pdb/palmdoc reader accepts compression in {2, 258}
-	// (src/calibre/ebooks/pdb/palmdoc/reader.py).
+	// CompressionPalmDOCAlt is also PalmDOC: calibre accepts compression in {2, 258}.
 	CompressionPalmDOCAlt CompressionType = 258
 	CompressionHUFF       CompressionType = 17480
 )
@@ -40,7 +46,6 @@ const (
 	MobiTypeNews         MobiType = 257
 	MobiTypeNewsFeed     MobiType = 258
 	MobiTypeNewsMagazine MobiType = 259
-	// Office codes (513+) we don't support them
 )
 
 type TextEncodingType uint32
@@ -52,50 +57,50 @@ const (
 
 type Mobi struct {
 	Compression         CompressionType
-	TextLength          uint32 // Uncompressed length of the entire text of the book
-	TextRecordCount     uint16 // Number of PDB records used for the text of the book.
-	MaxTextRecordSize   uint16 // Maximum size of each record containing text, always 4096
+	TextLength          uint32
+	TextRecordCount     uint16
+	MaxTextRecordSize   uint16
 	Encryption          EncryptionType
-	Identifier          string // the characters MOBI
-	HeaderLength        uint32 // Length of the header
+	Identifier          string
+	HeaderLength        uint32
 	Type                MobiType
 	TextEncoding        TextEncodingType
-	MobiVersion         uint32 // Version of the MOBI format, 4,5 very old, 6 most common, 8 newer KF8
-	FirstNonTextRecord  uint32 // First record number (starting with 0) that's not the book's text
-	FullNameOffset      uint32 // Offset in record 0 (not from start of file) of the full name of the book
-	FullNameLength      uint32 // Length in bytes of the full name of the book
-	Locale              uint32 // Book locale code. Low byte is main language 09= English, next byte is dialect, 08 = British, 04 = US. Thus US English is 1033, UK English is 2057.
-	InputLanguage       uint32 // Input language for a dictionary
-	OutputLanguage      uint32 // Output language for a dictionary
-	MinVersion          uint32 // Minimum version of the MOBI format required to read this book
-	FirstImageRecord    uint32 // First record number (starting with 0) that contains an image
-	HuffmanRecordOffset uint32 // Offset in the file of the Huffman table
-	HuffmanRecordCount  uint32 // Number of Huffman records in the file
-	HuffmanTableOffset  uint32 // Offset in the file of the Huffman table
-	HuffmanTableLength  uint32 // Length in bytes of the Huffman table
-	EXTHFlags           uint32 // bitfield. if bit 6 (0x40) is set, then there's an EXTH record
-	DRMOffset           uint32 // Offset to DRM key info in DRMed files. 0xFFFFFFFF if no DRM
-	DRMCount            uint32 // Number of entries in DRM info. 0xFFFFFFFF if no DRM
-	DRMSize             uint32 // Number of bytes in DRM info.
-	DRMFlags            uint32 // Flags for DRM info
-	FirstTextRecord     uint16 // Number of first text record. Normally 1.
-	LastContentRecord   uint16 // Number of last image record or number of last text record if it contains no images. Includes Image, DATP, HUFF, DRM.
-	FCISRecordOffset    uint32 // Offset to FCIS record in the file.
-	FCISRecordCount     uint32 // Number of FCIS records in the file.
-	FLISRecordOffset    uint32 // Offset to FLIS record in the file.
-	FLISRecordCount     uint32 // Number of FLIS records in the file.
-	ExtraRecordFlags    uint32 // A set of binary flags, some of which indicate extra data at the end of each text block.
-	IndxRecordOffset    uint32 // Offset to INDX record in the file (alias for NcxIdx, kept for compatibility).
-	NcxIdx              uint32 // NCX index (at 0xF4), 0xFFFFFFFF if not present
-	DivIdx              uint32 // DIV table index (at 0xF8), 0xFFFFFFFF if not present
-	SkelIdx             uint32 // Skeleton index (at 0xFC), 0xFFFFFFFF if not present
-	DatpIdx             uint32 // DATP index (at 0x100), 0xFFFFFFFF if not present
-	OthIdx              uint32 // OTH (guide) index (at 0x104), 0xFFFFFFFF if not present
-	FdstIdx             uint32 // FDST index (at 0xC0), 0xFFFFFFFF if not present or count <=1
-	FdstCount           uint32 // FDST count (at 0xC4)
+	MobiVersion         uint32
+	FirstNonTextRecord  uint32
+	FullNameOffset      uint32 // Offset in record 0 (not from start of file)
+	FullNameLength      uint32
+	Locale              uint32
+	InputLanguage       uint32
+	OutputLanguage      uint32
+	MinVersion          uint32
+	FirstImageRecord    uint32
+	HuffmanRecordOffset uint32
+	HuffmanRecordCount  uint32
+	HuffmanTableOffset  uint32
+	HuffmanTableLength  uint32
+	EXTHFlags           uint32 // bit 6 (0x40) set means an EXTH record is present
+	DRMOffset           uint32 // 0xFFFFFFFF if no DRM
+	DRMCount            uint32 // 0xFFFFFFFF if no DRM
+	DRMSize             uint32
+	DRMFlags            uint32
+	FirstTextRecord     uint16
+	LastContentRecord   uint16
+	FCISRecordOffset    uint32
+	FCISRecordCount     uint32
+	FLISRecordOffset    uint32
+	FLISRecordCount     uint32
+	ExtraRecordFlags    uint32
+	IndxRecordOffset    uint32 // Alias for NcxIdx, kept for compatibility.
+	NcxIdx              uint32 // 0xFFFFFFFF if not present
+	DivIdx              uint32 // 0xFFFFFFFF if not present
+	SkelIdx             uint32 // 0xFFFFFFFF if not present
+	DatpIdx             uint32 // 0xFFFFFFFF if not present
+	OthIdx              uint32 // 0xFFFFFFFF if not present
+	FdstIdx             uint32 // 0xFFFFFFFF if not present or count <=1
+	FdstCount           uint32
 	Codec               string // Go codec name derived from TextEncoding: "cp1252" or "utf-8"
-	Kf8FirstImageIndex  uint32 // For KF8 header: absolute first image index (KF8 FirstImageRecord + KF8HeaderIndex)
-	Mobi6Records        uint16 // For KF8 header in joint files: number of MOBI6 text records
+	Kf8FirstImageIndex  uint32 // Absolute first image index (KF8 FirstImageRecord + KF8HeaderIndex)
+	Mobi6Records        uint16 // Number of MOBI6 text records in joint files
 
 	EXTH        *Exth // EXTH record, if present
 	title       string
@@ -104,7 +109,7 @@ type Mobi struct {
 	recordCount uint16 // Number of records in the MOBI file
 }
 
-func ReadMobi(pdbDb *PdbDb, maxExthRecords int) (*Mobi, error) {
+func ReadMobi(pdbDb *pdb.PdbDb, maxExthRecords int) (*Mobi, error) {
 	if len(pdbDb.PdbRecords) == 0 {
 		return nil, fmt.Errorf("failed to read Record 0: no records in PDB database")
 	}
@@ -155,8 +160,7 @@ func ReadMobi(pdbDb *PdbDb, maxExthRecords int) (*Mobi, error) {
 	return mobi, nil
 }
 
-// newMobiDefaults returns a Mobi with the absent-optional fields set to
-// their "not present" sentinels, shared by the MOBI and PalmDOC headers.
+// newMobiDefaults sets absent-optional fields to their "not present" sentinels.
 func newMobiDefaults() *Mobi {
 	return &Mobi{
 		DRMOffset:        0xFFFFFFFF,
@@ -174,9 +178,7 @@ func newMobiDefaults() *Mobi {
 	}
 }
 
-// readBaseHeader reads the PalmDOC base header fields shared by the MOBI
-// and pure-PalmDOC record 0 layouts: compression, text length, text record
-// count, max text record size and encryption type.
+// readBaseHeader reads the PalmDOC base header shared by MOBI and pure-PalmDOC record 0.
 func (m *Mobi) readBaseHeader(data []byte) {
 	m.Compression = CompressionType(binary.BigEndian.Uint16(data[0:2]))
 	m.TextLength = binary.BigEndian.Uint32(data[4:8])
@@ -250,9 +252,7 @@ func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
 	}
 
 	if len(data) >= 244 && mobi.Identifier == "MOBI" && mobi.HeaderLength >= 0xE4 && mobi.HeaderLength <= 500 {
-		// Extra Data Flags is a 16-bit field at offset 242. calibre reads it
-		// as raw[0xF2:0xF4] and only honors it for BOOKMOBI files whose
-		// header length is at least 0xE4 (228).
+		// 16-bit field at 0xF2, honored only for BOOKMOBI with header length >= 0xE4.
 		mobi.ExtraRecordFlags = uint32(binary.BigEndian.Uint16(data[242:244]))
 	}
 
@@ -289,21 +289,17 @@ func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
 	return mobi, nil
 }
 
-// HasEXTH reports whether this MOBI file contains an EXTH record.
-// EXTH (Extended Header) records contain metadata such as title, author, and other book information.
+// HasEXTH reports whether the file contains an EXTH record.
 func (m *Mobi) HasEXTH() bool {
 	return (m.EXTHFlags & 0x40) != 0
 }
 
-// HasDRM reports whether this MOBI file is protected with DRM (Digital Rights Management).
+// HasDRM reports whether the file is DRM protected.
 func (m *Mobi) HasDRM() bool {
 	return m.DRMOffset != 0xFFFFFFFF
 }
 
-// isDRMProtected reports whether the MOBI (or its KF8 part in a dual file)
-// is DRM protected. Like Calibre, both the DRM record pointer and the
-// PalmDOC/MOBI text encryption field are treated as DRM: either a present
-// DRM offset or a non-zero encryption type means the content cannot be read.
+// isDRMProtected treats a present DRM offset or non-zero encryption as DRM, like calibre.
 func isDRMProtected(m *Mobi) bool {
 	if m == nil {
 		return false
@@ -317,8 +313,7 @@ func isDRMProtected(m *Mobi) bool {
 	return false
 }
 
-// Title returns the book title. It prefers the updated title from the EXTH record if available,
-// otherwise falls back to the full name extracted from the MOBI header.
+// Title returns the book title, preferring the EXTH updated title.
 func (m *Mobi) Title() string {
 	var title string
 	if m.KF8 != nil {
@@ -340,9 +335,6 @@ func (m *Mobi) Title() string {
 }
 
 // Authors returns the author names from the book metadata.
-// It first checks the KF8 header (if present in a dual MOBI file),
-// then falls back to the EXTH record.
-// If neither contains an author, an empty slice is returned.
 func (m *Mobi) Authors() []string {
 	var authors []string
 	if m.KF8 != nil {
@@ -355,9 +347,6 @@ func (m *Mobi) Authors() []string {
 }
 
 // Description returns the description from the book metadata.
-// It first checks the KF8 header (if present in a dual MOBI file),
-// then falls back to the EXTH record.
-// If neither contains a description, an empty string is returned.
 func (m *Mobi) Description() string {
 	var description string
 	if m.KF8 != nil {
@@ -370,9 +359,6 @@ func (m *Mobi) Description() string {
 }
 
 // Language returns the language code from the book metadata.
-// It first checks the KF8 header (if present in a dual MOBI file),
-// then falls back to the EXTH record.
-// If neither contains a language, an empty string is returned.
 func (m *Mobi) Language() string {
 	var language string
 	if m.KF8 != nil {
@@ -387,9 +373,7 @@ func (m *Mobi) Language() string {
 	return language
 }
 
-// Version returns the declared Mobipocket format version of the file. For a
-// dual MOBI/KF8 file both versions are reported, e.g. "6/8". It returns an
-// empty string if no version is declared.
+// Version returns the declared format version, e.g. "6/8" for dual files.
 func (m *Mobi) Version() string {
 	ver := m.MobiVersion
 	if m.KF8 != nil {
@@ -407,10 +391,7 @@ func (m *Mobi) Version() string {
 	return fmt.Sprintf("%d", ver)
 }
 
-// CoverRecordIdx returns the record index of the cover image.
-// In a dual MOBI file it checks the KF8 header first, then falls back to
-// the EXTH CoverOffset combined with FirstImageRecord.
-// Returns 0 if no cover image is found.
+// CoverRecordIdx returns the record index of the cover image, or 0 if none.
 func (m *Mobi) CoverRecordIdx() uint32 {
 	if m.KF8 != nil && m.EXTH != nil {
 		absIdx := uint32(m.EXTH.KF8HeaderIndex()) + m.KF8.CoverRecordIdx()
