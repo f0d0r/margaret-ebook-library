@@ -5,7 +5,7 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.26.8-blue)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI, KF8/AZW3, PalmDOC or FB — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB, MOBI, PalmDOC, FB and LIT reading.
+Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI, KF8/AZW3, PalmDOC or FictionBook (FB2, FB3) — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB, MOBI, PalmDOC, FB and LIT reading.
 
 ## Features
 
