@@ -43,6 +43,13 @@
   from the body/root relationships.
 - `WithKF8FallbackToMOBI6` option controlling whether a KF8 parse failure in a
   joint MOBI6+KF8 file falls back to the MOBI6 content (default `true`).
+- CHM reading (`.chm`, Microsoft Compiled HTML Help): content-based ITSF
+  detection, normalized metadata (title from `#SYSTEM` with default-topic
+  HTML and `#TOPICS` fallbacks, authors/description from topic meta tags,
+  languages from the LCID), HHC/`#TOPICS` reading order and lazily-opened
+  manifest resources (raw bytes, `text/html` for topics) with `alt=cover`
+  cover detection. Truncated tails fail loudly with `ErrCorrupt` instead
+  of serving short data. New `book.CHM` file type (`ebook.CHM`).
 
 ### Changed
 

@@ -29,4 +29,8 @@ const (
 	// "PNRdPPrs"/"PNPdPPrs" type/creator ident and PML payloads
 	// (Makebook 116/202-byte vs Dropbook 132-byte record 0 headers).
 	EREADER FileType = "ereader"
+
+	// CHM represents the Microsoft Compiled HTML Help format (.chm).
+	// It uses the ITSF container with LZX-compressed HTML content.
+	CHM FileType = "chm"
 )
