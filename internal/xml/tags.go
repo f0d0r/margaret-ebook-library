@@ -1,11 +1,11 @@
-package util
+package xml
 
 import "strings"
 
-// IsXMLNameChar reports whether c may appear in an XML tag or
-// namespace-prefix name after the first character (ASCII subset; the
-// name-matching call sites only ever need to recognize ASCII names).
-func IsXMLNameChar(c byte) bool {
+// IsNameChar reports whether c may appear in an XML tag or namespace-prefix
+// name after the first character (ASCII subset; the name-matching call sites
+// only ever need to recognize ASCII names).
+func IsNameChar(c byte) bool {
 	switch {
 	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
 		return true
@@ -34,7 +34,7 @@ func ScanOpenTag(buf []byte, tag string, foldCase, stripPrefix bool) bool {
 			continue
 		}
 		k := j
-		for k < len(buf) && IsXMLNameChar(buf[k]) {
+		for k < len(buf) && IsNameChar(buf[k]) {
 			k++
 		}
 		name := string(buf[j:k])

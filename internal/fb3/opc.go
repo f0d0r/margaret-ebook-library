@@ -3,7 +3,6 @@ package fb3
 import (
 	"archive/zip"
 	"bytes"
-	"encoding/xml"
 	"fmt"
 	"io"
 	"net/url"
@@ -11,6 +10,7 @@ import (
 	"strings"
 
 	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
+	"github.com/f0d0r/margaret-ebook-library/internal/xml"
 	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
@@ -86,7 +86,7 @@ func descriptionOverride(f *zip.File, maxSize int64) string {
 		return ""
 	}
 	var types contentTypes
-	if err := xml.Unmarshal(head, &types); err != nil {
+	if err := parseXMLPart(head, &types); err != nil {
 		return ""
 	}
 	for _, o := range types.Overrides {
@@ -95,6 +95,12 @@ func descriptionOverride(f *zip.File, maxSize int64) string {
 		}
 	}
 	return ""
+}
+
+// parseXMLPart decodes a small OPC part, honoring a declared non-UTF-8
+// encoding (and UTF-16 input) via the shared xml.NewDecoder.
+func parseXMLPart(data []byte, v any) error {
+	return xml.NewDecoder(bytes.NewReader(data)).Decode(v)
 }
 
 // resolvePart resolves a .rels Target or PartName to an entry, tolerating
@@ -184,7 +190,7 @@ func relTarget(f *zip.File, relType string, maxSize int64) string {
 		return ""
 	}
 	var rels relationships
-	if err := xml.Unmarshal(head, &rels); err != nil {
+	if err := parseXMLPart(head, &rels); err != nil {
 		return ""
 	}
 	for _, r := range rels.Items {
@@ -213,7 +219,7 @@ func bodyImageRels(zr *zip.Reader, bodyPath string, maxSize int64) []imageRef {
 		return nil
 	}
 	var rels relationships
-	if err := xml.Unmarshal(head, &rels); err != nil {
+	if err := parseXMLPart(head, &rels); err != nil {
 		return nil
 	}
 	var out []imageRef
@@ -267,7 +273,7 @@ func parseMediaMap(zr *zip.Reader, maxSize int64) *mediaMap {
 		return m
 	}
 	var types contentTypes
-	if err := xml.Unmarshal(head, &types); err != nil {
+	if err := parseXMLPart(head, &types); err != nil {
 		return m
 	}
 	for _, d := range types.Defaults {

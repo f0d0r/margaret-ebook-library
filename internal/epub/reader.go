@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/charset"
 	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
 	"github.com/f0d0r/margaret-ebook-library/internal/opf"
@@ -118,6 +119,11 @@ func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
 	}, nil
 }
 
+// charsetSniffSize bounds the entry-head read used to record the storage
+// encoding of textual resources. The head is decompressed but never served:
+// Open still streams the raw entry bytes.
+const charsetSniffSize = 4096
+
 // readResources returns all manifest resources, spine reading order with Linear flag, and cover.
 func (r *EpubReader) readResources(zr *zip.Reader, p opf.Package) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource) {
 	return opf.BuildResources(p, func(item opf.Item) (opf.EntrySource, bool) {
@@ -126,7 +132,8 @@ func (r *EpubReader) readResources(zr *zip.Reader, p opf.Package) ([]*book.Resou
 			return opf.EntrySource{}, false
 		}
 		return opf.EntrySource{
-			Size: int64(file.UncompressedSize64),
+			Size:    int64(file.UncompressedSize64),
+			Charset: entryCharset(file, item.MediaType),
 			Open: func() (io.ReadCloser, error) {
 				maxSize := r.cfg.MaxResourceSize
 				if maxSize <= 0 {
@@ -136,4 +143,21 @@ func (r *EpubReader) readResources(zr *zip.Reader, p opf.Package) ([]*book.Resou
 			},
 		}, true
 	})
+}
+
+// entryCharset reports the storage encoding of a textual ZIP entry by
+// sniffing its head for an XML/meta declaration, defaulting to UTF-8 (also
+// the XML default). Binary entries report "". Bounded decompression only;
+// failures fall back to the default rather than failing Read.
+func entryCharset(f *zip.File, mediaType string) string {
+	if !charset.IsTextMedia(mediaType) {
+		return ""
+	}
+	head, err := compressutil.ReadHead(f, charsetSniffSize)
+	if err == nil {
+		if cs, ok := charset.DetectDeclared(head); ok {
+			return cs
+		}
+	}
+	return book.CharsetUTF8
 }

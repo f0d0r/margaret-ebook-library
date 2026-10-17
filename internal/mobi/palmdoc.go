@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
-	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	"github.com/f0d0r/margaret-ebook-library/internal/xml"
 )
 
 // isPalmDocDb reports whether the container holds a PalmDOC book (TEXTREAD ident, like calibre).
@@ -55,7 +55,7 @@ func isPalmDocHTML(data []byte) bool {
 		trimmed = trimmed[:palmDocSniffSize]
 	}
 	for _, tag := range []string{"html", "head", "body"} {
-		if util.ScanOpenTag(trimmed, tag, true, false) {
+		if xml.ScanOpenTag(trimmed, tag, true, false) {
 			return true
 		}
 	}

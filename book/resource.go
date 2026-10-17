@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/f0d0r/margaret-ebook-library/converter"
+	"github.com/f0d0r/margaret-ebook-library/internal/charset"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
 	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
@@ -33,6 +34,18 @@ type Resource struct {
 	// Properties carries format-specific flags (e.g. EPUB manifest
 	// properties, or "cover-image" for a cover).
 	Properties string
+
+	// Charset names the character encoding of the bytes returned by Open
+	// (e.g. "utf-8", "windows-1250", "shift_jis").
+	//
+	// Open never transcodes: it returns the stored bytes byte-identically,
+	// so Charset tells the caller what they got. Textual resources always
+	// carry an explicit label ("utf-8" when nothing else is declared);
+	// binary resources (images, octet-stream, ...) carry "binary", for
+	// which a character set is meaningless. Charset is never "" on
+	// resources returned by Read (NewResourceSet backfills it from the
+	// media type); transcoding happens only in OpenAs/DataAs and Metadata.
+	Charset string
 
 	// Size is the declared uncompressed size of the resource in bytes.
 	Size int64
@@ -62,17 +75,37 @@ func (r *Resource) Data() ([]byte, error) {
 // OpenAs opens the resource and converts its content to targetMIME if needed.
 // It uses converter.DefaultRegistry. If the resource's MediaType already matches
 // targetMIME (after normalization), it simply calls Open.
+//
+// Textual input is decoded from the resource's Charset to UTF-8 before
+// conversion, so converters always see UTF-8; the converted output is UTF-8.
+// To request another output encoding, use OpenAsWithCharset.
 func (r *Resource) OpenAs(ctx context.Context, targetMIME string) (io.ReadCloser, error) {
-	return r.openAsWithRegistry(ctx, nil, targetMIME)
+	return r.openAsWithRegistryCharset(ctx, nil, targetMIME, "")
 }
 
 // OpenAsWithRegistry is like OpenAs but uses the provided registry. If reg is
 // nil, converter.DefaultRegistry is used.
 func (r *Resource) OpenAsWithRegistry(ctx context.Context, reg *converter.Registry, targetMIME string) (io.ReadCloser, error) {
-	return r.openAsWithRegistry(ctx, reg, targetMIME)
+	return r.openAsWithRegistryCharset(ctx, reg, targetMIME, "")
 }
 
-// DataAs reads the full resource content converted to targetMIME.
+// OpenAsWithCharset is like OpenAs but guarantees the output is encoded in
+// outCharset (e.g. "windows-1250"). "" keeps the pipeline's natural output
+// (stored bytes for an identity conversion, UTF-8 after MIME conversion);
+// "utf-8" explicitly requests UTF-8, transcoding the stored bytes when the
+// resource charset differs. "binary" also passes the pipeline output
+// through. Unknown labels error.
+func (r *Resource) OpenAsWithCharset(ctx context.Context, targetMIME, outCharset string) (io.ReadCloser, error) {
+	return r.openAsWithRegistryCharset(ctx, nil, targetMIME, outCharset)
+}
+
+// OpenAsWithRegistryCharset is like OpenAsWithRegistry with a requested
+// output charset. If reg is nil, converter.DefaultRegistry is used.
+func (r *Resource) OpenAsWithRegistryCharset(ctx context.Context, reg *converter.Registry, targetMIME, outCharset string) (io.ReadCloser, error) {
+	return r.openAsWithRegistryCharset(ctx, reg, targetMIME, outCharset)
+}
+
+// DataAs reads the full resource content converted to targetMIME (UTF-8 for text).
 func (r *Resource) DataAs(ctx context.Context, targetMIME string) ([]byte, error) {
 	rc, err := r.OpenAs(ctx, targetMIME)
 	if err != nil {
@@ -92,7 +125,27 @@ func (r *Resource) DataAsWithRegistry(ctx context.Context, reg *converter.Regist
 	return io.ReadAll(rc)
 }
 
-func (r *Resource) openAsWithRegistry(ctx context.Context, reg *converter.Registry, targetMIME string) (io.ReadCloser, error) {
+// DataAsWithCharset is like DataAs but re-encodes the output to outCharset.
+func (r *Resource) DataAsWithCharset(ctx context.Context, targetMIME, outCharset string) ([]byte, error) {
+	rc, err := r.OpenAsWithCharset(ctx, targetMIME, outCharset)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }()
+	return io.ReadAll(rc)
+}
+
+// DataAsWithRegistryCharset is like DataAsWithRegistry with a requested output charset.
+func (r *Resource) DataAsWithRegistryCharset(ctx context.Context, reg *converter.Registry, targetMIME, outCharset string) ([]byte, error) {
+	rc, err := r.OpenAsWithRegistryCharset(ctx, reg, targetMIME, outCharset)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }()
+	return io.ReadAll(rc)
+}
+
+func (r *Resource) openAsWithRegistryCharset(ctx context.Context, reg *converter.Registry, targetMIME, outCharset string) (io.ReadCloser, error) {
 	if r == nil {
 		return nil, errors.New("resource is nil")
 	}
@@ -107,8 +160,14 @@ func (r *Resource) openAsWithRegistry(ctx context.Context, reg *converter.Regist
 	if from == "" {
 		return nil, fmt.Errorf("%w: resource media type is empty", ErrUnsupportedMediaType)
 	}
+	out := charset.Normalize(outCharset)
 	if from == to {
-		return r.Open()
+		// Identity: raw bytes, unless an explicit output charset requests
+		// a pure transcoding of textual content not already stored in it.
+		if out == "" || out == CharsetBinary || !charset.IsTextMedia(from) || out == r.effectiveCharset() {
+			return r.Open()
+		}
+		return r.transcodeIdentity(out)
 	}
 	if reg == nil {
 		reg = converter.DefaultRegistry
@@ -124,8 +183,10 @@ func (r *Resource) openAsWithRegistry(ctx context.Context, reg *converter.Regist
 	if err != nil {
 		return nil, err
 	}
-	current := io.Reader(rc)
-	currentRC := rc
+	// Central input decode: converters always see UTF-8.
+	chain := charset.DecodeForTransform(rc, r.effectiveCharset(), from)
+	current := io.Reader(chain)
+	currentRC := chain
 	for i, t := range path {
 		nextRC, err := t.Transform(ctx, current)
 		if err != nil {
@@ -135,7 +196,21 @@ func (r *Resource) openAsWithRegistry(ctx context.Context, reg *converter.Regist
 		current = nextRC
 		currentRC = nextRC
 	}
-	return currentRC, nil
+	if out == "" || out == CharsetUTF8 || out == CharsetBinary {
+		return currentRC, nil
+	}
+	return charset.Encode(currentRC, out)
+}
+
+// transcodeIdentity re-encodes textual content without MIME conversion:
+// raw bytes (in the resource Charset) -> UTF-8 -> outCharset.
+func (r *Resource) transcodeIdentity(outCharset string) (io.ReadCloser, error) {
+	rc, err := r.Open()
+	if err != nil {
+		return nil, err
+	}
+	decoded := charset.DecodeForTransform(rc, r.effectiveCharset(), mediatype.Normalize(r.MediaType))
+	return charset.Encode(decoded, outCharset)
 }
 
 // ReadingOrderItem represents a single spine entry in reading order.
@@ -176,7 +251,19 @@ func NewResourceSet(all []*Resource, readingOrder []ReadingOrderItem, cover *Res
 		if r == nil {
 			continue
 		}
+		// Charset backstop: "" never escapes the library. Textual resources
+		// default to "utf-8", binary ones to "binary".
+		r.normalizeCharsetInPlace()
 		filteredAll = append(filteredAll, r)
+	}
+	for _, it := range readingOrder {
+		if it.Resource == nil {
+			continue
+		}
+		it.Resource.normalizeCharsetInPlace()
+	}
+	if cover != nil {
+		cover.normalizeCharsetInPlace()
 	}
 	filteredRO := make([]ReadingOrderItem, 0, len(readingOrder))
 	for _, it := range readingOrder {
@@ -359,6 +446,21 @@ func (rs *ResourceSet) OpenReadingOrderAs(ctx context.Context, targetMIME string
 // OpenReadingOrderAsWithRegistry is like OpenReadingOrderAs but uses the
 // provided registry. If reg is nil, converter.DefaultRegistry is used.
 func (rs *ResourceSet) OpenReadingOrderAsWithRegistry(ctx context.Context, reg *converter.Registry, targetMIME string) (io.ReadCloser, error) {
+	return rs.openReadingOrder(ctx, reg, targetMIME, "")
+}
+
+// OpenReadingOrderAsWithCharset is like OpenReadingOrderAs but guarantees
+// the output is encoded in outCharset ("" keeps the natural output).
+func (rs *ResourceSet) OpenReadingOrderAsWithCharset(ctx context.Context, targetMIME, outCharset string) (io.ReadCloser, error) {
+	return rs.openReadingOrder(ctx, nil, targetMIME, outCharset)
+}
+
+// OpenReadingOrderAsWithRegistryCharset combines custom registry and output charset.
+func (rs *ResourceSet) OpenReadingOrderAsWithRegistryCharset(ctx context.Context, reg *converter.Registry, targetMIME, outCharset string) (io.ReadCloser, error) {
+	return rs.openReadingOrder(ctx, reg, targetMIME, outCharset)
+}
+
+func (rs *ResourceSet) openReadingOrder(ctx context.Context, reg *converter.Registry, targetMIME, outCharset string) (io.ReadCloser, error) {
 	if rs == nil {
 		return nil, fmt.Errorf("resource set is nil")
 	}
@@ -383,6 +485,7 @@ func (rs *ResourceSet) OpenReadingOrderAsWithRegistry(ctx context.Context, reg *
 		resources: linear,
 		reg:       reg,
 		target:    to,
+		charset:   outCharset,
 		index:     0,
 	}, nil
 }
@@ -392,6 +495,7 @@ type multiReadCloser struct {
 	resources []*Resource
 	reg       *converter.Registry
 	target    string
+	charset   string
 	index     int
 	current   io.ReadCloser
 	closed    bool
@@ -409,7 +513,7 @@ func (m *multiReadCloser) Read(p []byte) (int, error) {
 			if m.index >= len(m.resources) {
 				return 0, io.EOF
 			}
-			rc, err := m.resources[m.index].OpenAsWithRegistry(m.ctx, m.reg, m.target)
+			rc, err := m.resources[m.index].OpenAsWithRegistryCharset(m.ctx, m.reg, m.target, m.charset)
 			if err != nil {
 				return 0, err
 			}

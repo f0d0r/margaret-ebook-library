@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/charset"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
 	"github.com/f0d0r/margaret-ebook-library/internal/opf"
 	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
@@ -132,6 +133,7 @@ func (r *MobiReader) readPalmDoc(pdbDb *pdb.PdbDb) (book.Book, error) {
 		Href:         name,
 		ResolvedHref: name,
 		MediaType:    mediaType,
+		Charset:      charsetForEncoding(mobiDoc.TextEncoding),
 		Size:         int64(mobiDoc.TextLength),
 		Open: func() (io.ReadCloser, error) {
 			data, err := extractPalmDocText(pdbDb, mobiDoc, maxResourceSize)
@@ -197,6 +199,7 @@ func (r *MobiReader) cover(b book.Blob, pdbDb *pdb.PdbDb, mobiDoc *Mobi) *book.R
 		Href:         href,
 		ResolvedHref: href,
 		MediaType:    mediaType,
+		Charset:      book.CharsetBinary,
 		Properties:   "cover-image",
 		Size:         int64(coverLength),
 		Open: func() (io.ReadCloser, error) {
@@ -269,6 +272,16 @@ func (r *MobiReader) buildMobiResources(b book.Blob, pdbDb *pdb.PdbDb, mobiDoc *
 	return all, readingOrder, cover
 }
 
+// charsetForEncoding maps a MOBI text encoding to the Resource.Charset
+// label, mirroring decodeString: only CP1252 decodes as windows-1252,
+// everything else is stored UTF-8.
+func charsetForEncoding(enc TextEncodingType) string {
+	if enc == CP1252 {
+		return "windows-1252"
+	}
+	return book.CharsetUTF8
+}
+
 // content returns the book's text as HTML resources: a single index.html for
 // MOBI6, ordered parts for MOBI8/KF8. A KF8 parse failure surfaces from Open,
 // except in dual files with KF8FallbackToMOBI6 where MOBI6 is served instead.
@@ -311,6 +324,7 @@ func (r *MobiReader) content(pdbDb *pdb.PdbDb, mobiDoc *Mobi) []book.Resource {
 	return []book.Resource{{
 		Name:      "index.html",
 		MediaType: "application/x-mobipocket-html",
+		Charset:   charsetForEncoding(mobiDoc.TextEncoding),
 		Size:      int64(mobiDoc.TextLength),
 		Open: func() (io.ReadCloser, error) {
 			data, err := extractText(pdbDb, mobiDoc, maxResourceSize)
@@ -353,6 +367,7 @@ func (r *MobiReader) contentMobi8(pdbDb *pdb.PdbDb, mobiDoc *Mobi, maxResourceSi
 		if codec == "" {
 			codec = "utf-8"
 		}
+		contentCharset := charset.Normalize(codec)
 		flowTable, files, elems, err := readMobi8Indices(kf8Sections, kf8, codec)
 		if err != nil {
 			if len(rawML) == 0 {
@@ -364,7 +379,7 @@ func (r *MobiReader) contentMobi8(pdbDb *pdb.PdbDb, mobiDoc *Mobi, maxResourceSi
 			if maxResourceSize > 0 && int64(len(rawML)) > maxResourceSize {
 				return fmt.Errorf("%w: part %q %d bytes exceeds MaxResourceSize %d", book.ErrLimitExceeded, "part0000.html", len(rawML), maxResourceSize)
 			}
-			resources = []book.Resource{htmlResource("part0000.html", rawML)}
+			resources = []book.Resource{htmlResource("part0000.html", rawML, contentCharset)}
 			return nil
 		}
 
@@ -391,7 +406,7 @@ func (r *MobiReader) contentMobi8(pdbDb *pdb.PdbDb, mobiDoc *Mobi, maxResourceSi
 			if name == "" {
 				name = fmt.Sprintf("part%04d.html", i)
 			}
-			resources = append(resources, htmlResource(name, part))
+			resources = append(resources, htmlResource(name, part, contentCharset))
 		}
 		return nil
 	})
@@ -399,10 +414,14 @@ func (r *MobiReader) contentMobi8(pdbDb *pdb.PdbDb, mobiDoc *Mobi, maxResourceSi
 }
 
 // htmlResource serves already-bounded KF8 bytes; Open just returns them.
-func htmlResource(name string, data []byte) book.Resource {
+func htmlResource(name string, data []byte, charset string) book.Resource {
+	if charset == "" {
+		charset = book.CharsetUTF8
+	}
 	return book.Resource{
 		Name:      name,
 		MediaType: "application/x-mobipocket-html",
+		Charset:   charset,
 		Size:      int64(len(data)),
 		Open: func() (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(data)), nil
@@ -415,6 +434,7 @@ func failingResource(name string, err error) book.Resource {
 	return book.Resource{
 		Name:      name,
 		MediaType: "application/x-mobipocket-html",
+		Charset:   book.CharsetUTF8,
 		Size:      0,
 		Open: func() (io.ReadCloser, error) {
 			return nil, err

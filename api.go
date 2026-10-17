@@ -30,6 +30,14 @@ const (
 	CHM     = book.CHM
 )
 
+// Charset labels for Resource.Charset and OpenAsWithCharset.
+const (
+	// CharsetUTF8 marks textual content stored as UTF-8.
+	CharsetUTF8 = book.CharsetUTF8
+	// CharsetBinary marks non-textual content (images, ...); not an encoding.
+	CharsetBinary = book.CharsetBinary
+)
+
 var (
 	ErrUnsupportedFormat    = book.ErrUnsupportedFormat
 	ErrLimitExceeded        = book.ErrLimitExceeded

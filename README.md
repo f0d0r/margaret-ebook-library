@@ -375,6 +375,35 @@ fmt.Println(string(plain))
 Constants are compile-time safe: `mediatype.PlainText`, `mediatype.XHTML`,
 `mediatype.HTML`, `mediatype.MobiHTML`, `mediatype.FB2Body`, `mediatype.EreaderPML`, etc.
 
+#### Storage charset and byte-identical reads
+
+`Resource.Open()` (and `Data()`) always serves the stored bytes exactly as
+they are: decompressed/decrypted, but **never** transcoded — XML/HTML
+declarations, BOMs and the original encoding are preserved.
+`Resource.Charset` names that encoding: an explicit IANA label
+(`"windows-1251"`, `"utf-16le"`, ...), `"utf-8"` when nothing else is
+declared, or `"binary"` for non-textual content (`ebook.CharsetUTF8` /
+`ebook.CharsetBinary`). It is never empty on resources returned by `Read`.
+
+`OpenAs`/`DataAs`/`OpenReadingOrderAs` decode to UTF-8 centrally before the
+transformer chain, so transformers always see UTF-8. To request a non-UTF-8
+output (e.g. a legacy tool expecting Latin-2), use the `...WithCharset`
+variants; unknown charset labels return an error:
+
+```go
+rc, err := r.OpenAsWithCharset(ctx, mediatype.PlainText, "windows-1250")
+if err != nil {
+    log.Fatal(err)
+}
+defer rc.Close()
+
+// Whole book in the requested charset:
+rc, err = b.Resources().OpenReadingOrderAsWithCharset(ctx, mediatype.PlainText, "windows-1250")
+```
+
+The one documented exception is LIT spine content: it is synthesized by the
+reader itself and therefore always UTF-8 (`Charset == ebook.CharsetUTF8`).
+
 #### Custom transformers and isolated registries
 
 `Transformer` is a single edge `From() -> To()` over MIME types:

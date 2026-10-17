@@ -12,7 +12,7 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/book"
 	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
-	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	xmlx "github.com/f0d0r/margaret-ebook-library/internal/xml"
 )
 
 type Fb2Reader struct {
@@ -67,7 +67,7 @@ func (r *Fb2Reader) Read(b book.Blob) (book.Book, error) {
 	}
 
 	// The source stream is capped at maxSize, so materializing it below is
-	// bounded (transcoding may expand it slightly).
+	// bounded.
 	var raw io.ReadCloser
 	if compressutil.IsZip(head) {
 		zr, err := compressutil.Open(b)
@@ -90,33 +90,53 @@ func (r *Fb2Reader) Read(b book.Blob) (book.Book, error) {
 		}
 		raw = io.NopCloser(io.NewSectionReader(b, 0, size))
 	}
-	buf, err := canonicalizeFB2(raw)
+	rawBytes, err := io.ReadAll(raw)
 	_ = raw.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode fb2: %w", err)
 	}
 
-	// Locate body ranges first: on syntax errors retry with bare ampersands
-	// fixed, keeping the fixed buffer downstream for consistent offsets.
-	ranges, err := findBodyRanges(buf)
+	// The storage encoding is recorded on every body resource; Open serves
+	// the raw bytes byte-identically (BOM, declaration and original
+	// encoding preserved). Transcoding happens only for structure
+	// discovery/metadata (normalized copy) and in OpenAs converters.
+	charset, err := detectFB2Charset(rawBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode fb2: %w", err)
+	}
+	normBuf, err := normalizeFB2(rawBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode fb2: %w", err)
+	}
+
+	// Locate body ranges on the normalized copy first (encoding/xml based):
+	// on syntax errors retry with bare ampersands fixed.
+	ranges, err := findBodyRanges(normBuf)
 	if err != nil {
 		var syntaxErr *xml.SyntaxError
 		if !errors.As(err, &syntaxErr) {
 			return nil, fmt.Errorf("failed to read fb2 content: %w", err)
 		}
-		fixed := bytes.ReplaceAll(buf, []byte("& "), []byte("&amp; "))
+		fixed := bytes.ReplaceAll(normBuf, []byte("& "), []byte("&amp; "))
 		ranges, err = findBodyRanges(fixed)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read fb2 content: %w", err)
 		}
-		buf = fixed
 	}
 
-	pm, err := parseMetadata(buf)
+	// Then locate the same bodies in the raw document so Open can serve
+	// the original bytes. The body count must agree; a mismatch fails
+	// loudly instead of serving misaligned slices.
+	rawRanges, err := locateRawBodyRanges(rawBytes, charset, len(ranges))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read fb2 content: %w", err)
+	}
+
+	pm, err := parseNormalized(normBuf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read fb2 metadata: %w", err)
 	}
-	all, readingOrder, cover, err := buildFb2Resources(buf, pm, ranges, maxSize)
+	all, readingOrder, cover, err := buildFb2Resources(rawBytes, normBuf, rawRanges, charset, pm, maxSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read fb2 content: %w", err)
 	}
@@ -205,5 +225,5 @@ func hasFictionBookRoot(buf []byte) bool {
 // "FictionBook" (XML is case-sensitive). Closing tags, PIs and markup
 // declarations are skipped, and the next character must delimit the tag.
 func scanFictionBookTag(buf []byte) bool {
-	return util.ScanOpenTag(buf, elFictionBook, false, true)
+	return xmlx.ScanOpenTag(buf, elFictionBook, false, true)
 }

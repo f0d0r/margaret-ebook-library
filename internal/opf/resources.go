@@ -15,6 +15,11 @@ import (
 type EntrySource struct {
 	// Size is the stored byte count of the entry.
 	Size int64
+	// Charset is the storage encoding of the entry's bytes, when the
+	// caller determined one (e.g. LIT's synthesized spine documents, or a
+	// declaration sniffed from the entry head). "" leaves the decision to
+	// NewResourceSet's media-type default.
+	Charset string
 	// Open streams the entry content lazily. Size limiting is enforced
 	// inside, following the format reader's configured limits.
 	Open func() (io.ReadCloser, error)
@@ -31,6 +36,7 @@ func newResource(item Item, resolved string, src EntrySource) *book.Resource {
 		ResolvedHref: resolved,
 		Properties:   item.Properties,
 		MediaType:    item.MediaType,
+		Charset:      src.Charset,
 		Size:         src.Size,
 		Open:         src.Open,
 	}

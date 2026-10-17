@@ -2,10 +2,10 @@ package epub
 
 import (
 	"archive/zip"
-	"encoding/xml"
 	"fmt"
 
 	compressutil "github.com/f0d0r/margaret-ebook-library/internal/compress"
+	"github.com/f0d0r/margaret-ebook-library/internal/xml"
 )
 
 // OcfReader handles Open Container Format (OCF) parsing and operations

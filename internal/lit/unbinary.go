@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
-	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	"github.com/f0d0r/margaret-ebook-library/internal/xml"
 )
 
 // UnBinary flags for tag records.
@@ -556,7 +556,7 @@ func isEntityStart(s []byte) bool {
 	}
 	if i < len(s) && (isNameStart(s[i])) {
 		i++
-		for i < len(s) && util.IsXMLNameChar(s[i]) {
+		for i < len(s) && xml.IsNameChar(s[i]) {
 			i++
 		}
 		return i < len(s) && s[i] == ';'
