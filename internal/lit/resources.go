@@ -58,6 +58,11 @@ func (c *container) lookup(item opf.Item, p opf.Package, maxSize int64) (opf.Ent
 	if state == contentTransformed {
 		return opf.EntrySource{
 			Size: size,
+			// Decoded through UnBinary HTML on Open: the original
+			// encoding is gone and the output carries a UTF-8
+			// declaration (see openContent). This is the documented
+			// LIT exception to byte-identical Open.
+			Charset: book.CharsetUTF8,
 			Open: func() (io.ReadCloser, error) {
 				return c.openContent(internal, item.Href, maxSize)
 			},

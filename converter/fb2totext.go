@@ -9,7 +9,7 @@ import (
 
 	stdhtml "html"
 
-	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	"github.com/f0d0r/margaret-ebook-library/internal/xml"
 )
 
 // fb2BodyToTextTransformer converts FictionBook body fragments
@@ -250,7 +250,7 @@ func (f *fb2TextReader) parseTag() {
 		f.parseEndTag()
 	case c == '!' || c == '?':
 		f.skipSpecial(c)
-	case util.IsXMLNameChar(c):
+	case xml.IsNameChar(c):
 		_ = f.src.UnreadByte()
 		name, selfClosing := f.parseStartTag()
 		local := localName(name)
@@ -333,7 +333,7 @@ func (f *fb2TextReader) scanSkipped() {
 			}
 		case d == '!' || d == '?':
 			f.skipSpecial(d)
-		case util.IsXMLNameChar(d):
+		case xml.IsNameChar(d):
 			_ = f.src.UnreadByte()
 			_, selfClosing := f.parseStartTag()
 			if !selfClosing {
@@ -489,7 +489,7 @@ func (f *fb2TextReader) readTagName() string {
 		if err != nil {
 			break
 		}
-		if !util.IsXMLNameChar(c) {
+		if !xml.IsNameChar(c) {
 			_ = f.src.UnreadByte()
 			break
 		}

@@ -9,7 +9,7 @@ import (
 
 	stdhtml "html"
 
-	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	"github.com/f0d0r/margaret-ebook-library/internal/xml"
 )
 
 // fb3BodyToTextTransformer converts FB3 body parts to plain text
@@ -208,7 +208,7 @@ func (f *fb3TextReader) parseTag() {
 		f.parseEndTag()
 	case c == '!' || c == '?':
 		f.skipSpecial(c)
-	case util.IsXMLNameChar(c):
+	case xml.IsNameChar(c):
 		_ = f.src.UnreadByte()
 		name, _ := f.parseStartTag()
 		if localName(name) == "br" {
@@ -367,7 +367,7 @@ func (f *fb3TextReader) readTagName() string {
 		if err != nil {
 			break
 		}
-		if !util.IsXMLNameChar(c) {
+		if !xml.IsNameChar(c) {
 			_ = f.src.UnreadByte()
 			break
 		}

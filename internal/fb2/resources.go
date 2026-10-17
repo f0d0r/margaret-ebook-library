@@ -13,6 +13,7 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
+	xmlx "github.com/f0d0r/margaret-ebook-library/internal/xml"
 	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
 
@@ -26,7 +27,7 @@ type binaryFile struct {
 // collectBinaries decodes every image <binary> payload, skipping the rest.
 func collectBinaries(data []byte) ([]*binaryFile, error) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
-	dec.CharsetReader = charsetReader
+	dec.CharsetReader = xmlx.CharsetReader
 	var out []*binaryFile
 	used := make(map[string]int)
 	for {
@@ -136,7 +137,7 @@ func sanitizeImageID(id string) string {
 // Offsets index data, so data must be normalized UTF-8 (see normalizeFB2).
 func findBodyRanges(data []byte) ([][2]int64, error) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
-	dec.CharsetReader = charsetReader
+	dec.CharsetReader = xmlx.CharsetReader
 	var out [][2]int64
 	depth := 0
 	var start int64 = -1
@@ -181,11 +182,25 @@ func isTruncated(err error) bool {
 }
 
 // buildFb2Resources assembles content resources, reading order and cover.
-// Body slices are zero-copy views; only decoded images add footprint.
-func buildFb2Resources(data []byte, pm parsedMeta, ranges [][2]int64, maxSize int64) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource, error) {
-	bins, err := collectBinaries(data)
+// data is the raw (untranscoded) document; ranges index it, so Open serves
+// the original bytes byte-identically. normData is the decoded UTF-8 copy
+// used to extract <binary> payloads (base64 is encoding-agnostic, but the
+// XML tokenizer needs ASCII-compatible input). charset is the document's
+// storage encoding recorded on every body resource. Body slices are
+// zero-copy views; only decoded images add footprint.
+func buildFb2Resources(data, normData []byte, ranges [][2]int64, charset string, pm parsedMeta, maxSize int64) ([]*book.Resource, []book.ReadingOrderItem, *book.Resource, error) {
+	bins, err := collectBinaries(normData)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to read fb2 binaries: %w", err)
+		// Leniency mirror for bare ampersands (see parseNormalized):
+		// a syntax error retries on the fixed buffer. Images are
+		// base64-decoded bytes, unaffected by where the fix landed.
+		var syntaxErr *xml.SyntaxError
+		if !errors.As(err, &syntaxErr) {
+			return nil, nil, nil, fmt.Errorf("failed to read fb2 binaries: %w", err)
+		}
+		if bins, err = collectBinaries(bytes.ReplaceAll(normData, []byte("& "), []byte("&amp; "))); err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to read fb2 binaries: %w", err)
+		}
 	}
 
 	var all []*book.Resource
@@ -201,6 +216,7 @@ func buildFb2Resources(data []byte, pm parsedMeta, ranges [][2]int64, maxSize in
 			Href:         name,
 			ResolvedHref: name,
 			MediaType:    mediatype.FB2Body,
+			Charset:      charset,
 			Size:         int64(len(content)),
 			Open: func() (io.ReadCloser, error) {
 				if maxSize > 0 && int64(len(content)) > maxSize {
@@ -234,6 +250,7 @@ func imageResources(bins []*binaryFile, maxSize int64) []*book.Resource {
 			Href:         bf.href,
 			ResolvedHref: bf.href,
 			MediaType:    bf.mediaType,
+			Charset:      book.CharsetBinary,
 			Size:         int64(len(bf.data)),
 			Open: func() (io.ReadCloser, error) {
 				if maxSize > 0 && int64(len(bf.data)) > maxSize {

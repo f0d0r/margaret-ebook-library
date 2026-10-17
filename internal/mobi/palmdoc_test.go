@@ -31,7 +31,14 @@ func palmDocEncode(input []byte) []byte {
 			out = append(out, byte(0x80|(m>>5)), byte(((m&0x1f)<<3)|(ln-3)))
 			i += bestLen
 		} else {
-			out = append(out, input[i])
+			b := input[i]
+			if b < 0x09 || b >= 0x80 {
+				// Bytes outside the literal range (and the escape
+				// byte itself) travel as a 0x01 escape + raw byte.
+				out = append(out, 0x01, b)
+			} else {
+				out = append(out, b)
+			}
 			i++
 		}
 	}

@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/charset"
+	xmlx "github.com/f0d0r/margaret-ebook-library/internal/xml"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/language"
@@ -70,6 +72,14 @@ func parseMetadata(data []byte) (parsedMeta, error) {
 	if err != nil {
 		return parsedMeta{}, err
 	}
+	return parseNormalized(norm)
+}
+
+// parseNormalized extracts metadata from already-normalized (UTF-8) FB2
+// bytes, retrying once with bare ampersands fixed. Callers that already
+// normalized (e.g. the reader, which also needs the normalized buffer for
+// structure discovery) use this to avoid transcoding twice.
+func parseNormalized(norm []byte) (parsedMeta, error) {
 	pm, err := parseDoc(norm)
 	if err == nil {
 		return pm, nil
@@ -82,9 +92,46 @@ func parseMetadata(data []byte) (parsedMeta, error) {
 	return parseDoc(fixed)
 }
 
+// detectFB2Charset reports the storage encoding of raw FB2 bytes without
+// transcoding: UTF-16 by BOM (or declared UTF-16 resolved to its concrete
+// byte order), otherwise the XML declaration label (or "utf-8" when
+// undeclared). It mirrors normalizeFB2's validation, so an unsupported
+// encoding errors here just as it would there.
+func detectFB2Charset(raw []byte) (string, error) {
+	if len(raw) >= 2 && raw[0] == 0xFF && raw[1] == 0xFE {
+		if len(raw) >= 4 && raw[2] == 0x00 && raw[3] == 0x00 {
+			return "", fmt.Errorf("unsupported xml encoding: utf-32")
+		}
+		return "utf-16le", nil
+	}
+	if len(raw) >= 2 && raw[0] == 0xFE && raw[1] == 0xFF {
+		return "utf-16be", nil
+	}
+	label := declLabel(stripNULs(raw[:min(prologScanLimit, len(raw))]))
+	switch strings.ToLower(label) {
+	case "", encUTF8, encUTF8Alt, encASCII, encASCIIAlt:
+		return book.CharsetUTF8, nil
+	case encUTF16, encUTF16LE, encUTF16BE:
+		// Declared UTF-16 without a BOM: report the concrete byte order
+		// (skeleton or label), so Charset names a decodable encoding.
+		if le, _, ok := utf16Layout(raw, charset.Normalize(label)); ok {
+			if le {
+				return "utf-16le", nil
+			}
+			return "utf-16be", nil
+		}
+		return charset.Normalize(label), nil
+	default:
+		if _, err := htmlindex.Get(label); err != nil {
+			return "", fmt.Errorf("unsupported xml encoding %q", label)
+		}
+		return charset.Normalize(label), nil
+	}
+}
+
 func parseDoc(data []byte) (parsedMeta, error) {
 	dec := xml.NewDecoder(bytes.NewReader(data))
-	dec.CharsetReader = charsetReader
+	dec.CharsetReader = xmlx.CharsetReader
 	return parseDocument(dec)
 }
 
@@ -125,19 +172,24 @@ func normalizeFB2(raw []byte) ([]byte, error) {
 		return rewriteDecl(out), nil
 	}
 	raw = bytes.TrimPrefix(raw, []byte{0xEF, 0xBB, 0xBF})
-	if bytes.IndexByte(raw, 0x00) >= 0 {
-		stripped := make([]byte, 0, len(raw))
-		for _, c := range raw {
-			if c != 0x00 {
-				stripped = append(stripped, c)
-			}
-		}
-		raw = stripped
-	}
-	label := declLabel(raw)
-	switch strings.ToLower(label) {
+	orig := raw
+	raw = stripNULs(raw)
+	label := strings.ToLower(declLabel(raw))
+	switch label {
 	case "", encUTF8, encUTF8Alt, encASCII, encASCIIAlt:
 		return raw, nil
+	case encUTF16, encUTF16LE, encUTF16BE:
+		// BOM-less UTF-16: decode the original bytes (the NUL-stripped
+		// copy only served declaration sniffing).
+		le, skip, ok := utf16Layout(orig, label)
+		if !ok {
+			return nil, fmt.Errorf("indeterminate utf-16 byte order")
+		}
+		out, err := utf16ToUTF8(orig[skip:], le)
+		if err != nil {
+			return nil, err
+		}
+		return rewriteDecl(out), nil
 	default:
 		enc, err := htmlindex.Get(label)
 		if err != nil {
@@ -153,8 +205,7 @@ func normalizeFB2(raw []byte) ([]byte, error) {
 
 // declLabel returns the encoding label from the XML prolog, or "".
 func declLabel(data []byte) string {
-	head := data[:min(prologScanLimit, len(data))]
-	m := declPattern.Find(head)
+	m := declPattern.Find(data[:min(prologScanLimit, len(data))])
 	if m == nil {
 		return ""
 	}
@@ -163,6 +214,21 @@ func declLabel(data []byte) string {
 		s = s[i+1:]
 	}
 	return strings.TrimRight(s, `"'`)
+}
+
+// stripNULs returns b without NUL bytes, making a BOM-less UTF-16 prolog
+// readable as ASCII; other input passes through unchanged.
+func stripNULs(b []byte) []byte {
+	if bytes.IndexByte(b, 0x00) < 0 {
+		return b
+	}
+	out := make([]byte, 0, len(b))
+	for _, c := range b {
+		if c != 0x00 {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // rewriteDecl sets the prolog encoding declaration to UTF-8.
@@ -178,31 +244,8 @@ func rewriteDecl(data []byte) []byte {
 	return append(out, data[loc[1]:]...)
 }
 
-func canonicalizeFB2(r io.Reader) ([]byte, error) {
-	raw, err := io.ReadAll(r)
-	if err != nil {
-		return nil, err
-	}
-	return normalizeFB2(raw)
-}
-
 // charsetReader resolves the XML encoding declaration via x/text,
 // passing UTF-8/16 and ASCII through.
-func charsetReader(label string, input io.Reader) (io.Reader, error) {
-	switch strings.ToLower(strings.TrimSpace(label)) {
-	case "", encUTF8, encUTF8Alt, encASCII, encASCIIAlt:
-		return input, nil
-	case encUTF16, encUTF16LE, encUTF16BE:
-		return input, nil
-	default:
-		enc, err := htmlindex.Get(label)
-		if err != nil {
-			return nil, fmt.Errorf("unsupported xml encoding %q", label)
-		}
-		return transform.NewReader(input, enc.NewDecoder()), nil
-	}
-}
-
 // infoSection holds metadata collected from one description subsection.
 type infoSection struct {
 	title      string

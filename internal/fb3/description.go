@@ -9,9 +9,8 @@ import (
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
-	"golang.org/x/text/encoding/htmlindex"
+	xmlx "github.com/f0d0r/margaret-ebook-library/internal/xml"
 	"golang.org/x/text/language"
-	"golang.org/x/text/transform"
 )
 
 // Element and attribute local names (matched namespace-agnostically).
@@ -58,24 +57,8 @@ func parseDescription(data []byte) (parsedMeta, error) {
 }
 
 func decodeDescription(data []byte) (parsedMeta, error) {
-	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF}) // UTF-8 BOM
-	dec := xml.NewDecoder(bytes.NewReader(data))
-	dec.CharsetReader = charsetReader
-	return parseDescriptionDoc(dec)
-}
-
-// charsetReader resolves the XML encoding declaration.
-func charsetReader(label string, input io.Reader) (io.Reader, error) {
-	switch strings.ToLower(strings.TrimSpace(label)) {
-	case "", "utf-8", "utf8", "us-ascii", "ascii", "utf-16", "utf-16le", "utf-16be":
-		return input, nil
-	default:
-		enc, err := htmlindex.Get(label)
-		if err != nil {
-			return nil, fmt.Errorf("unsupported xml encoding %q", label)
-		}
-		return transform.NewReader(input, enc.NewDecoder()), nil
-	}
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF}) // UTF-8 BOM; UTF-16 handled by the decoder
+	return parseDescriptionDoc(xmlx.NewDecoder(bytes.NewReader(data)))
 }
 
 // parseDescriptionDoc consumes the fb3-description document.

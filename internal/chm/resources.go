@@ -9,6 +9,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/charset"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
 	"github.com/f0d0r/margaret-ebook-library/mediatype"
 )
@@ -46,6 +47,26 @@ func isControl(name string) bool {
 		strings.HasPrefix(trimmed, "::")
 }
 
+// charsetSniffSize bounds the topic-head read used to record the storage
+// encoding; only the head is decompressed, Open still serves raw bytes.
+const charsetSniffSize = 4096
+
+// entryCharset reports the storage encoding of an HTML topic: the charset
+// declared in its head, falling back to the container's #SYSTEM LCID
+// default. Highlights only; other textual entries rely on the media-type
+// default ("utf-8") via NewResourceSet.
+func (c *container) entryCharset(name string, ent entry) string {
+	fallback := c.charset()
+	head, err := c.readEntryHead(name, ent, charsetSniffSize)
+	if err != nil {
+		return fallback
+	}
+	if cs, ok := charset.DetectDeclared(head); ok {
+		return cs
+	}
+	return fallback
+}
+
 // buildResources assembles the manifest resources, the TOC-derived reading
 // order and the cover. Entry payloads serve raw bytes lazily; unresolvable
 // TOC targets are skipped like missing OPF entries.
@@ -70,12 +91,18 @@ func (c *container) buildResources() ([]*book.Resource, []book.ReadingOrderItem,
 		}
 		ent := ne.ent
 		name := ne.name
+		mediaType := mediaByExt(href)
+		charset := ""
+		if mediaType == mediatype.HTML {
+			charset = c.entryCharset(name, ent)
+		}
 		res := &book.Resource{
 			Id:           href,
 			Name:         path.Base(href),
 			Href:         href,
 			ResolvedHref: href,
-			MediaType:    mediaByExt(href),
+			MediaType:    mediaType,
+			Charset:      charset,
 			Size:         int64(ent.length),
 			Open: func() (io.ReadCloser, error) {
 				data, err := c.readEntry(name, ent)

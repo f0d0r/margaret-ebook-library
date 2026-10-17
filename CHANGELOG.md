@@ -50,9 +50,40 @@
   manifest resources (raw bytes, `text/html` for topics) with `alt=cover`
   cover detection. Truncated tails fail loudly with `ErrCorrupt` instead
   of serving short data. New `book.CHM` file type (`ebook.CHM`).
+- `Resource.Charset` reporting the storage encoding of every resource's
+  bytes (`book.CharsetUTF8`/`book.CharsetBinary`, re-exported as
+  `ebook.CharsetUTF8`/`ebook.CharsetBinary`); never empty on resources
+  returned by `Read`. Format readers fill it from their container knowledge
+  (FB2 document declaration, MOBI `TextEncoding`, eReader's fixed CP1252)
+  or a bounded declaration sniff (EPUB/FB3 entries, CHM topics with LCID
+  fallback); the media-type default decides the rest.
+- `Resource.OpenAsWithCharset` / `DataAsWithCharset` /
+  `ResourceSet.OpenReadingOrderAsWithCharset` (and the `...WithRegistryCharset`
+  variants) to request a non-UTF-8 output charset for converted content;
+  unknown labels error instead of producing mojibake.
+- Shared `internal/xml` package: one `encoding/xml` CharsetReader
+  (UTF-8/UTF-16 pass-through, x/text decoding, unknown labels rejected)
+  replacing the per-reader copies in FB2, FB3, OPF and EPUB, plus the
+  `IsNameChar`/`ScanOpenTag` sniffing helpers (formerly in `internal/util`).
 
 ### Changed
 
+- `Resource.Open`/`Data` now guarantee byte-identical stored bytes across
+  every format: the filesystem/container bytes after decompression (or DRM
+  decryption) are served untouched, with XML declarations, BOMs and the
+  original encoding preserved. This fixes FB2 bodies, MOBI/PalmDOC content
+  and other text resources that were previously normalized to UTF-8.
+  LIT spine documents remain the documented exception: they are synthesized
+  by the reader and always carry a UTF-8 declaration.
+- Charset handling is centralized in the `book` layer: `OpenAs`/`DataAs`
+  decode the stored bytes to UTF-8 before the transformer chain and
+  optionally re-encode the result. Transformers (including
+  `converter/pmltotext`, which now expects UTF-8 input) no longer need
+  per-format encoding logic. `OpenAs` output is UTF-8 unless a charset is
+  requested explicitly.
+- Text media classification treats any `+xml`/`+json` media type plus
+  `application/xml`/`application/json` as text, so EPUB 3 SMIL/page-map and
+  JSON resources get a charset instead of `"binary"`.
 - FictionBook generations share one file type: `book.FB2` and `book.FB3`
   are replaced by a single `book.FB` (`ebook.FB`); `Version` tells the
   generations apart ("2.x" from the FB2 namespace, "3.0" for FB3 — FB3
@@ -68,6 +99,28 @@
 
 ### Fixed
 
+- EPUB/OPF/FB3 containers stored as UTF-16 (BOM-carrying
+  `encoding="UTF-16"` files, as written by Windows tools) failed with
+  "invalid UTF-8" on the first XML parse: `encoding/xml` cannot scan
+  UTF-16 bytes and never reaches the encoding declaration. The shared
+  `internal/xml` decoder now recognizes a UTF-16 BOM (or a
+  BOM-less UTF-16 XML prolog) and transcodes to UTF-8 before scanning.
+  UTF-16 content documents are also labeled correctly (`Charset`
+  "utf-16be"/"utf-16le"): declarations are detected with or without BOM,
+  decoding consumes the BOM, and requesting a UTF-16 output charset
+  writes a BOM.
+- `OpenAsWithCharset`/`DataAsWithCharset` with an explicit `"utf-8"` output
+  on an identity conversion no longer returned the stored bytes unconverted
+  when the resource charset was not UTF-8; the content is transcoded now.
+  `""` (and the stored charset itself) still means raw passthrough.
+- Charset sniffing no longer treats `encoding="..."` appearing in HTML text
+  or attributes as an XML declaration: the prolog pattern now requires a
+  literal `<?xml`.
+- FB2 documents stored as BOM-less UTF-16 (declared `utf-16`/`utf-16le`/
+  `utf-16be`) are read correctly: the declaration is sniffed through the
+  NUL-interleaved prolog, the declared label is resolved to the concrete
+  byte order, and raw body ranges honor the detected BOM/byte order instead
+  of assuming a 2-byte BOM.
 - KF8 content is no longer dropped when the index tables cannot be read: the
   decompressed markup is served as a single resource.
 

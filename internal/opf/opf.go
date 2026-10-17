@@ -13,6 +13,7 @@ import (
 	"path"
 	"strings"
 
+	xmlx "github.com/f0d0r/margaret-ebook-library/internal/xml"
 	"golang.org/x/text/language"
 )
 
@@ -111,10 +112,12 @@ type Spine struct {
 	ItemRefs                 []ItemRef `xml:"itemref"`
 }
 
-// Parse decodes an OPF package document from r.
+// Parse decodes an OPF package document from r. A declared non-UTF-8
+// encoding is decoded via x/text instead of failing; UTF-16 input is
+// transcoded before scanning.
 func Parse(r io.Reader) (Package, error) {
 	var p Package
-	if err := xml.NewDecoder(r).Decode(&p); err != nil {
+	if err := xmlx.NewDecoder(r).Decode(&p); err != nil {
 		return Package{}, err
 	}
 	return p, nil
@@ -144,7 +147,7 @@ func ParseMetadata(r io.Reader) (Metadata, error) {
 	if !ok {
 		return Metadata{}, nil
 	}
-	dec := xml.NewDecoder(bytes.NewReader(frag))
+	dec := xmlx.NewDecoder(bytes.NewReader(frag))
 	dec.Strict = false
 	dec.Entity = xml.HTMLEntity
 	var m Metadata

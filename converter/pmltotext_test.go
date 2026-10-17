@@ -57,7 +57,11 @@ func TestPmlToText(t *testing.T) {
 }
 
 func TestPmlToTextCP1252(t *testing.T) {
-	if got := pmlToText(t, []byte{0xE9}); got != "\u00e9" {
+	// The transformer itself expects UTF-8: the book layer decodes the
+	// resource's original windows-1252 bytes centrally before the chain
+	// runs. UTF-8 "é" must pass through byte-identically here; the
+	// end-to-end windows-1252 -> UTF-8 path is covered in book tests.
+	if got := pmlToText(t, []byte("é")); got != "é" {
 		t.Errorf("got %q, want é", got)
 	}
 }

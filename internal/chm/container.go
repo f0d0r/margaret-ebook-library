@@ -562,34 +562,65 @@ func (c *container) readRawAt(what string, start, length uint64) ([]byte, error)
 	return buf, nil
 }
 
+// readEntryHead returns at most limit bytes from the start of an entry,
+// decompressing only the turns it needs. Used for charset sniffing so
+// scan-time Read does not materialize whole entries.
+func (c *container) readEntryHead(name string, e entry, limit uint64) ([]byte, error) {
+	if e.length == 0 {
+		return nil, nil
+	}
+	end := min(limit, e.length)
+	switch e.space {
+	case 0:
+		off := c.dataOff + int64(e.start)
+		if int64(e.start) < 0 || off+int64(end) > c.size {
+			return nil, fmt.Errorf("chm: entry %q out of bounds: %w", name, book.ErrCorrupt)
+		}
+		return c.readBounded(off, int64(end), "entry "+name)
+	case 1:
+		return c.readEntryRange(name, e, e.start, e.start+end)
+	default:
+		return nil, fmt.Errorf("chm: entry %q in unknown section %d: %w", name, e.space, book.ErrCorrupt)
+	}
+}
+
 // readCompressed decodes the reset intervals covering the entry slice,
 // like chmlib retrieve_object looping over decompress_region calls.
 func (c *container) readCompressed(name string, e entry) ([]byte, error) {
+	return c.readEntryRange(name, e, e.start, e.start+e.length)
+}
+
+// readEntryRange decodes the entry's [start, end) slice of uncompressed
+// content, decompressing only the turns covering that slice.
+func (c *container) readEntryRange(name string, e entry, start, end uint64) ([]byte, error) {
 	if err := c.ensureComp(); err != nil {
 		return nil, err
 	}
 	p := c.comp
-	if e.start > p.uncompLen || e.length > p.uncompLen || e.start+e.length > p.uncompLen {
+	if start < e.start || end < start || end > e.start+e.length {
+		return nil, fmt.Errorf("chm: entry %q range out of bounds: %w", name, book.ErrCorrupt)
+	}
+	if e.start > p.uncompLen || end > p.uncompLen {
 		return nil, fmt.Errorf("chm: entry %q out of content bounds: %w", name, book.ErrCorrupt)
 	}
 	turnLen := p.blocksPerTurn * p.blockLen
-	out := make([]byte, 0, e.length)
-	for off := e.start; off < e.start+e.length; {
+	out := make([]byte, 0, end-start)
+	for off := start; off < end; {
 		turnStart := off / turnLen * turnLen
-		needEnd := min(turnStart+turnLen, e.start+e.length)
+		needEnd := min(turnStart+turnLen, end)
 		plain, err := c.decodeTurn(turnStart, needEnd)
 		if err != nil {
 			return nil, err
 		}
-		start := off - turnStart
-		if start >= uint64(len(plain)) {
+		from := off - turnStart
+		if from >= uint64(len(plain)) {
 			return nil, fmt.Errorf("chm: entry %q outside interval: %w", name, book.ErrCorrupt)
 		}
-		n := min(uint64(len(plain))-start, e.start+e.length-off)
+		n := min(uint64(len(plain))-from, end-off)
 		if n == 0 {
 			return nil, fmt.Errorf("chm: entry %q made no progress: %w", name, book.ErrCorrupt)
 		}
-		out = append(out, plain[start:start+n]...)
+		out = append(out, plain[from:from+n]...)
 		off += n
 	}
 	return out, nil

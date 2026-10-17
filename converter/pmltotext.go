@@ -7,8 +7,6 @@ import (
 	"io"
 	"strings"
 	"unicode/utf8"
-
-	"golang.org/x/text/encoding/charmap"
 )
 
 type pmlToTextTransformer struct {
@@ -19,6 +17,9 @@ type pmlToTextTransformer struct {
 func (t *pmlToTextTransformer) From() string { return t.from }
 func (t *pmlToTextTransformer) To() string   { return t.to }
 
+// Transform expects UTF-8 input: the book layer decodes the resource's
+// original encoding (windows-1252 for eReader PML) centrally before the
+// transformer chain runs, so every converter sees UTF-8.
 func (t *pmlToTextTransformer) Transform(ctx context.Context, r io.Reader) (io.ReadCloser, error) {
 	if r == nil {
 		return io.NopCloser(bytes.NewReader(nil)), nil
@@ -29,7 +30,7 @@ func (t *pmlToTextTransformer) Transform(ctx context.Context, r io.Reader) (io.R
 	}
 	return &pmlTextReader{
 		ctx:    ctx,
-		src:    bufio.NewReader(charmap.Windows1252.NewDecoder().Reader(r)),
+		src:    bufio.NewReader(r),
 		closer: closer,
 	}, nil
 }

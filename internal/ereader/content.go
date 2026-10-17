@@ -132,6 +132,7 @@ func textResource(id, name string, pdbDb *pdb.PdbDb, hdr header, pages []int, ma
 		Href:         name,
 		ResolvedHref: name,
 		MediaType:    mediatype.EreaderPML,
+		Charset:      "windows-1252",
 		Size:         size,
 		Open: func() (io.ReadCloser, error) {
 			if maxSize > 0 && size > maxSize {
