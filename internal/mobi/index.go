@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// TagX mirrors calibre's TagX namedtuple.
+// TagX is a TAGX entry definition.
 type TagX struct {
 	Tag         uint8
 	NumOfValues uint8
@@ -35,7 +35,7 @@ type indxHeader struct {
 	Start           int
 }
 
-// parseIndxHeader mirrors calibre's parse_indx_header.
+// parseIndxHeader parses the INDX record header.
 func parseIndxHeader(data []byte) (*indxHeader, error) {
 	if len(data) < 4 || string(data[:4]) != "INDX" {
 		return nil, fmt.Errorf("not a valid INDX section")
@@ -197,7 +197,7 @@ func parseIndexRecord(table map[string]map[uint32][]int, ordered *[]string, data
 		return err
 	}
 	idxtPos := hdr.Start
-	// calibre prints a warning on missing IDXT but continues regardless
+	// A missing IDXT is tolerated.
 	entryCount := hdr.Count
 	idxPositions := make([]int, 0, entryCount+1)
 	for j := 0; j < entryCount; j++ {
@@ -265,7 +265,7 @@ func decodeIdent(rec []byte, codec string, ordtMap string) (string, int, error) 
 	if err != nil {
 		return "", 0, err
 	}
-	// calibre also handles '\x00' in ident -> try utf-16
+	// Handle '\x00' in ident -> try utf-16
 	if bytes.Contains([]byte(s), []byte{0}) {
 		// Try utf-16 decode? Simplify: replace
 		s = string(bytes.ReplaceAll([]byte(s), []byte{0}, []byte{}))
@@ -292,7 +292,7 @@ func getTagSectionStart(data []byte, hdr *indxHeader) int {
 	return tagSectionStart
 }
 
-// ReadIndex mirrors calibre's read_index; idx is a KF8-relative PDB record index.
+// ReadIndex parses an INDX record; idx is a KF8-relative PDB record index.
 func ReadIndex(sections [][]byte, idx int, codec string) (table map[string]map[uint32][]int, ordered []string, cncx CNCX, err error) {
 	table = make(map[string]map[uint32][]int)
 	cncx = make(CNCX)

@@ -33,4 +33,9 @@ const (
 	// CHM represents the Microsoft Compiled HTML Help format (.chm).
 	// It uses the ITSF container with LZX-compressed HTML content.
 	CHM FileType = "chm"
+
+	// LRF represents the Sony BBeB LRF e-book format (.lrf).
+	// It is a binary container with a UTF-16LE "LRF" header, a zlib-compressed
+	// metadata block and a tagged object stream table.
+	LRF FileType = "lrf"
 )

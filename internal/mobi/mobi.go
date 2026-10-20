@@ -11,7 +11,7 @@ const PALM_DOC_HEADER_SIZE = 16
 
 const NullIndex uint32 = 0xFFFFFFFF
 
-// PDB idents recognized on the MOBI/PalmDOC path (uppercased like calibre).
+// PDB idents recognized on the MOBI/PalmDOC path (uppercased).
 const (
 	pdbIdentMobi    = "BOOKMOBI"
 	pdbIdentPalmDoc = "TEXTREAD"
@@ -22,7 +22,7 @@ type CompressionType uint16
 const (
 	CompressionNone    CompressionType = 1
 	CompressionPalmDOC CompressionType = 2
-	// CompressionPalmDOCAlt is also PalmDOC: calibre accepts compression in {2, 258}.
+	// CompressionPalmDOCAlt is also PalmDOC: compression in {2, 258} is accepted.
 	CompressionPalmDOCAlt CompressionType = 258
 	CompressionHUFF       CompressionType = 17480
 )
@@ -142,14 +142,14 @@ func ReadMobi(pdbDb *pdb.PdbDb, maxExthRecords int) (*Mobi, error) {
 				}
 
 				kf8.recordCount = uint16(uint32(pdbDb.NumberOfRecords) - kf8HeaderIdx + 1)
-				// calibre: kf8_first_image_index = kf8.first_image_index + k8i
+				// kf8_first_image_index = kf8.first_image_index + k8i
 				kf8.Kf8FirstImageIndex = kf8.FirstImageRecord + kf8HeaderIdx
 				kf8.Mobi6Records = mobi.TextRecordCount
-				// calibre restores first_image_index to MOBI6's value on the KF8 header
+				// Restore first_image_index to MOBI6's value on the KF8 header
 				// so that generic code sees MOBI6's index, but keep absolute via Kf8FirstImageIndex
 				kf8.FirstImageRecord = mobi.FirstImageRecord
 				if kf8.HuffmanRecordCount > 0 {
-					// calibre: huff_offset += k8i for joint files
+					// huff_offset += k8i for joint files
 					kf8.HuffmanRecordOffset += kf8HeaderIdx
 				}
 				mobi.KF8 = kf8
@@ -209,7 +209,7 @@ func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
 	case CP1252:
 		codec = "cp1252"
 	default:
-		// calibre: unknown codepage -> cp1252 fallback
+		// unknown codepage -> cp1252 fallback
 		codec = "cp1252"
 	}
 
@@ -261,7 +261,7 @@ func readMobiHeader(data []byte, maxExthRecords int) (*Mobi, error) {
 		mobi.NcxIdx = binary.BigEndian.Uint32(data[244:248])
 	}
 
-	// calibre: BookHeader fdst/skel/div/oth only for MobiVersion==8, see headers.py:267
+	// BookHeader fdst/skel/div/oth only for MobiVersion==8.
 	if mobi.MobiVersion == 8 && len(data) >= 0xF8+16 {
 		mobi.DivIdx = binary.BigEndian.Uint32(data[0xF8 : 0xF8+4])
 		mobi.SkelIdx = binary.BigEndian.Uint32(data[0xFC : 0xFC+4])
@@ -299,7 +299,7 @@ func (m *Mobi) HasDRM() bool {
 	return m.DRMOffset != 0xFFFFFFFF
 }
 
-// isDRMProtected treats a present DRM offset or non-zero encryption as DRM, like calibre.
+// isDRMProtected treats a present DRM offset or non-zero encryption as DRM.
 func isDRMProtected(m *Mobi) bool {
 	if m == nil {
 		return false

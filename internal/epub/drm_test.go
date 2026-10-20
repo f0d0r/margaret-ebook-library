@@ -94,7 +94,7 @@ func TestMalformedEncryptionXMLRejected(t *testing.T) {
 }
 
 // A leftover rights.xml from a DeDRM tool with intact koboSpan content
-// must NOT be rejected — rights.xml alone is not definitive (Calibre).
+// must NOT be rejected — rights.xml alone is not definitive.
 func TestKoboRightsXMLLeftoverAccepted(t *testing.T) {
 	tmpDir := t.TempDir()
 	p := filepath.Join(tmpDir, "leftover.kepub.epub")

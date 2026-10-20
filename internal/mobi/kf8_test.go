@@ -12,7 +12,7 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 )
 
-// The TAGX tables mirror the tags calibre reads from the SKEL and DIV indices:
+// The TAGX tables cover the tags read from the SKEL and DIV indices:
 // SKEL tag 1 (div count) and tag 6 (start, length); DIV tag 2 (CNCX reference),
 // tag 3 (file number), tag 4 (sequence number) and tag 6 (start, length).
 var (
@@ -88,7 +88,7 @@ func makeStandaloneKF8Blob(t *testing.T, mutate func(*[]recordSpec, *mobiHeaderO
 
 // makeDualKF8Blob builds a joint MOBI6+KF8 book: a MOBI6 header and text, a
 // BOUNDARY record, then the KF8 header and text. EXTH type 121 points at the
-// KF8 header record (index 3), which is how calibre finds it.
+// KF8 header record (index 3).
 func makeDualKF8Blob(t *testing.T, mutate func(*[]recordSpec, *mobiHeaderOpts)) []byte {
 	t.Helper()
 
@@ -446,7 +446,7 @@ func TestLocateBegEndOfTag(t *testing.T) {
 }
 
 func TestBuildMobi8PartsNoSkeleton(t *testing.T) {
-	// Without SKEL the whole flow becomes one part (calibre's fallback).
+	// Without SKEL the whole flow becomes one part (fallback).
 	parts, infos, err := buildMobi8Parts(kf8Text, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("buildMobi8Parts() error: %v", err)
@@ -523,7 +523,7 @@ func TestParseCNCX(t *testing.T) {
 		t.Errorf("cncx[%d] = %q (%v), want beta", alphaEnd, s, ok)
 	}
 
-	// A second record is offset by 0x10000, like calibre's CNCX.
+	// A second record is offset by 0x10000.
 	cncx, err = parseCNCX([][]byte{rec, makeCNCXRecord("gamma")}, "utf-8")
 	if err != nil {
 		t.Fatalf("parseCNCX() error: %v", err)
@@ -533,7 +533,7 @@ func TestParseCNCX(t *testing.T) {
 	}
 
 	if _, err := parseCNCX([][]byte{{0x7F, 'a'}}, "utf-8"); err != nil {
-		t.Errorf("parseCNCX(truncated) error = %v, want nil (calibre skips it)", err)
+		t.Errorf("parseCNCX(truncated) error = %v, want nil (skipped)", err)
 	}
 }
 

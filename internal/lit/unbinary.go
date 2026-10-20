@@ -92,8 +92,8 @@ var opfTables = unbinTables{tags: opfTags[:], attrs: opfAttrs}
 var htmlTables = unbinTables{tags: htmlTags[:], attrs: htmlAttrs, tagAttrs: htmlTagAttrs}
 
 // unbinAtoms carries custom tag/attribute names for content documents.
-// Nil maps behave like calibre's empty atom lists (any atom reference is
-// corrupt input).
+// Nil maps behave like empty atom lists (any atom reference is corrupt
+// input).
 type unbinAtoms struct {
 	tags  map[int]string
 	attrs map[int]string

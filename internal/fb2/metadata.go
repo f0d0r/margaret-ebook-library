@@ -14,7 +14,6 @@ import (
 	xmlx "github.com/f0d0r/margaret-ebook-library/internal/xml"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/encoding/unicode"
-	"golang.org/x/text/language"
 	"golang.org/x/text/transform"
 )
 
@@ -621,11 +620,7 @@ func assemble(titleInfo, srcTitleInfo, docInfo infoSection, version string) pars
 		}
 	}
 	if lang := strings.TrimSpace(titleInfo.lang); lang != "" {
-		if tag, err := language.Parse(lang); err == nil && tag.String() != "und" {
-			if _, confidence := tag.Base(); confidence != language.No {
-				pm.metadata.Languages = []string{lang}
-			}
-		}
+		pm.metadata.Languages = []string{lang}
 	}
 	return pm
 }

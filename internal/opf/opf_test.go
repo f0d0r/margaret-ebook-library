@@ -19,7 +19,7 @@ const oeb10Sample = `<?xml version="1.0" encoding="UTF-8" ?>
    <dc:Language>hun</dc:Language>
    <dc:Title>Evelyn Hardcastle 7 hal&#225;la</dc:Title>
    <dc:Creator file-as="Turton, Stuart" role="aut">Stuart Turton</dc:Creator>
-   <dc:Contributor role="bkp">calibre (9.15.0) [https://calibre-ebook.com]</dc:Contributor>
+   <dc:Contributor role="bkp">Test Tool (1.0) [https://example.com]</dc:Contributor>
    <dc:Description>&lt;div&gt;A Blackheath-h&#225;z szab&#225;lyai.&lt;/div&gt;</dc:Description>
   </dc-metadata>
   <x-metadata>

@@ -9,6 +9,7 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/internal/fb2"
 	"github.com/f0d0r/margaret-ebook-library/internal/fb3"
 	"github.com/f0d0r/margaret-ebook-library/internal/lit"
+	"github.com/f0d0r/margaret-ebook-library/internal/lrf"
 	"github.com/f0d0r/margaret-ebook-library/internal/mobi"
 )
 
@@ -30,6 +31,7 @@ func New(cfg ...config.Config) *Registry {
 			fb2.NewFb2Reader(c),
 			lit.NewLitReader(c),
 			chm.NewChmReader(c),
+			lrf.NewLrfReader(c),
 		},
 	}
 }

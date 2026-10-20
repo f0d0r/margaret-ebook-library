@@ -2,7 +2,7 @@ package mobi
 
 import "fmt"
 
-// decInt decodes a Mobipocket variable-width integer (calibre decint).
+// decInt decodes a Mobipocket variable-width integer.
 // Forward reads from the start (TAGX/INDX); backward from the end.
 func decInt(raw []byte, forward bool) (int, int) {
 	if len(raw) == 0 {
@@ -39,7 +39,7 @@ func decInt(raw []byte, forward bool) (int, int) {
 	return val, len(byts)
 }
 
-// countSetBits mirrors calibre.utils.count_set_bits.
+// countSetBits returns the number of set bits.
 func countSetBits(num int) int {
 	if num < 0 {
 		num = -num
@@ -52,7 +52,7 @@ func countSetBits(num int) int {
 	return ans
 }
 
-// decodeStringWithByteLength decodes a length-prefixed INDX string (calibre decode_string).
+// decodeStringWithByteLength decodes a length-prefixed INDX string.
 func decodeStringWithByteLength(raw []byte, codec string) (string, int, error) {
 	if len(raw) == 0 {
 		return "", 0, fmt.Errorf("empty raw for decodeString")

@@ -24,4 +24,7 @@ func init() {
 	DefaultRegistry.Register(&fb3BodyToTextTransformer{from: mediatype.FB3Body, to: mediatype.PlainText})
 	// eReader PML -> plain text (backslash markup, cp1252 payload).
 	DefaultRegistry.Register(&pmlToTextTransformer{from: mediatype.EreaderPML, to: mediatype.PlainText})
+	// LRF text flow -> plain text (UTF-16LE payload, layout tags already
+	// dropped by the reader; U+FFFC plot markers are removed here).
+	DefaultRegistry.Register(&lrfToTextTransformer{from: mediatype.LRFText, to: mediatype.PlainText})
 }

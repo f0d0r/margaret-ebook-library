@@ -502,9 +502,8 @@ func TestReadRecordDataTruncated(t *testing.T) {
 	testFile := filepath.Join(tmpDir, "truncated.pdb")
 
 	// Simulate a truncated MOBI: the record table claims more bytes than
-	// the file physically contains. Like calibre's section() slicing,
-	// reads must yield the available prefix (or empty data past EOF)
-	// instead of an error.
+	// the file physically contains. Reads must yield the available prefix
+	// (or empty data past EOF) instead of an error.
 	fileData := []byte("0123456789ABCDEFGHIJ") // 20 bytes
 	if err := os.WriteFile(testFile, fileData, 0644); err != nil {
 		t.Fatalf("WriteFile() error: %v", err)
