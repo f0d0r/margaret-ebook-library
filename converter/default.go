@@ -7,7 +7,7 @@ import "github.com/f0d0r/margaret-ebook-library/mediatype"
 var DefaultRegistry = NewRegistry()
 
 func init() {
-	// HTML variants -> plain text share the same logic via aliases.
+	// HTML variants -> plain text
 	RegisterAliases(DefaultRegistry, func(from, to string) Transformer {
 		return &htmlToTextTransformer{from: from, to: to}
 	}, mediatype.PlainText,
@@ -16,15 +16,12 @@ func init() {
 		mediatype.MobiHTML,
 		mediatype.OEB1Document,
 	)
-	// FictionBook body fragments -> plain text (tolerant scanner, see
-	// fb2totext.go). Registered separately: unlike the HTML variants it
-	// needs its own implementation.
+	// FictionBook body fragments -> plain text
 	DefaultRegistry.Register(&fb2BodyToTextTransformer{from: mediatype.FB2Body, to: mediatype.PlainText})
-	// FB3 body parts -> plain text (block vocabulary differs from FB2).
+	// FB3 body parts -> plain text
 	DefaultRegistry.Register(&fb3BodyToTextTransformer{from: mediatype.FB3Body, to: mediatype.PlainText})
-	// eReader PML -> plain text (backslash markup, cp1252 payload).
+	// eReader PML -> plain text
 	DefaultRegistry.Register(&pmlToTextTransformer{from: mediatype.EreaderPML, to: mediatype.PlainText})
-	// LRF text flow -> plain text (UTF-16LE payload, layout tags already
-	// dropped by the reader; U+FFFC plot markers are removed here).
+	// LRF text flow -> plain text
 	DefaultRegistry.Register(&lrfToTextTransformer{from: mediatype.LRFText, to: mediatype.PlainText})
 }

@@ -11,17 +11,12 @@ const (
 	MOBI FileType = "mobi"
 
 	// FB represents the FictionBook e-book format family (.fb2, .fb3).
-	// Generations share the brand but not the container: FB2 is a
-	// single-XML document, FB3 an OPC ZIP container. Use Version to tell
-	// them apart ("2.x" for FB2, "3.0" for FB3).
 	FB FileType = "fb"
 
 	// LIT represents the Microsoft Reader e-book format (.lit).
 	LIT FileType = "lit"
 
 	// PALMDOC represents the PalmDOC e-book format (.prc, .pdb).
-	// It shares the PDB container with MOBI but carries a 16-byte
-	// record 0 header and plain-text or OEB 1.0 HTML payloads.
 	PALMDOC FileType = "palmdoc"
 
 	// EREADER represents the Peanut Press eReader format (.pdb).
@@ -31,11 +26,8 @@ const (
 	EREADER FileType = "ereader"
 
 	// CHM represents the Microsoft Compiled HTML Help format (.chm).
-	// It uses the ITSF container with LZX-compressed HTML content.
 	CHM FileType = "chm"
 
 	// LRF represents the Sony BBeB LRF e-book format (.lrf).
-	// It is a binary container with a UTF-16LE "LRF" header, a zlib-compressed
-	// metadata block and a tagged object stream table.
 	LRF FileType = "lrf"
 )
