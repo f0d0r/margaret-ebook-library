@@ -468,6 +468,31 @@ Or from a blob:
 hash, err := tools.CalculateFileHashFromBlob(ebook.NewPathBlob("books/my-book.epub"))
 ```
 
+### ISBN validation and conversion
+
+`IsValidISBN` accepts ISBN-10 and ISBN-13 identifiers in common forms such as
+`urn:isbn:` prefixes, `ISBN` labels, spaces, and hyphens:
+
+```go
+if tools.IsValidISBN("urn:isbn:978-0-306-40615-7") {
+    // valid ISBN-13
+}
+
+isbn, ok := tools.ParseISBN("ISBN-10: 0-306-40615-2")
+if ok {
+    fmt.Println(isbn, isbn.Kind()) // 0306406152 10
+
+    isbn13, _ := isbn.ToISBN13()
+    fmt.Println(isbn13) // 9780306406157
+
+    isbn10, _ := isbn13.ToISBN10()
+    fmt.Println(isbn10) // 0306406152
+}
+```
+
+`ToISBN10` returns `false` for 979-prefixed ISBN-13 values, which have no
+ISBN-10 equivalent.
+
 ### Content fingerprinting (MinHash / SimHash)
 
 Fingerprints are computed over the normalized plain-text stream and are streaming-friendly — they implement `io.Writer` so they can be attached with `io.TeeReader`/`io.MultiWriter` in a single pass:
