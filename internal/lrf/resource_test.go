@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
@@ -372,6 +373,100 @@ func TestReadObjectsImageLimit(t *testing.T) {
 	}
 	if _, err := all[0].Data(); !errors.Is(err, book.ErrLimitExceeded) {
 		t.Errorf("Data() error = %v, want book.ErrLimitExceeded", err)
+	}
+}
+
+type countingBlob struct {
+	inner book.Blob
+	read  int64
+}
+
+func (b *countingBlob) ReadAt(p []byte, off int64) (int, error) {
+	n, err := b.inner.ReadAt(p, off)
+	b.read += int64(n)
+	return n, err
+}
+
+func (b *countingBlob) Size() (int64, error) {
+	return b.inner.Size()
+}
+
+func TestReadObjectsDefersImagePayload(t *testing.T) {
+	jpeg := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, bytes.Repeat([]byte{0x5A}, 1<<20)...)
+	data := buildLrfBook(t, 0, testObject{0x10, objectTypeImageStream, tStream(0x11, jpeg)})
+
+	blob := &countingBlob{inner: book.NewBytesBlob(data)}
+	b, err := NewLrfReader(config.DefaultConfig()).Read(blob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := b.Resources().All()
+	if len(all) != 1 {
+		t.Fatalf("All() = %d resources, want 1", len(all))
+	}
+
+	afterRead := blob.read
+	if afterRead >= int64(len(jpeg)) {
+		t.Errorf("Read() read %d bytes, want less than the %d-byte payload", afterRead, len(jpeg))
+	}
+	if afterRead > 64<<10 {
+		t.Errorf("Read() read %d bytes, want at most 64 KiB", afterRead)
+	}
+
+	got, err := all[0].Data()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, jpeg) {
+		t.Errorf("Data() = %d bytes, want the identical %d bytes", len(got), len(jpeg))
+	}
+	if delta := blob.read - afterRead; delta < int64(len(jpeg)) {
+		t.Errorf("Data() read %d bytes, want at least the %d-byte payload", delta, len(jpeg))
+	}
+}
+
+func TestReadObjectsLongMetaTagsFallBack(t *testing.T) {
+	jpeg := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, bytes.Repeat([]byte{0x6B}, 40)...)
+	comment := tString(0xF555, strings.Repeat("x", 5000))
+	objects := []testObject{
+		{0x10, objectTypeImageStream, joinBytes(comment, tStream(0x11, jpeg))},
+	}
+	rs := readResourceSet(t, config.DefaultConfig(), buildLrfBook(t, 0, objects...))
+
+	all := rs.All()
+	if len(all) != 1 || all[0].Name != "16.jpg" || all[0].Size != int64(len(jpeg)) {
+		t.Fatalf("All() = %v, want image-16 with the full size", all)
+	}
+	if got, err := all[0].Data(); err != nil || !bytes.Equal(got, jpeg) {
+		t.Errorf("Data() = %d bytes (err %v), want the identical %d bytes", len(got), err, len(jpeg))
+	}
+}
+
+func TestReadObjectsLongFontNameFallsBack(t *testing.T) {
+	ttf := bytes.Repeat([]byte{0x33}, 32)
+	face := strings.Repeat("A", 5000)
+	objects := []testObject{
+		{0x30, objectTypeFont, joinBytes(tString(tagFontFaceName, face), tStream(0, ttf))},
+	}
+	rs := readResourceSet(t, config.DefaultConfig(), buildLrfBook(t, 0, objects...))
+
+	all := rs.All()
+	if len(all) != 1 || all[0].Name != face+".ttf" || all[0].Size != int64(len(ttf)) {
+		t.Fatalf("All() = %v, want the long-named font", all)
+	}
+	if got, err := all[0].Data(); err != nil || !bytes.Equal(got, ttf) {
+		t.Errorf("Data() = %d bytes (err %v), want the identical %d bytes", len(got), err, len(ttf))
+	}
+}
+
+func TestReadObjectsImageOverLimitSkipped(t *testing.T) {
+	jpeg := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, bytes.Repeat([]byte{0x7C}, 100)...)
+	objects := []testObject{
+		{0x10, objectTypeImageStream, tStream(0x11, jpeg)},
+	}
+	rs := readResourceSet(t, config.Config{MaxResourceSize: 64}, buildLrfBook(t, 0, objects...))
+	if all := rs.All(); len(all) != 0 {
+		t.Errorf("All() = %v, want no resources for an oversized object", all)
 	}
 }
 

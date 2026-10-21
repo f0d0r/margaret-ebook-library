@@ -201,15 +201,11 @@ func (r *LrfReader) readObjects(b book.Blob, header *LrfHeader, objectTable []Lr
 // imageResource builds the resource for an ImageStream object, or nil when
 // the image format is unknown or the object is malformed.
 func (r *LrfReader) imageResource(header *LrfHeader, ix *objectIndex, ref LrfObjectRef) *book.Resource {
-	_, body, err := ix.objectBody(ref)
-	if err != nil {
+	info, ok := ix.objectStreamMeta(ref, false)
+	if !ok {
 		return nil
 	}
-	flags, payload, ok, err := objectStream(body)
-	if err != nil || !ok {
-		return nil
-	}
-	mime, ok := imageTypeCodes[uint16(flags)&0xFF]
+	mime, ok := imageTypeCodes[uint16(info.flags)&0xFF]
 	if !ok {
 		return nil
 	}
@@ -219,8 +215,8 @@ func (r *LrfReader) imageResource(header *LrfHeader, ix *objectIndex, ref LrfObj
 	}
 	href := fmt.Sprintf("images/%d.%s", ref.id, ext)
 	size := int64(0)
-	if flags&streamFlagCompressed == 0 {
-		size = int64(len(payload))
+	if info.flags&streamFlagCompressed == 0 {
+		size = int64(info.size)
 	}
 	return &book.Resource{
 		Id:           fmt.Sprintf("image-%d", ref.id),
@@ -243,23 +239,15 @@ func (r *LrfReader) imageResource(header *LrfHeader, ix *objectIndex, ref LrfObj
 // fontResource builds the resource for a Font object, named after the face
 // name. It returns nil for malformed objects.
 func (r *LrfReader) fontResource(header *LrfHeader, ix *objectIndex, ref LrfObjectRef) *book.Resource {
-	_, body, err := ix.objectBody(ref)
-	if err != nil {
+	info, ok := ix.objectStreamMeta(ref, true)
+	if !ok {
 		return nil
 	}
-	flags, payload, ok, err := objectStream(body)
-	if err != nil || !ok {
-		return nil
-	}
-	file, face, err := fontNames(body)
-	if err != nil {
-		return nil
-	}
-	name := fontFileName(file, face, ref.id)
+	name := fontFileName(info.fontFile, info.fontFace, ref.id)
 	href := "fonts/" + name
 	size := int64(0)
-	if flags&streamFlagCompressed == 0 {
-		size = int64(len(payload))
+	if info.flags&streamFlagCompressed == 0 {
+		size = int64(info.size)
 	}
 	return &book.Resource{
 		Id:           fmt.Sprintf("font-%d", ref.id),
