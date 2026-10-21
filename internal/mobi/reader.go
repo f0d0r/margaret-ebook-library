@@ -28,7 +28,7 @@ func NewMobiReader(cfg config.Config) *MobiReader {
 }
 
 func (r *MobiReader) Supports(b book.Blob) bool {
-	// PDB type/creator ident at bytes 60-67, uppercased like calibre.
+	// PDB type/creator ident at bytes 60-67, uppercased.
 	buf := make([]byte, 68)
 	n, err := b.ReadAt(buf, 0)
 	if err != nil && err != io.EOF {

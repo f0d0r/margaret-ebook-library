@@ -16,8 +16,7 @@ import (
 
 // Adobe/IDPF font obfuscation algorithms. These are the only
 // META-INF/encryption.xml entries that are NOT DRM — they only obfuscate
-// embedded fonts and Calibre decrypts them on the fly.
-// See calibre src/calibre/ebooks/conversion/plugins/epub_input.py:
+// embedded fonts.
 // ADOBE_OBFUSCATION, IDPF_OBFUSCATION.
 const (
 	adobeObfuscation = "http://ns.adobe.com/pdf/enc#RC"
@@ -25,7 +24,6 @@ const (
 )
 
 // Content-document media types examined for the Kobo DRM sniff.
-// Mirrors calibre OEB_DOCS in src/calibre/ebooks/oeb/base.py.
 var oebDocs = map[string]bool{
 	"application/xhtml+xml": true,
 	"text/html":             true,
@@ -33,12 +31,11 @@ var oebDocs = map[string]bool{
 	"text/x-oeb-document":   true,
 }
 
-// koboDRMProbeSize mirrors calibre's 8192-byte window in
-// check_for_kobo_drm (kepubify.py).
+// koboDRMProbeSize is the 8192-byte window probed for Kobo DRM markers.
 const koboDRMProbeSize = 8192
 
 // checkDRM rejects DRM-protected EPUB/KEPUB archives with book.ErrDRM.
-// It mirrors Calibre's two independent checks:
+// Two independent checks are applied:
 //
 //  1. Adobe ADEPT: META-INF/encryption.xml with any EncryptionMethod
 //     algorithm outside the font-obfuscation allowlist (or an
@@ -46,7 +43,7 @@ const koboDRMProbeSize = 8192
 //  2. Kobo kdrm: a non-empty rights.xml plus an encrypted first spine
 //     content document (first 8 KiB contains neither <?xml, <html nor
 //     koboSpan) means DRM. A bare or leftover rights.xml alone is NOT
-//     definitive, exactly like in Calibre.
+//     definitive.
 func checkDRM(zr *zip.Reader, p opf.Package) error {
 	if err := checkAdobeDRM(zr); err != nil {
 		return err
@@ -65,8 +62,7 @@ func checkAdobeDRM(zr *zip.Reader) error {
 		return fmt.Errorf("epub is DRM protected (META-INF/encryption.xml unreadable): %w", book.ErrDRM)
 	}
 	// An empty file carries no encrypted content (e.g. left behind emptied
-	// by a DeDRM tool), so it is not DRM — unlike Calibre, which rejects
-	// it on parse failure.
+	// by a DeDRM tool), so it is not DRM.
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil
 	}
@@ -85,7 +81,7 @@ func checkAdobeDRM(zr *zip.Reader) error {
 // encryptionAlgorithms returns every EncryptionMethod Algorithm attribute
 // in an encryption.xml document, regardless of XML namespace. Zero methods
 // means font-obfuscation-only or empty metadata, i.e. no DRM. Malformed
-// XML reports an error so the caller can reject it as DRM, like Calibre.
+// XML reports an error so the caller can reject it as DRM.
 func encryptionAlgorithms(raw []byte) ([]string, error) {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil, fmt.Errorf("empty encryption.xml")
@@ -131,8 +127,8 @@ func checkKoboDRM(zr *zip.Reader, p opf.Package) error {
 		return fmt.Errorf("kepub is DRM protected (rights.xml present, spine unreadable): %w", book.ErrDRM)
 	}
 	// Markup markers are matched case-insensitively: <HTML> is legal
-	// HTML5, unlike Calibre's byte-exact check. The koboSpan class name
-	// stays case-sensitive — it is defined verbatim by Kobo.
+	// HTML5. The koboSpan class name stays case-sensitive — it is defined
+	// verbatim by Kobo.
 	lower := bytes.ToLower(raw)
 	if !bytes.Contains(lower, []byte("<?xml")) &&
 		!bytes.Contains(lower, []byte("<html")) &&
@@ -142,7 +138,7 @@ func checkKoboDRM(zr *zip.Reader, p opf.Package) error {
 	return nil
 }
 
-// findRightsXML locates the Kobo rights.xml entry. Calibre addresses it by
+// findRightsXML locates the Kobo rights.xml entry. It is addressed by
 // the bare canonical name 'rights.xml'; ZIP entries are matched by base
 // name to tolerate leading ./ prefixes while staying case-sensitive on
 // the file name itself.

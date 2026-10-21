@@ -66,7 +66,7 @@ func TestResolveOptionsKF8Fallback(t *testing.T) {
 		t.Error("WithKF8FallbackToMOBI6(true) = false, want true")
 	}
 
-	// Explicit false (Calibre-like strict)
+	// Explicit false (strict)
 	cfg = resolveOptions([]Option{WithKF8FallbackToMOBI6(false)})
 	if cfg.KF8Fallback() {
 		t.Error("WithKF8FallbackToMOBI6(false) = true, want false")

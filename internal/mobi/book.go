@@ -8,7 +8,7 @@ type mobiBook struct {
 	resources *domain.ResourceSet
 	version   string
 	mobiDoc   *Mobi
-	// isPalmDoc drives FileType by container ident, not the Mobi.Type header field (like calibre).
+	// isPalmDoc drives FileType by container ident, not the Mobi.Type header field.
 	isPalmDoc bool
 }
 

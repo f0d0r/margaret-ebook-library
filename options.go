@@ -38,7 +38,7 @@ func WithMaxExthRecords(n int) Option {
 
 // WithKF8FallbackToMOBI6 controls whether KF8 parsing falls back to MOBI6
 // on parse failures. Default (nil) uses the library default (true).
-// Set to false for Calibre-like strict behavior (error on KF8 parse failure).
+// Set to false for strict behavior (error on KF8 parse failure).
 // Set to true for fallback to MOBI6 content on KF8 parse failure.
 func WithKF8FallbackToMOBI6(enabled bool) Option {
 	return func(o *options) {

@@ -26,6 +26,14 @@ const (
 	// OEB1Document is the legacy Open eBook 1.x content type used by MS
 	// Reader .LIT packages.
 	OEB1Document = "text/x-oeb1-document"
+	// LRFText is the native LRF text flow: UTF-16LE text with layout tag
+	// payloads dropped and inline plots replaced by U+FFFC OBJECT
+	// REPLACEMENT CHARACTER. It is not valid text; converters must turn it
+	// into a real text format.
+	LRFText = "application/x-lrf-text"
+	// TTF is an embedded TrueType font (LRF Font streams, EPUB manifest
+	// items with the same media type).
+	TTF = "application/x-font-ttf"
 )
 
 // extByType is the single source of truth mapping MIME types to canonical
@@ -42,6 +50,7 @@ var extByType = map[string]string{
 	BMP:         "bmp",
 	MSBMP:       "bmp",
 	OctetStream: "bin",
+	TTF:         "ttf",
 }
 
 // Extension returns the canonical file extension for a MIME type, or false

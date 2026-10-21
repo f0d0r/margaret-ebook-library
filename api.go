@@ -28,6 +28,7 @@ const (
 	PALMDOC = book.PALMDOC
 	EREADER = book.EREADER
 	CHM     = book.CHM
+	LRF     = book.LRF
 )
 
 // Charset labels for Resource.Charset and OpenAsWithCharset.

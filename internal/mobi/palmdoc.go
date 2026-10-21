@@ -9,7 +9,7 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/internal/xml"
 )
 
-// isPalmDocDb reports whether the container holds a PalmDOC book (TEXTREAD ident, like calibre).
+// isPalmDocDb reports whether the container holds a PalmDOC book (TEXTREAD ident).
 func isPalmDocDb(pdbDb *pdb.PdbDb) bool {
 	if pdbDb == nil {
 		return false
@@ -17,7 +17,7 @@ func isPalmDocDb(pdbDb *pdb.PdbDb) bool {
 	return strings.ToUpper(pdbDb.Type+pdbDb.Creator) == pdbIdentPalmDoc
 }
 
-// readPalmDocHeader parses the 16-byte PalmDOC header from record 0 (calibre ancient path).
+// readPalmDocHeader parses the 16-byte PalmDOC header from record 0.
 // MOBI layout must not apply past byte 16: the record already carries text.
 func readPalmDocHeader(pdbDb *pdb.PdbDb) (*Mobi, error) {
 	if len(pdbDb.PdbRecords) == 0 {

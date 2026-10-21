@@ -9,13 +9,13 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/internal/pdb"
 )
 
-// extractText returns the raw MOBI6 markup, mirroring calibre's mobi6.py extract_text.
+// extractText returns the raw MOBI6 markup.
 func extractText(pdbDb *pdb.PdbDb, mobi *Mobi, maxSize int64) ([]byte, error) {
 	return extractTextWithOffset(pdbDb, mobi, 1, maxSize)
 }
 
 // extractTextWithOffset is the offset-aware variant (1 for MOBI6, kf8_boundary+2 for joint KF8).
-// FirstTextRecord is ignored like calibre: real-world files may leave it as the 0xFFFF sentinel.
+// FirstTextRecord is ignored: real-world files may leave it as the 0xFFFF sentinel.
 func extractTextWithOffset(pdbDb *pdb.PdbDb, mobi *Mobi, offset int, maxSize int64) ([]byte, error) {
 	var huff *HuffCdicReader
 	switch mobi.Compression {
@@ -140,7 +140,7 @@ func decompressTextSection(section []byte, compression CompressionType, huff *Hu
 	return dec, nil
 }
 
-// cleanDecompressedText applies calibre-parity hygiene to decompressed text.
+// cleanDecompressedText removes NULs and control characters from decompressed text.
 func cleanDecompressedText(out []byte, enc TextEncodingType) []byte {
 	out = bytes.ReplaceAll(out, []byte{0}, nil)
 	if enc == CP1252 {
@@ -150,7 +150,7 @@ func cleanDecompressedText(out []byte, enc TextEncodingType) []byte {
 	return out
 }
 
-// newHuffReader builds a HuffCdicReader, mirroring calibre's HuffReader.
+// newHuffReader builds a HuffCdicReader.
 func newHuffReader(pdbDb *pdb.PdbDb, mobi *Mobi) (*HuffCdicReader, error) {
 	off := int(mobi.HuffmanRecordOffset)
 	cnt := int(mobi.HuffmanRecordCount)
@@ -178,7 +178,7 @@ func newHuffReader(pdbDb *pdb.PdbDb, mobi *Mobi) (*HuffCdicReader, error) {
 	return h, nil
 }
 
-// sizeofTrailingEntries mirrors calibre's sizeof_trailing_entries.
+// sizeofTrailingEntries returns the size of any trailing entries.
 func sizeofTrailingEntries(data []byte, extraFlags uint32) int {
 	num := 0
 	size := len(data)
@@ -198,7 +198,7 @@ func sizeofTrailingEntries(data []byte, extraFlags uint32) int {
 	return min(num, size)
 }
 
-// sizeofTrailingEntry decodes one backward-encoded trailing entry, mirroring calibre.
+// sizeofTrailingEntry decodes one backward-encoded trailing entry.
 func sizeofTrailingEntry(data []byte, psize int) int {
 	if psize <= 0 {
 		return 0

@@ -2,8 +2,8 @@
 // directory entries and storage sections holding a binary OPF package
 // (/meta) plus binary content documents.
 //
-// The reader follows the ConvertLIT and calibre LIT readers: primary and
-// secondary header parsing, IFCM directory decoding, section assembly
+// The reader follows the ConvertLIT approach: primary and secondary header
+// parsing, IFCM directory decoding, section assembly
 // through DES/LZX transforms (LZX via internal/compress), UnBinary markup
 // decoding with OPF/HTML vocabularies, and manifest parsing. OPF handling
 // itself lives in internal/opf and is shared with the EPUB reader.

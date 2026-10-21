@@ -238,7 +238,7 @@ func readRecordData(b book.Blob, offset uint32, length uint32, maxRecordSize, fi
 		return nil, fmt.Errorf("record length %d exceeds maximum %d", length, maxRecordSize)
 	}
 	if int64(offset) >= fileSize {
-		// Calibre parity: offsets beyond EOF yield empty data instead of an error.
+		// Offsets beyond EOF yield empty data instead of an error.
 		return []byte{}, nil
 	}
 	if int64(offset)+int64(length) > fileSize {

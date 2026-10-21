@@ -6,10 +6,9 @@ import (
 
 // DecompressPalmDoc decompresses a block compressed with PalmDOC (LZ77)
 // compression, as used for the text records of MOBI, PalmDOC and eReader
-// books. It mirrors the reference calibre cPalmdoc.decompress behaviour:
-// malformed tokens (truncated literal runs or back-references whose distance
-// exceeds the output produced so far) are silently skipped rather than
-// reported as errors.
+// books. Malformed tokens (truncated literal runs or back-references whose
+// distance exceeds the output produced so far) are silently skipped rather
+// than reported as errors.
 //
 // remain is the remaining budget for decompressed bytes (maxSize - len(out)
 // from the caller). If remain >=0, decompression fails with

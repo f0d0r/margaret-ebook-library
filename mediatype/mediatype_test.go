@@ -54,6 +54,9 @@ func TestConstants(t *testing.T) {
 		{"CSS", CSS, "text/css"},
 		{"NCX", NCX, "application/x-dtbncx+xml"},
 		{"OPF", OPF, "application/oebps-package+xml"},
+		{"OEB1Document", OEB1Document, "text/x-oeb1-document"},
+		{"LRFText", LRFText, "application/x-lrf-text"},
+		{"TTF", TTF, "application/x-font-ttf"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -80,6 +83,7 @@ func TestExtension(t *testing.T) {
 		{"bmp", "image/bmp", "bmp", true},
 		{"bmp alias", "image/x-ms-bmp", "bmp", true},
 		{"octet-stream", "application/octet-stream", "bin", true},
+		{"ttf", "application/x-font-ttf", "ttf", true},
 		{"uppercase", "IMAGE/JPEG", "jpg", true},
 		{"parameters stripped", "image/png; charset=binary", "png", true},
 		{"whitespace", "  image/gif  ", "gif", true},

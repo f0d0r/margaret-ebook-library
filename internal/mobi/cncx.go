@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// CNCX maps absolute string offset to string (calibre index.CNCX).
+// CNCX maps absolute string offset to string.
 type CNCX map[int]string
 
 // parseCNCX parses compiled NCX records.
@@ -30,7 +30,6 @@ func parseCNCX(records [][]byte, codec string) (CNCX, error) {
 				if codec == "cp1252" {
 					enc = CP1252
 				}
-				// No ordt_map handling, like calibre.
 				s = decodeString(data, enc)
 				cncx[pos+recordOffset] = s
 			}

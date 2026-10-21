@@ -30,6 +30,7 @@ var textApplicationTypes = map[string]bool{
 	mediatype.FB2Body:      true,
 	mediatype.FB3Body:      true,
 	mediatype.EreaderPML:   true,
+	mediatype.LRFText:      true,
 	mediatype.OEB1Document: true,
 	mediatype.NCX:          true,
 	mediatype.OPF:          true,

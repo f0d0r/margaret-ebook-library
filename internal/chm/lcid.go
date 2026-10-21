@@ -159,7 +159,7 @@ func lcidLanguage(lcid uint32) string {
 }
 
 // lcidCharset maps a Windows LCID to an IANA charset name for the ANSI
-// #SYSTEM/#STRINGS strings. Mirrors the calibre encoding chain with a cp1252
+// #SYSTEM/#STRINGS strings, using the Windows encoding chain with a cp1252
 // fallback.
 func lcidCharset(lcid uint32) string {
 	switch lcid {

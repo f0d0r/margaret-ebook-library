@@ -243,10 +243,10 @@ func TestMobiReaderContent(t *testing.T) {
 		}
 	})
 
-	t.Run("ignores FirstTextRecord sentinel like calibre", func(t *testing.T) {
-		// Real-world MOBI6 files (e.g. calibre-generated) leave
+	t.Run("ignores FirstTextRecord sentinel", func(t *testing.T) {
+		// Real-world MOBI6 files (e.g. tool-generated) leave
 		// FirstTextRecord/LastContentRecord as the 0xFFFF sentinel.
-		// Calibre ignores the field and reads range(1, records+1).
+		// The field is ignored; text starts at record 1.
 		pdbDb := &pdb.PdbDb{PdbRecords: []pdb.PdbRecord{
 			createMockPdbRecord(make([]byte, 100)),
 			createMockPdbRecord([]byte("<html>hello</html>#")),

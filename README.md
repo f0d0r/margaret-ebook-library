@@ -5,7 +5,7 @@
 [![Go Version](https://img.shields.io/badge/go-%3E%3D1.26.8-blue)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI, KF8/AZW3, PalmDOC, eReader, FictionBook (FB2, FB3), LIT or CHM — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB, MOBI, PalmDOC, FB, LIT, eReader and CHM reading.
+Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI, KF8/AZW3, PalmDOC, eReader, FictionBook (FB2, FB3), LIT, CHM or LRF — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB, MOBI, PalmDOC, FB, LIT, eReader, CHM and LRF reading.
 
 ## Features
 
@@ -30,6 +30,7 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 | LIT (`.lit`)       | ✅  | — |
 | eReader (`.pdb`) | ✅ (as `EREADER`) | — |
 | CHM (`.chm`) | ✅ | — |
+| LRF (`.lrf`, Sony BBeB) | ✅ | — |
 
 > **KEPUB status:** a KEPUB is a valid EPUB archive whose content documents
 > carry Kobo rendering markup (`div#book-columns`/`div#book-inner` wrappers,
@@ -49,6 +50,11 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 > (section decryption is out of scope). Font obfuscation
 > (`adobe#RC`, `idpf.org/2008/embedding`) and leftover/empty `rights.xml`
 > files are not treated as DRM.
+>
+> **LRF status:** the text flow is synthesized by the reader (UTF-16LE,
+> `application/x-lrf-text`) and is the only reading-order item; images and
+> fonts are manifest resources, the header thumbnail is the cover, and inline
+> plots are dropped from plain text.
 
 ## Requirements
 
@@ -259,8 +265,8 @@ reader falls back to the intact MOBI6 content, which is the same content the
 book exposes to older readers. This is the default so that a damaged KF8 part
 never costs the reader the book.
 
-The fallback is configurable. Turn it off for Calibre-like strict behaviour, so
-a KF8 parse failure is reported instead of silently serving different content:
+The fallback is configurable. Turn it off for strict behaviour, so a KF8 parse
+failure is reported instead of silently serving different content:
 
 ```go
 b, err := ebook.Read(
@@ -336,7 +342,8 @@ import (
 
 ctx := context.Background()
 
-// Single resource: XHTML/HTML/MobiHTML/FB2Body/EreaderPML -> plain text
+// Single resource: XHTML/HTML/MobiHTML/FB2Body/FB3Body/EreaderPML/LRFText
+// -> plain text
 // MediaType can include charset params; they are normalized (case-insensitive,
 // "; charset=..." stripped).
 for _, r := range b.Resources().All() {
@@ -373,7 +380,8 @@ fmt.Println(string(plain))
 ```
 
 Constants are compile-time safe: `mediatype.PlainText`, `mediatype.XHTML`,
-`mediatype.HTML`, `mediatype.MobiHTML`, `mediatype.FB2Body`, `mediatype.EreaderPML`, etc.
+`mediatype.HTML`, `mediatype.MobiHTML`, `mediatype.FB2Body`, `mediatype.FB3Body`,
+`mediatype.EreaderPML`, `mediatype.LRFText`, etc.
 
 #### Storage charset and byte-identical reads
 
@@ -401,8 +409,9 @@ defer rc.Close()
 rc, err = b.Resources().OpenReadingOrderAsWithCharset(ctx, mediatype.PlainText, "windows-1250")
 ```
 
-The one documented exception is LIT spine content: it is synthesized by the
-reader itself and therefore always UTF-8 (`Charset == ebook.CharsetUTF8`).
+Synthesized resources are the documented exceptions: LIT spine documents are
+built by the reader and always UTF-8 (`Charset == ebook.CharsetUTF8`), while
+the LRF text flow is a synthesized UTF-16LE stream (`Charset == "utf-16le"`).
 
 #### Custom transformers and isolated registries
 

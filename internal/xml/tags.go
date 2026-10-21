@@ -20,8 +20,8 @@ func IsNameChar(c byte) bool {
 // processing instructions and markup declarations are skipped, and the
 // character following the tag name must be a tag delimiter so that prose
 // mentioning the word does not match. When foldCase is set the name
-// matches case-insensitively (HTML sniffing); otherwise it is exact (XML,
-// matching calibre's lxml parsing). When stripPrefix is set an optional
+// matches case-insensitively (HTML sniffing); otherwise it is exact (XML).
+// When stripPrefix is set an optional
 // namespace prefix is accepted (e.g. <fb:FictionBook>). A probe truncated
 // mid-tag still counts as found.
 func ScanOpenTag(buf []byte, tag string, foldCase, stripPrefix bool) bool {

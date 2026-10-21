@@ -118,7 +118,7 @@ func defaultMobiHeaderOpts() mobiHeaderOpts {
 
 // makeMobiHeaderRecord builds the record 0 payload: PalmDOC header, MOBI header
 // of headerLength bytes and, when exthRecords is set, an EXTH block directly
-// behind it (calibre reads it at headerLength+16).
+// behind it (read at headerLength+16).
 func makeMobiHeaderRecord(opts mobiHeaderOpts) recordSpec {
 	exth := makeExthRecord(opts.exthRecords)
 	size := int(opts.headerLength) + PALM_DOC_HEADER_SIZE + len(exth)
@@ -221,7 +221,7 @@ func makeMalformedFDSTRecord() []byte {
 	return data
 }
 
-// tagxDef mirrors the parts of calibre's TagX tuple the fixtures need: the tag
+// tagxDef describes the parts of a TAGX tuple the fixtures need: the tag
 // id and how many values an entry carries. Every tag gets its own control byte
 // holding a single bit, so the fixtures never need multi-bit masks.
 type tagxDef struct {
@@ -262,7 +262,7 @@ func encVarint(v int) []byte {
 }
 
 // makeTagxSection builds the TAGX section: header plus one tag definition and
-// one eof terminator per tag, which is what calibre's get_tag_map expects when
+// one eof terminator per tag, matching what the parser expects when
 // every tag owns a control byte of its own. The terminator entry consumes the
 // control byte group without decoding a tag.
 func makeTagxSection(tags []tagxDef) []byte {

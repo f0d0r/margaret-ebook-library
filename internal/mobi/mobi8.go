@@ -37,7 +37,7 @@ func kf8ContentError(err error) error {
 	return fmt.Errorf("KF8 parsing failed: %w", err)
 }
 
-// Part mirrors calibre's Part namedtuple.
+// Part describes one reconstructed document part.
 type Part struct {
 	Num      int
 	Type     string
@@ -47,7 +47,7 @@ type Part struct {
 	Aid      string
 }
 
-// Elem mirrors calibre's Elem.
+// Elem describes a skeleton/div insertion.
 type Elem struct {
 	InsertPos      int
 	TocText        string
@@ -57,7 +57,7 @@ type Elem struct {
 	Length         int
 }
 
-// FileInfo mirrors calibre's File (skel).
+// FileInfo describes a skeleton file.
 type FileInfo struct {
 	FileNumber int
 	Name       string
@@ -66,7 +66,7 @@ type FileInfo struct {
 	Length     int
 }
 
-// FlowInfo mirrors calibre's FlowInfo.
+// FlowInfo describes a flow split.
 type FlowInfo struct {
 	Type   string
 	Format string
@@ -165,14 +165,14 @@ func atoiOrZero(s string) int {
 		if c >= '0' && c <= '9' {
 			n = n*10 + int(c-'0')
 		} else {
-			// non-numeric: calibre would fail, but we return 0
+			// non-numeric: return 0
 			break
 		}
 	}
 	return n
 }
 
-// buildMobi8Parts mirrors calibre's build_parts: flow split plus skeleton/div reconstruction.
+// buildMobi8Parts splits flows and reconstructs skeletons and divs.
 func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems []Elem) (parts [][]byte, partInfos []Part, err error) {
 	err = withRecover("buildMobi8Parts", func() error {
 		flows := [][]byte{}
@@ -232,7 +232,7 @@ func buildMobi8Parts(rawML []byte, flowTable [][2]int, files []FileInfo, elems [
 				}
 				e := elems[divPtr]
 				if i == 0 {
-					// calibre: aidtext = idtext[12:-2], filename from the file number
+					// aidtext = idtext[12:-2], filename from the file number
 					filename = fmt.Sprintf("part%04d.html", e.FileNumber)
 					if len(e.TocText) > 14 {
 						aidText = e.TocText[12 : len(e.TocText)-2]
@@ -357,7 +357,7 @@ func extractMobi8Raw(pdbDb *pdb.PdbDb, mobi *Mobi, maxSize int64) (rawML []byte,
 	return
 }
 
-// aidTagRe matches a tag carrying an aid attribute and captures its value (case-insensitive like calibre).
+// aidTagRe matches a tag carrying an aid attribute and captures its value (case-insensitive).
 var aidTagRe = regexp.MustCompile(`(?i)<[^>]*\said\s*=\s*['"]([^'"]*)['"][^>]*>`)
 
 // locateBegEndOfTag returns the bounds of the first tag with the given aid, or (0, 0).

@@ -13,16 +13,14 @@
   `converter` transformer renders them to plain text on demand.
 - PalmDOC reading (`.prc`, `.pdb`, `TEXtREAd`): normalized metadata, single
   lazily-opened content resource and linear reading order from the 16-byte
-  record 0 header, following calibre's MOBI `TEXTREAD` path and the PDB
-  PalmDOC reader. The decompressed prefix decides only the media type
+  record 0 header. The decompressed prefix decides only the media type
   (`text/html` for OEB 1.0 payloads via the new `opf.ParseMetadata`, else
   `text/plain` with the PDB name as title); payload bytes are preserved
   as-is for the existing transformers. New `book.PALMDOC` file type
   (`ebook.PALMDOC`); encrypted books report `book.ErrDRM`.
 - LIT reading (`.lit`, MS Reader): normalized metadata, spine reading order
-  and lazily-opened content/cover resources from OEB 1.x packages, following
-  the ConvertLIT and calibre LIT readers (ITSF container, LZX sections,
-  binary OPF/content decoding). Sealed content stays listed but fails with
+  and lazily-opened content/cover resources from OEB 1.x packages (ITSF
+  container, LZX sections, binary OPF/content decoding). Sealed content stays listed but fails with
   `ErrDRM` on `Open` (section decryption is out of scope); passport-locked
   (`/DRMStorage/Licenses/EUL`) files are rejected outright. MS-era files
   with unbalanced binary markup are tolerated like MS Reader.
@@ -33,8 +31,7 @@
 - FB2 reading (`.fb2`, `.fbz`, `.fb2.zip`, plain or zipped XML):
   normalized metadata, raw body XML content resources (`application/x-fictionbook-body+xml`),
   spine-like reading order (notes bodies marked non-linear), transformer
-  to plain text, embedded images and cover image. Detection and metadata
-  follow calibre's `get_fb2_data` and `metadata/fb2.py` rules.
+  to plain text, embedded images and cover image.
 - FB3 reading (`.fb3`, OPC ZIP container): format detection from
   `[Content_Types].xml`, root relationships and `fb3-description`
   sniffing; normalized metadata (title, authors, description, languages)
@@ -50,6 +47,11 @@
   manifest resources (raw bytes, `text/html` for topics) with `alt=cover`
   cover detection. Truncated tails fail loudly with `ErrCorrupt` instead
   of serving short data. New `book.CHM` file type (`ebook.CHM`).
+- LRF reading (`.lrf`, Sony BBeB): normalized metadata from the compressed
+  info block, a lazily synthesized UTF-16LE text flow as the single linear
+  reading-order resource (`application/x-lrf-text`, plain-text transformer),
+  embedded images and fonts, and the header thumbnail as cover. New
+  `book.LRF` file type (`ebook.LRF`).
 - `Resource.Charset` reporting the storage encoding of every resource's
   bytes (`book.CharsetUTF8`/`book.CharsetBinary`, re-exported as
   `ebook.CharsetUTF8`/`ebook.CharsetBinary`); never empty on resources
@@ -129,11 +131,10 @@
 ### Fixed
 
 - MOBI6 books that leave `FirstTextRecord` as the `0xFFFF` sentinel no
-  longer yield an empty reading order; text records are read from record
-  1 like calibre does.
-- Truncated MOBI/PRC files (record table running past EOF) now return
-  the available content instead of failing the whole book, mirroring
-  calibre's lenient section slicing; `MaxRecordSize` limits still apply.
+  longer yield an empty reading order; text records are read from record 1.
+- Truncated MOBI/PRC files (record table running past EOF) now return the
+  available content instead of failing the whole book; `MaxRecordSize`
+  limits still apply.
 
 ## [0.1.0] - 2026-09-11
 

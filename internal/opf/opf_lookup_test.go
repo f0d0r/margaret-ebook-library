@@ -27,10 +27,10 @@ func TestGetMetaByName(t *testing.T) {
 	}{
 		{
 			name:       "Meta with matching name",
-			opfContent: createOPFWithMeta("calibre", "content-value"),
-			searchName: "calibre",
+			opfContent: createOPFWithMeta("generator", "content-value"),
+			searchName: "generator",
 			expectedMeta: &Meta{
-				Name:    "calibre",
+				Name:    "generator",
 				Content: "content-value",
 			},
 			shouldFind: true,
@@ -48,7 +48,7 @@ func TestGetMetaByName(t *testing.T) {
 		},
 		{
 			name:         "Meta not found",
-			opfContent:   createOPFWithMeta("calibre", "value"),
+			opfContent:   createOPFWithMeta("generator", "value"),
 			searchName:   "non-existent",
 			expectedMeta: nil,
 			shouldFind:   false,
@@ -56,7 +56,7 @@ func TestGetMetaByName(t *testing.T) {
 		{
 			name:         "Empty metadata - no metas",
 			opfContent:   emptyPackage(),
-			searchName:   "calibre",
+			searchName:   "generator",
 			expectedMeta: nil,
 			shouldFind:   false,
 		},

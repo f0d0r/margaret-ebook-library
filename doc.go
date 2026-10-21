@@ -1,5 +1,6 @@
-// Package ebook reads EPUB, MOBI, KF8/AZW3 and FB (FictionBook 2/3) ebooks
-// through a single stable Book abstraction.
+// Package ebook reads EPUB, MOBI, KF8/AZW3, PalmDOC, eReader, FB
+// (FictionBook 2/3), LIT, CHM and LRF ebooks through a single stable Book
+// abstraction.
 //
 // Instead of surfacing format-specific internals such as EPUB manifests and
 // spines or MOBI PDB records, it hides those details behind normalized

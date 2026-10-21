@@ -45,6 +45,7 @@ func TestDefault(t *testing.T) {
 		{mediatype.XHTML, UTF8},
 		{mediatype.CSS, UTF8},
 		{mediatype.FB2Body, UTF8},
+		{mediatype.LRFText, UTF8},
 		{mediatype.SVG, UTF8},
 		{"application/xml", UTF8},
 		{"application/json", UTF8},

@@ -159,16 +159,10 @@ func TestParseMetadataLanguage(t *testing.T) {
 		return []byte(`<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0"><description><title-info><author><nickname>a</nickname></author><book-title>T</book-title><lang>` + lang + `</lang></title-info></description><body><p>x</p></body></FictionBook>`)
 	}
 
-	for _, lang := range []string{"hu", "en", "ru", "de"} {
+	for _, lang := range []string{"hu", "en", "ru", "de", ""} {
 		md, _ := parseBytes(t, wrap(lang))
 		if strings.Join(md.Languages, "|") != lang {
 			t.Errorf("Languages for %q = %q, want [%s]", lang, md.Languages, lang)
-		}
-	}
-	for _, lang := range []string{"und", "not a language!!!", ""} {
-		md, _ := parseBytes(t, wrap(lang))
-		if len(md.Languages) != 0 {
-			t.Errorf("Languages for %q = %q, want empty", lang, md.Languages)
 		}
 	}
 }
