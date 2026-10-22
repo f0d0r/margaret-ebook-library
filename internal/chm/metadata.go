@@ -12,7 +12,9 @@ import (
 // readMetadata assembles book metadata. Title falls back from the #SYSTEM
 // title through the default-topic HTML title to the first #TOPICS title.
 // Authors and description come only from default-topic meta tags; languages
-// from the #SYSTEM LCID. Missing sources yield empty fields, never errors.
+// from the #SYSTEM LCID. Publisher, date and ISBN use declared meta tags plus
+// calibre-style span/table heuristics. Missing sources yield empty fields,
+// never errors.
 func (c *container) readMetadata() book.Metadata {
 	sys, err := c.cachedSystem()
 	if err != nil {
@@ -49,6 +51,12 @@ func (c *container) readMetadata() book.Metadata {
 			}
 		}
 		meta.Description = strings.TrimSpace(headMeta(head, "description"))
+	}
+	tags := collectMetaTags(doc)
+	meta.Publisher = publisherFromDoc(doc, tags)
+	meta.PublicationDate = declaredDate(tags)
+	if isbn := isbnFromDoc(doc, tags); isbn != "" {
+		meta.Identifiers = append(meta.Identifiers, book.Identifier{Scheme: "ISBN", Value: isbn})
 	}
 	return meta
 }

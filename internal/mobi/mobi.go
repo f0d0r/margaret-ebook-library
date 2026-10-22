@@ -358,6 +358,47 @@ func (m *Mobi) Description() string {
 	return description
 }
 
+// Publisher returns the publisher from the book metadata.
+func (m *Mobi) Publisher() string {
+	if m == nil {
+		return ""
+	}
+	if m.KF8 != nil {
+		if publisher := m.KF8.exthPublisher(); publisher != "" {
+			return publisher
+		}
+	}
+	return m.exthPublisher()
+}
+
+// PublicationDate returns the raw publication date from the book metadata.
+// The value is returned as declared, without parsing or validation.
+func (m *Mobi) PublicationDate() string {
+	if m == nil {
+		return ""
+	}
+	if m.KF8 != nil {
+		if date := m.KF8.exthPublicationDate(); date != "" {
+			return date
+		}
+	}
+	return m.exthPublicationDate()
+}
+
+func (m *Mobi) exthPublisher() string {
+	if m.EXTH == nil {
+		return ""
+	}
+	return m.EXTH.Publisher()
+}
+
+func (m *Mobi) exthPublicationDate() string {
+	if m.EXTH == nil {
+		return ""
+	}
+	return m.EXTH.PublicationDate()
+}
+
 // Language returns the language code from the book metadata.
 func (m *Mobi) Language() string {
 	var language string

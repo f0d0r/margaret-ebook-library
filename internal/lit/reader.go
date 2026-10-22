@@ -101,11 +101,13 @@ func (r *LitReader) Read(b book.Blob) (book.Book, error) {
 
 	return &litBook{
 		metadata: book.Metadata{
-			Title:       p.Title(),
-			Authors:     p.Authors(),
-			Description: p.Description(),
-			Languages:   p.Languages(),
-			Identifiers: p.Identifiers(),
+			Title:           p.Title(),
+			Authors:         p.Authors(),
+			Description:     p.Description(),
+			Languages:       p.Languages(),
+			Identifiers:     p.Identifiers(),
+			Publisher:       p.Publisher(),
+			PublicationDate: p.PublicationDate(),
 		},
 		resources: book.NewResourceSet(all, order, cover),
 		version:   litVersionString,

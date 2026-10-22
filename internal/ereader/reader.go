@@ -90,6 +90,7 @@ func readMetadata(pdbDb *pdb.PdbDb, hdr header) book.Metadata {
 	if author := decodeField(fields, 1); author != "" {
 		meta.Authors = []string{author}
 	}
+	meta.Publisher = decodeField(fields, 3)
 	if isbn := decodeField(fields, 4); isbn != "" {
 		meta.Identifiers = append(meta.Identifiers, book.Identifier{Scheme: "ISBN", Value: isbn})
 	}

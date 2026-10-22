@@ -85,6 +85,12 @@ func TestParseMetadataFull(t *testing.T) {
 	if !reflect.DeepEqual(md.Identifiers, wantIdentifiers) {
 		t.Errorf("Identifiers = %+v, want %+v", md.Identifiers, wantIdentifiers)
 	}
+	if md.Publisher != "" {
+		t.Errorf("Publisher = %q, want %q", md.Publisher, "")
+	}
+	if md.PublicationDate != "" {
+		t.Errorf("PublicationDate = %q, want %q", md.PublicationDate, "")
+	}
 }
 
 func TestParseMetadataIdentifiers(t *testing.T) {
@@ -154,6 +160,62 @@ func TestParseMetadataIdentifiers(t *testing.T) {
 			md, _ := parseBytes(t, wrap(tt.desc))
 			if !reflect.DeepEqual(md.Identifiers, tt.want) {
 				t.Errorf("Identifiers = %+v, want %+v", md.Identifiers, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseMetadataPublisherAndDate(t *testing.T) {
+	wrap := func(desc string) []byte {
+		return []byte(`<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0"><description>` + desc + `</description><body><p>x</p></body></FictionBook>`)
+	}
+
+	tests := []struct {
+		name    string
+		desc    string
+		pub     string
+		pubDate string
+	}{
+		{
+			name:    "publisher and year from publish-info",
+			desc:    `<publish-info><publisher>Test Publisher</publisher><year>2023</year></publish-info>`,
+			pub:     "Test Publisher",
+			pubDate: "2023",
+		},
+		{
+			name:    "publisher and date from publish-info",
+			desc:    `<publish-info><publisher>Test Publisher</publisher><date>2023-05-15</date></publish-info>`,
+			pub:     "Test Publisher",
+			pubDate: "2023-05-15",
+		},
+		{
+			name:    "publisher trimmed",
+			desc:    `<publish-info><publisher>  Spaced Publisher  </publisher><year>2022</year></publish-info>`,
+			pub:     "Spaced Publisher",
+			pubDate: "2022",
+		},
+		{
+			name:    "date preferred over year",
+			desc:    `<publish-info><date>2021-01-01</date><year>2021</year></publish-info>`,
+			pub:     "",
+			pubDate: "2021-01-01",
+		},
+		{
+			name:    "empty publish-info",
+			desc:    `<publish-info></publish-info>`,
+			pub:     "",
+			pubDate: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md, _ := parseBytes(t, wrap(tt.desc))
+			if md.Publisher != tt.pub {
+				t.Errorf("Publisher = %q, want %q", md.Publisher, tt.pub)
+			}
+			if md.PublicationDate != tt.pubDate {
+				t.Errorf("PublicationDate = %q, want %q", md.PublicationDate, tt.pubDate)
 			}
 		})
 	}

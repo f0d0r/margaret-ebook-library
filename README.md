@@ -10,7 +10,8 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 ## Features
 
 - Single stable `Book` abstraction over all supported formats
-- Normalized metadata (title, authors, description, languages, identifiers)
+- Normalized metadata (title, authors, description, languages, identifiers,
+  publisher, publication date)
 - Lazy streaming access to resources (no full in-memory load)
 - On-the-fly conversion of text resources to plain text (search indexing, LLM input, TTS)
 - Content fingerprinting (MinHash / SimHash) for deduplication and similarity
@@ -189,6 +190,11 @@ fmt.Println("Title:", meta.Title)
 fmt.Println("Authors:", strings.Join(meta.Authors, ", "))
 fmt.Println("Languages:", meta.Languages)
 fmt.Println("Description:", meta.Description)
+fmt.Println("Publisher:", meta.Publisher)
+fmt.Println("Publication Date:", meta.PublicationDate)
+for _, id := range meta.Identifiers {
+    fmt.Printf("Identifier: %s (Scheme: %s)\n", id.Value, id.Scheme)
+}
 fmt.Println("FileType:", b.FileType())
 fmt.Println("Version:", b.Version())
 
@@ -252,6 +258,48 @@ same own-before-source order: FB2 reads `document-info/id`,
 `periodical/issn`, and `document-info/@src-url`. LIT reads the embedded
 OEB 1.0 OPF's `dc:Identifier` and `dc:Source` values, including their
 `scheme` attributes.
+
+### Publisher and publication date
+
+For EPUB and LIT, `Metadata.Publisher` is the first non-empty `dc:publisher`
+value from the OEB package, with surrounding whitespace trimmed.
+`Metadata.PublicationDate` is the raw `dc:date` string: it is not parsed or
+validated, so it may contain arbitrary text. Only an EPUB 2 date carrying
+`event="publication"` (or `opf:event="publication"`) or a date without an
+event is considered; dates carrying any other event (for example `creation`
+or `modification`) are ignored. An explicit publication date is preferred;
+otherwise the first non-empty unqualified `dc:date` is returned.
+`dcterms:modified` is not treated as the publication date.
+
+For MOBI and KF8, `Metadata.Publisher` is the first non-empty EXTH publisher
+record (type 101) and `Metadata.PublicationDate` is the raw EXTH publishing
+date record (type 106). Both are decoded with the book's text encoding and
+whitespace-trimmed; the date is returned as declared, not parsed or
+validated. A KF8 EXTH value is preferred when non-empty, otherwise the MOBI6
+EXTH is used. PalmDOC books carry both fields in the embedded HTML metadata,
+read under the same rules.
+
+For FB2 and FB3, `Metadata.Publisher` and `Metadata.PublicationDate` are
+extracted from the publication metadata sections:
+
+- **FB2** (`<publish-info>`): `<publisher>` element text and `<year>` or `<date>`
+  element text.
+- **FB3** (`<paper-publish-info>`): `publisher` attribute and `year` attribute.
+
+For eReader, `Metadata.Publisher` is the publisher field of the Dropbook
+metadata record. For LRF, it is the `BookInfo/Publisher` element. Neither
+format exposes a publication date, so `Metadata.PublicationDate` is empty.
+
+For CHM, the native `#SYSTEM` metadata carries no publisher, date or ISBN.
+Declared default-topic meta tags (`publisher`, `date`, and Dublin Core forms)
+are used when present. Otherwise the publisher is taken from calibre-style
+`span.imprint` or labeled table cells, and the ISBN from declared meta tags,
+`span.isbn` or labeled table cells. ISBN-specific candidates are reduced to
+their digits (ASCII `0`-`9` and `X`) before checksum validation, and the
+canonical digits are stored, so surrounding text such as `(pbk.)` is ignored.
+Generic Dublin Core identifiers are parsed strictly and are not reduced to
+digits. Free-text "pub date" heuristics are not treated as a publication
+date.
 
 ### Overriding the safety limits
 

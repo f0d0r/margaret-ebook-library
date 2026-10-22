@@ -32,13 +32,15 @@ const (
 	elDocumentInfo     = "document-info"
 	elPaperPublishInfo = "paper-publish-info"
 	elPeriodical       = "periodical"
-	elISBN             = "isbn"
 	elISSN             = "issn"
+	elISBN             = "isbn"
 
-	attrLink   = "link"
-	attrID     = "id"
-	attrDOI    = "doi"
-	attrSrcURL = "src-url"
+	attrLink      = "link"
+	attrID        = "id"
+	attrDOI       = "doi"
+	attrSrcURL    = "src-url"
+	attrPublisher = "publisher"
+	attrYear      = "year"
 
 	// linkAuthor is the only subject role mapped to authors.
 	linkAuthor = "author"
@@ -55,6 +57,8 @@ type parsedMeta struct {
 	srcURLs         []string
 	paperISBNs      []string
 	periodicalISSNs []string
+	publisher       string
+	publicationDate string
 }
 
 // parseDescription extracts metadata from description-part bytes,
@@ -104,6 +108,8 @@ func parseDescriptionDoc(dec *xml.Decoder) (parsedMeta, error) {
 		}
 		validateLang(&pm)
 		pm.metadata.Identifiers = fb3Identifiers(pm)
+		pm.metadata.Publisher = strings.TrimSpace(pm.publisher)
+		pm.metadata.PublicationDate = strings.TrimSpace(pm.publicationDate)
 		return pm, nil
 	}
 }
@@ -153,7 +159,7 @@ func parseDescriptionChildren(dec *xml.Decoder, pm *parsedMeta) error {
 					return err
 				}
 			case elPaperPublishInfo:
-				if err := parsePaperPublishInfo(dec, pm); err != nil {
+				if err := parsePaperPublishInfo(dec, tok.Attr, pm); err != nil {
 					return err
 				}
 			case elPeriodical:
@@ -215,8 +221,20 @@ func parseDocumentInfo(dec *xml.Decoder, attrs []xml.Attr, pm *parsedMeta) error
 	}
 }
 
-// parsePaperPublishInfo collects the ISBNs of one paper publication.
-func parsePaperPublishInfo(dec *xml.Decoder, pm *parsedMeta) error {
+// parsePaperPublishInfo collects the publisher and year from paper-publish-info attributes.
+func parsePaperPublishInfo(dec *xml.Decoder, attrs []xml.Attr, pm *parsedMeta) error {
+	for _, a := range attrs {
+		switch a.Name.Local {
+		case attrPublisher:
+			if pm.publisher == "" {
+				pm.publisher = strings.TrimSpace(a.Value)
+			}
+		case attrYear:
+			if pm.publicationDate == "" {
+				pm.publicationDate = strings.TrimSpace(a.Value)
+			}
+		}
+	}
 	for {
 		tok, err := dec.Token()
 		if err != nil {
@@ -224,18 +242,16 @@ func parsePaperPublishInfo(dec *xml.Decoder, pm *parsedMeta) error {
 		}
 		switch tok := tok.(type) {
 		case xml.StartElement:
-			if tok.Name.Local != elISBN {
-				if err := skipElement(dec); err != nil {
+			if tok.Name.Local == elISBN {
+				text, err := textOf(dec)
+				if err != nil {
 					return err
 				}
-				continue
-			}
-			text, err := textOf(dec)
-			if err != nil {
+				if text != "" {
+					pm.paperISBNs = append(pm.paperISBNs, text)
+				}
+			} else if err := skipElement(dec); err != nil {
 				return err
-			}
-			if text != "" {
-				pm.paperISBNs = append(pm.paperISBNs, text)
 			}
 		case xml.EndElement:
 			if tok.Name.Local == elPaperPublishInfo {
@@ -254,18 +270,16 @@ func parsePeriodical(dec *xml.Decoder, pm *parsedMeta) error {
 		}
 		switch tok := tok.(type) {
 		case xml.StartElement:
-			if tok.Name.Local != elISSN {
-				if err := skipElement(dec); err != nil {
+			if tok.Name.Local == elISSN {
+				text, err := textOf(dec)
+				if err != nil {
 					return err
 				}
-				continue
-			}
-			text, err := textOf(dec)
-			if err != nil {
+				if text != "" {
+					pm.periodicalISSNs = append(pm.periodicalISSNs, text)
+				}
+			} else if err := skipElement(dec); err != nil {
 				return err
-			}
-			if text != "" {
-				pm.periodicalISSNs = append(pm.periodicalISSNs, text)
 			}
 		case xml.EndElement:
 			if tok.Name.Local == elPeriodical {
