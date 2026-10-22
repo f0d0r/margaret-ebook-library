@@ -263,3 +263,52 @@ func TestParseDescriptionErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestParseDescriptionPublisherAndDate(t *testing.T) {
+	wrap := func(inner string) []byte {
+		return []byte(`<fb3-description xmlns="http://www.fictionbook.org/FictionBook3/description" id="test-id">` +
+			`<title><main>Test Book</main></title>` +
+			`<fb3-relations><subject link="author"><last-name>Author</last-name></subject></fb3-relations>` +
+			`<lang>en</lang>` +
+			inner +
+			`</fb3-description>`)
+	}
+
+	tests := []struct {
+		name  string
+		inner string
+		pub   string
+		date  string
+	}{
+		{
+			name:  "paper-publish-info publisher attribute",
+			inner: `<paper-publish-info title="Print Edition" publisher="Acme Press"><isbn>978-3-16-148410-0</isbn></paper-publish-info>`,
+			pub:   "Acme Press",
+			date:  "",
+		},
+		{
+			name:  "paper-publish-info year attribute",
+			inner: `<paper-publish-info title="Print Edition" year="2020"><isbn>978-3-16-148410-0</isbn></paper-publish-info>`,
+			pub:   "",
+			date:  "2020",
+		},
+		{
+			name:  "paper-publish-info both publisher and year",
+			inner: `<paper-publish-info title="Print Edition" publisher="Acme Press" year="2020"><isbn>978-3-16-148410-0</isbn></paper-publish-info>`,
+			pub:   "Acme Press",
+			date:  "2020",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md := parseFB3(t, wrap(tt.inner))
+			if md.Publisher != tt.pub {
+				t.Errorf("Publisher = %q, want %q", md.Publisher, tt.pub)
+			}
+			if md.PublicationDate != tt.date {
+				t.Errorf("PublicationDate = %q, want %q", md.PublicationDate, tt.date)
+			}
+		})
+	}
+}

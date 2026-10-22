@@ -288,6 +288,110 @@ func TestExthAuthors(t *testing.T) {
 	}
 }
 
+func TestExthPublisher(t *testing.T) {
+	tests := []struct {
+		name         string
+		records      map[uint32][][]byte
+		textEncoding TextEncodingType
+		want         string
+	}{
+		{
+			name:         "No publisher record",
+			records:      map[uint32][][]byte{AUTHOR: {[]byte("Author")}},
+			textEncoding: UTF8,
+			want:         "",
+		},
+		{
+			name:         "UTF-8 publisher",
+			records:      map[uint32][][]byte{PUBLISHER: {[]byte("Acme Press")}},
+			textEncoding: UTF8,
+			want:         "Acme Press",
+		},
+		{
+			name:         "Whitespace trimmed",
+			records:      map[uint32][][]byte{PUBLISHER: {[]byte("  Acme  Press  ")}},
+			textEncoding: UTF8,
+			want:         "Acme  Press",
+		},
+		{
+			name:         "First non-empty wins",
+			records:      map[uint32][][]byte{PUBLISHER: {[]byte(""), []byte("First"), []byte("Second")}},
+			textEncoding: UTF8,
+			want:         "First",
+		},
+		{
+			name:         "CP1252 publisher",
+			records:      map[uint32][][]byte{PUBLISHER: {cp1252Bytes(t, "Café Press")}},
+			textEncoding: CP1252,
+			want:         "Café Press",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exth := &Exth{Records: tt.records, textEncoding: tt.textEncoding}
+			if got := exth.Publisher(); got != tt.want {
+				t.Errorf("Publisher() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExthPublicationDate(t *testing.T) {
+	tests := []struct {
+		name         string
+		records      map[uint32][][]byte
+		textEncoding TextEncodingType
+		want         string
+	}{
+		{
+			name:         "No publication date record",
+			records:      map[uint32][][]byte{AUTHOR: {[]byte("Author")}},
+			textEncoding: UTF8,
+			want:         "",
+		},
+		{
+			name:         "ISO date",
+			records:      map[uint32][][]byte{PUBLICATION_DATE: {[]byte("2000-01-01T00:00:00Z")}},
+			textEncoding: UTF8,
+			want:         "2000-01-01T00:00:00Z",
+		},
+		{
+			name:         "Raw value preserved unparsed",
+			records:      map[uint32][][]byte{PUBLICATION_DATE: {[]byte("circa 1999")}},
+			textEncoding: UTF8,
+			want:         "circa 1999",
+		},
+		{
+			name:         "Whitespace trimmed",
+			records:      map[uint32][][]byte{PUBLICATION_DATE: {[]byte("  1999  ")}},
+			textEncoding: UTF8,
+			want:         "1999",
+		},
+		{
+			name:         "First non-empty wins",
+			records:      map[uint32][][]byte{PUBLICATION_DATE: {[]byte(""), []byte("2001"), []byte("2002")}},
+			textEncoding: UTF8,
+			want:         "2001",
+		},
+		{
+			name:         "CP1252 date",
+			records:      map[uint32][][]byte{PUBLICATION_DATE: {cp1252Bytes(t, "1999. május")}},
+			textEncoding: CP1252,
+			want:         "1999. május",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exth := &Exth{Records: tt.records, textEncoding: tt.textEncoding}
+			if got := exth.PublicationDate(); got != tt.want {
+				t.Errorf("PublicationDate() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestExthRecordMap(t *testing.T) {
 	data := buildExthDataWithRecords(map[uint32]string{
 		100: "value1",

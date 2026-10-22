@@ -383,6 +383,112 @@ func TestMobiDescription(t *testing.T) {
 	}
 }
 
+func TestMobiPublisher(t *testing.T) {
+	exth := func(records map[uint32][][]byte) *Exth {
+		return &Exth{Records: records, textEncoding: UTF8}
+	}
+
+	tests := []struct {
+		name string
+		mobi *Mobi
+		want string
+	}{
+		{
+			name: "nil Mobi",
+			want: "",
+		},
+		{
+			name: "No EXTH, no KF8",
+			mobi: &Mobi{},
+			want: "",
+		},
+		{
+			name: "MOBI6 EXTH",
+			mobi: &Mobi{EXTH: exth(map[uint32][][]byte{PUBLISHER: {[]byte("MOBI6 Press")}})},
+			want: "MOBI6 Press",
+		},
+		{
+			name: "KF8 EXTH preferred",
+			mobi: &Mobi{
+				KF8:  &Mobi{EXTH: exth(map[uint32][][]byte{PUBLISHER: {[]byte("KF8 Press")}})},
+				EXTH: exth(map[uint32][][]byte{PUBLISHER: {[]byte("MOBI6 Press")}}),
+			},
+			want: "KF8 Press",
+		},
+		{
+			name: "Empty KF8 value falls back to MOBI6",
+			mobi: &Mobi{
+				KF8: &Mobi{EXTH: exth(map[uint32][][]byte{
+					PUBLISHER: {[]byte("")},
+				})},
+				EXTH: exth(map[uint32][][]byte{PUBLISHER: {[]byte("MOBI6 Press")}}),
+			},
+			want: "MOBI6 Press",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.mobi.Publisher(); got != tt.want {
+				t.Errorf("Publisher() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMobiPublicationDate(t *testing.T) {
+	exth := func(records map[uint32][][]byte) *Exth {
+		return &Exth{Records: records, textEncoding: UTF8}
+	}
+
+	tests := []struct {
+		name string
+		mobi *Mobi
+		want string
+	}{
+		{
+			name: "nil Mobi",
+			want: "",
+		},
+		{
+			name: "No EXTH, no KF8",
+			mobi: &Mobi{},
+			want: "",
+		},
+		{
+			name: "MOBI6 EXTH",
+			mobi: &Mobi{EXTH: exth(map[uint32][][]byte{PUBLICATION_DATE: {[]byte("1999")}})},
+			want: "1999",
+		},
+		{
+			name: "KF8 EXTH preferred",
+			mobi: &Mobi{
+				KF8:  &Mobi{EXTH: exth(map[uint32][][]byte{PUBLICATION_DATE: {[]byte("2001-02-03")}})},
+				EXTH: exth(map[uint32][][]byte{PUBLICATION_DATE: {[]byte("1999")}}),
+			},
+			want: "2001-02-03",
+		},
+		{
+			name: "Empty KF8 value falls back to MOBI6",
+			mobi: &Mobi{
+				KF8: &Mobi{EXTH: exth(map[uint32][][]byte{
+					PUBLICATION_DATE: {[]byte("")},
+				})},
+				EXTH: exth(map[uint32][][]byte{PUBLICATION_DATE: {[]byte("1999")}}),
+			},
+			want: "1999",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.mobi.PublicationDate(); got != tt.want {
+				t.Errorf("PublicationDate() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestReadMobiValidHeader(t *testing.T) {
 	// Create a minimal valid MOBI record (96+ bytes)
 	data := buildValidMobiData()

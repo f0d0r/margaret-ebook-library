@@ -109,11 +109,13 @@ func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
 
 	return &epubBook{
 		metadata: book.Metadata{
-			Title:       p.Title(),
-			Authors:     p.Authors(),
-			Description: p.Description(),
-			Languages:   p.Languages(),
-			Identifiers: p.Identifiers(),
+			Title:           p.Title(),
+			Authors:         p.Authors(),
+			Description:     p.Description(),
+			Languages:       p.Languages(),
+			Identifiers:     p.Identifiers(),
+			Publisher:       p.Publisher(),
+			PublicationDate: p.PublicationDate(),
 		},
 		resources: book.NewResourceSet(resources, readingOrder, cover),
 		version:   p.Version,

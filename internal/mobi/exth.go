@@ -8,8 +8,10 @@ import (
 
 const (
 	AUTHOR           = 100
+	PUBLISHER        = 101
 	DESCRIPTION      = 103
 	ISBN             = 104
+	PUBLICATION_DATE = 106
 	SOURCE           = 112
 	ASIN             = 113
 	KF8_HEADER_INDEX = 121
@@ -98,6 +100,27 @@ func (e *Exth) Authors() []string {
 		}
 	}
 	return authors
+}
+
+// Publisher returns the publisher from the EXTH record.
+func (e *Exth) Publisher() string {
+	return e.firstRecordString(PUBLISHER)
+}
+
+// PublicationDate returns the raw publication date from the EXTH record.
+// The value is returned as declared, without parsing or validation.
+func (e *Exth) PublicationDate() string {
+	return e.firstRecordString(PUBLICATION_DATE)
+}
+
+// firstRecordString returns the first non-empty decoded value of a record type.
+func (e *Exth) firstRecordString(recordType uint32) string {
+	for _, raw := range e.Records[recordType] {
+		if value := decodeString(raw, e.textEncoding); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // Description returns the description from the EXTH record.

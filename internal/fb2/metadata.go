@@ -34,6 +34,9 @@ const (
 	elDocumentInfo = "document-info"
 	elPublishInfo  = "publish-info"
 	elISBN         = "isbn"
+	elPublisher    = "publisher"
+	elYear         = "year"
+	elDate         = "date"
 	elID           = "id"
 	elSrcURL       = "src-url"
 	elBookTitle    = "book-title"
@@ -260,6 +263,9 @@ type infoSection struct {
 	ids        []string
 	srcURLs    []string
 	isbns      []string
+	publisher  string
+	year       string
+	date       string
 }
 
 // parseDocument streams the XML until the description is consumed,
@@ -427,6 +433,30 @@ func parseInfoSection(dec *xml.Decoder, name string, dst *infoSection) error {
 				}
 				if text != "" {
 					dst.isbns = append(dst.isbns, text)
+				}
+			case elPublisher:
+				text, err := textOf(dec)
+				if err != nil {
+					return err
+				}
+				if dst.publisher == "" {
+					dst.publisher = text
+				}
+			case elYear:
+				text, err := textOf(dec)
+				if err != nil {
+					return err
+				}
+				if dst.year == "" {
+					dst.year = text
+				}
+			case elDate:
+				text, err := textOf(dec)
+				if err != nil {
+					return err
+				}
+				if dst.date == "" {
+					dst.date = text
 				}
 			default:
 				if err := skipElement(dec); err != nil {
@@ -655,6 +685,12 @@ func assemble(titleInfo, srcTitleInfo, docInfo, publishInfo infoSection, version
 	}
 	if lang := strings.TrimSpace(titleInfo.lang); lang != "" {
 		pm.metadata.Languages = []string{lang}
+	}
+	pm.metadata.Publisher = strings.TrimSpace(publishInfo.publisher)
+	if strings.TrimSpace(publishInfo.date) != "" {
+		pm.metadata.PublicationDate = strings.TrimSpace(publishInfo.date)
+	} else {
+		pm.metadata.PublicationDate = strings.TrimSpace(publishInfo.year)
 	}
 	pm.metadata.Identifiers = fb2Identifiers(docInfo, publishInfo)
 	return pm

@@ -30,6 +30,8 @@ func main() {
 	fmt.Printf("Authors: %v\n", strings.Join(bookMeta.Authors, ", "))
 	fmt.Printf("Description: %s\n", bookMeta.Description)
 	fmt.Printf("Languages: %v\n", strings.Join(bookMeta.Languages, ", "))
+	fmt.Printf("Publisher: %s\n", bookMeta.Publisher)
+	fmt.Printf("Publication Date: %s\n", bookMeta.PublicationDate)
 	fmt.Printf("File Type: %s\n", book.FileType())
 	fmt.Printf("Version: %s\n", book.Version())
 

@@ -54,6 +54,7 @@ func (r *LrfReader) readMetadata(b book.Blob, header *LrfHeader) (book.Metadata,
 		Title:       strings.TrimSpace(info.BookInfo.Title),
 		Authors:     splitAuthors(info.BookInfo.Author),
 		Description: strings.TrimSpace(info.BookInfo.Description),
+		Publisher:   strings.TrimSpace(info.BookInfo.Publisher),
 	}
 	if lang := strings.TrimSpace(info.DocInfo.Language); lang != "" {
 		md.Languages = []string{lang}

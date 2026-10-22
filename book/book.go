@@ -49,8 +49,18 @@ type Metadata struct {
 
 	// Identifiers are the identifiers declared by the e-book metadata, in
 	// source order. Scheme prefixes are moved to Identifier.Scheme; values
-	// are not otherwise validated or normalized.
+	// are not otherwise validated or normalized. Identifiers extracted
+	// heuristically (CHM) are checksum-validated before inclusion.
 	Identifiers []Identifier
+
+	// Publisher is the publisher declared by the e-book metadata, with
+	// surrounding whitespace trimmed.
+	Publisher string
+
+	// PublicationDate is the raw publication date declared by the e-book
+	// metadata. It is returned as declared, without parsing or validation,
+	// so it may contain arbitrary or malformed text.
+	PublicationDate string
 }
 
 // Identifier returns the first identifier with the given scheme, matched

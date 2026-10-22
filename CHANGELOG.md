@@ -9,6 +9,20 @@
   hyphenated forms. Parsed values report their `Kind` and convert with
   `ToISBN10`/`ToISBN13`; 979-prefixed ISBN-13 values have no ISBN-10
   equivalent.
+- Publisher and raw publication-date extraction from EPUB, LIT, MOBI/KF8,
+  eReader, LRF, FB2 and FB3 metadata: `Metadata.Publisher` and
+  `Metadata.PublicationDate`. The date is returned as declared, without parsing
+  or validation. For EPUB and LIT, only an EPUB 2 date with
+  `event="publication"` or a date without an event is considered; dates with
+  any other event are ignored, and an explicit publication date is preferred.
+  For MOBI/KF8 the EXTH 101 (publisher) and 106 (publication date) records are
+  used; PalmDOC HTML metadata is parsed the same way. For FB2 the
+  `<publish-info><publisher>` and `<year>`/`<date>` elements are used. For FB3
+  the `<paper-publish-info>` `publisher` and `year` attributes are used.
+  eReader and LRF expose only the publisher; no publication date is read for
+  them. CHM reads declared default-topic meta tags and calibre-style
+  `span`/table heuristics; publisher is exposed and only checksum-valid ISBNs
+  are accepted.
 - Identifier extraction from formats that declare them (EPUB, MOBI/KF8,
   eReader, PalmDOC, FB2/FB3 and LIT): `Metadata.Identifiers` exposes raw
   scheme/value pairs and `Metadata.Identifier` provides case-insensitive

@@ -74,6 +74,15 @@ func fixtureMeta() []byte {
 	b = append(b, 0x00)
 	b = append(b, ubText("A description")...)
 	b = append(b, ubClose()...)
+	b = append(b, ubOpen(24)...) // dc:Publisher
+	b = append(b, 0x00)
+	b = append(b, ubText("Test Publisher")...)
+	b = append(b, ubClose()...)
+	b = append(b, ubOpen(26)...) // dc:Date
+	b = append(b, ubAttr(0x0F, "publication")...)
+	b = append(b, 0x00)
+	b = append(b, ubText("1999-05-04")...)
+	b = append(b, ubClose()...)
 	b = append(b, ubOpen(31)...) // dc:Language
 	b = append(b, 0x00)
 	b = append(b, ubText("en")...)
@@ -219,6 +228,12 @@ func TestLitReadMetadata(t *testing.T) {
 	}
 	if md.Description != "A description" {
 		t.Errorf("Description = %q, want %q", md.Description, "A description")
+	}
+	if md.Publisher != "Test Publisher" {
+		t.Errorf("Publisher = %q, want %q", md.Publisher, "Test Publisher")
+	}
+	if md.PublicationDate != "1999-05-04" {
+		t.Errorf("PublicationDate = %q, want %q", md.PublicationDate, "1999-05-04")
 	}
 	if len(md.Languages) != 1 || md.Languages[0] != "en" {
 		t.Errorf("Languages = %q, want [en]", md.Languages)

@@ -40,6 +40,8 @@ type Metadata struct {
 	Languages    []string     `xml:"language"`
 	Identifiers  []Identifier `xml:"identifier"`
 	Sources      []Identifier `xml:"source"`
+	Publishers   []string     `xml:"publisher"`
+	Dates        []Date       `xml:"date"`
 	Metas        []Meta       `xml:"meta"`
 
 	// DirectLanguages holds capitalized language elements placed directly
@@ -61,6 +63,8 @@ type DcMetadata struct {
 	Languages    []string     `xml:"Language"`
 	Identifiers  []Identifier `xml:"Identifier"`
 	Sources      []Identifier `xml:"Source"`
+	Publishers   []string     `xml:"Publisher"`
+	Dates        []Date       `xml:"Date"`
 }
 
 // XMetadata carries OEB 1.x extended metadata elements.
@@ -74,6 +78,13 @@ type Identifier struct {
 	Value  string `xml:",chardata"`
 	ID     string `xml:"id,attr"`
 	Scheme string `xml:"scheme,attr"`
+}
+
+// Date is a raw date-bearing Dublin Core element (dc:date). Event is the
+// optional OPF 2 event attribute (e.g. "publication", "creation").
+type Date struct {
+	Value string `xml:",chardata"`
+	Event string `xml:"event,attr"`
 }
 
 type Title struct {
@@ -307,6 +318,48 @@ func validLanguages(values []string) []string {
 		languages = append(languages, lang)
 	}
 	return languages
+}
+
+// Publisher extracts the first non-empty dc:publisher value from a Package.
+// OEB 1.x wrapped metadata is used when the direct element is absent.
+func (p Package) Publisher() string {
+	if publisher := firstNonEmpty(p.Metadata.Publishers); publisher != "" {
+		return publisher
+	}
+	if p.Metadata.Dc != nil {
+		return firstNonEmpty(p.Metadata.Dc.Publishers)
+	}
+	return ""
+}
+
+// PublicationDate extracts the raw dc:date value from a Package. Dates
+// carrying a non-publication OPF 2 event attribute are not publication dates
+// and are ignored. An explicit "publication" event is preferred; otherwise
+// the first non-empty date without an event wins. The value is returned as
+// declared, without parsing or validation.
+func (p Package) PublicationDate() string {
+	dates := make([]Date, 0, len(p.Metadata.Dates))
+	dates = append(dates, p.Metadata.Dates...)
+	if p.Metadata.Dc != nil {
+		dates = append(dates, p.Metadata.Dc.Dates...)
+	}
+	return publicationDate(dates)
+}
+
+func publicationDate(dates []Date) string {
+	var fallback string
+	for _, d := range dates {
+		if value := strings.TrimSpace(d.Value); value != "" {
+			event := strings.TrimSpace(d.Event)
+			if strings.EqualFold(event, "publication") {
+				return value
+			}
+			if event == "" && fallback == "" {
+				fallback = value
+			}
+		}
+	}
+	return fallback
 }
 
 // metas returns all meta elements, including OEB 1.x wrapped ones.

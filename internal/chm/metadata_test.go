@@ -52,6 +52,119 @@ func TestMetadataFromSystem(t *testing.T) {
 	}
 }
 
+func TestMetadataPublisherDateISBN(t *testing.T) {
+	wrap := func(head, body string) string {
+		return `<html><head>` + head + `</head><body>` + body + `</body></html>`
+	}
+	tests := []struct {
+		name      string
+		html      string
+		publisher string
+		date      string
+		isbn      string
+	}{
+		{
+			name: "declared meta",
+			html: wrap(`<meta name="publisher" content="Acme Press">`+
+				`<meta name="isbn" content="978-0-306-40615-7">`+
+				`<meta name="date" content="2020-01-01">`, ""),
+			publisher: "Acme Press",
+			date:      "2020-01-01",
+			isbn:      "978-0-306-40615-7",
+		},
+		{
+			name: "declared dublin core",
+			html: wrap(`<meta name="DC.publisher" content="DC Press">`+
+				`<meta name="DC.identifier" content="urn:isbn:9780306406157">`+
+				`<meta name="DC.date" content="1999">`, ""),
+			publisher: "DC Press",
+			date:      "1999",
+			isbn:      "9780306406157",
+		},
+		{
+			name:      "span heuristics",
+			html:      wrap("", `<span class="imprint">Imprint Press</span><span class="isbn">ISBN 0-306-40615-2</span>`),
+			publisher: "Imprint Press",
+			isbn:      "0-306-40615-2",
+		},
+		{
+			name: "table heuristics",
+			html: wrap("", `<table>`+
+				`<tr><td>Publisher</td><td>Table Press</td></tr>`+
+				`<tr><td>ISBN</td><td>978-0-306-40615-7</td></tr>`+
+				`</table>`),
+			publisher: "Table Press",
+			isbn:      "978-0-306-40615-7",
+		},
+		{
+			name:      "single cell table",
+			html:      wrap("", `<table><tr><td>Publisher: Colon Press</td></tr><tr><td>ISBN: 0-306-40615-2</td></tr></table>`),
+			publisher: "Colon Press",
+			isbn:      "0-306-40615-2",
+		},
+		{
+			name: "declared beats heuristics",
+			html: wrap(`<meta name="publisher" content="Meta Press">`+
+				`<meta name="isbn" content="978-0-306-40615-7">`,
+				`<span class="imprint">Span Press</span><span class="isbn">0-306-40615-2</span>`),
+			publisher: "Meta Press",
+			isbn:      "978-0-306-40615-7",
+		},
+		{
+			name:      "invalid isbn ignored",
+			html:      wrap(`<meta name="isbn" content="not an isbn">`, ""),
+			publisher: "",
+			date:      "",
+			isbn:      "",
+		},
+		{
+			name: "invalid declared falls back to valid heuristic",
+			html: wrap(`<meta name="isbn" content="12345">`,
+				`<span class="isbn">978-0-306-40615-7</span>`),
+			isbn: "978-0-306-40615-7",
+		},
+		{
+			name:      "publisher label stripped",
+			html:      wrap(`<meta name="publisher" content="Publisher: Labelled Press">`, ""),
+			publisher: "Labelled Press",
+		},
+		{
+			name: "date heuristic ignored",
+			html: wrap("", `<span class="cwdate">2020</span>`+
+				`<table><tr><td>Pub Date</td><td>2019</td></tr></table>`),
+			date: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := readFixture(t, fixture{files: map[string][]byte{
+				"/#SYSTEM": buildSystem(3, []sysEntry{
+					{sysDefaultTopic, []byte("/default.html\x00")},
+					{sysInfo, sysInfoEntry(1033)},
+				}),
+				"/default.html": []byte(tt.html),
+			}})
+			md := b.Metadata()
+			if md.Publisher != tt.publisher {
+				t.Errorf("Publisher = %q, want %q", md.Publisher, tt.publisher)
+			}
+			if md.PublicationDate != tt.date {
+				t.Errorf("PublicationDate = %q, want %q", md.PublicationDate, tt.date)
+			}
+			if tt.isbn == "" {
+				if len(md.Identifiers) != 0 {
+					t.Errorf("Identifiers = %+v, want empty", md.Identifiers)
+				}
+				return
+			}
+			if len(md.Identifiers) != 1 || md.Identifiers[0].Scheme != "ISBN" || md.Identifiers[0].Value != tt.isbn {
+				t.Errorf("Identifiers = %+v, want ISBN %q", md.Identifiers, tt.isbn)
+			}
+		})
+	}
+}
+
 func TestMetadataTitleFallbacks(t *testing.T) {
 	html := `<html><head><title>
 		Spaced   Title

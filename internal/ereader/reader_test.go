@@ -66,6 +66,9 @@ func TestReadDropbookMetadata(t *testing.T) {
 	if m.Description != "" || len(m.Languages) != 0 {
 		t.Errorf("Description/Languages = %q/%q, want empty", m.Description, m.Languages)
 	}
+	if m.Publisher != "publisher" {
+		t.Errorf("Publisher = %q, want %q", m.Publisher, "publisher")
+	}
 	if isbn, ok := m.Identifier("ISBN"); !ok || isbn != "9780306406157" {
 		t.Errorf("Identifier(ISBN) = %q, %v, want %q, true", isbn, ok, "9780306406157")
 	}
