@@ -70,7 +70,7 @@ func TestMetadataPublisherDateISBN(t *testing.T) {
 				`<meta name="date" content="2020-01-01">`, ""),
 			publisher: "Acme Press",
 			date:      "2020-01-01",
-			isbn:      "978-0-306-40615-7",
+			isbn:      "9780306406157",
 		},
 		{
 			name: "declared dublin core",
@@ -85,7 +85,7 @@ func TestMetadataPublisherDateISBN(t *testing.T) {
 			name:      "span heuristics",
 			html:      wrap("", `<span class="imprint">Imprint Press</span><span class="isbn">ISBN 0-306-40615-2</span>`),
 			publisher: "Imprint Press",
-			isbn:      "0-306-40615-2",
+			isbn:      "0306406152",
 		},
 		{
 			name: "table heuristics",
@@ -94,13 +94,13 @@ func TestMetadataPublisherDateISBN(t *testing.T) {
 				`<tr><td>ISBN</td><td>978-0-306-40615-7</td></tr>`+
 				`</table>`),
 			publisher: "Table Press",
-			isbn:      "978-0-306-40615-7",
+			isbn:      "9780306406157",
 		},
 		{
 			name:      "single cell table",
 			html:      wrap("", `<table><tr><td>Publisher: Colon Press</td></tr><tr><td>ISBN: 0-306-40615-2</td></tr></table>`),
 			publisher: "Colon Press",
-			isbn:      "0-306-40615-2",
+			isbn:      "0306406152",
 		},
 		{
 			name: "declared beats heuristics",
@@ -108,7 +108,7 @@ func TestMetadataPublisherDateISBN(t *testing.T) {
 				`<meta name="isbn" content="978-0-306-40615-7">`,
 				`<span class="imprint">Span Press</span><span class="isbn">0-306-40615-2</span>`),
 			publisher: "Meta Press",
-			isbn:      "978-0-306-40615-7",
+			isbn:      "9780306406157",
 		},
 		{
 			name:      "invalid isbn ignored",
@@ -121,7 +121,25 @@ func TestMetadataPublisherDateISBN(t *testing.T) {
 			name: "invalid declared falls back to valid heuristic",
 			html: wrap(`<meta name="isbn" content="12345">`,
 				`<span class="isbn">978-0-306-40615-7</span>`),
-			isbn: "978-0-306-40615-7",
+			isbn: "9780306406157",
+		},
+		{
+			name: "isbn surrounded by text",
+			html: wrap(`<meta name="isbn" content="ISBN: 978-0-306-40615-7 (pbk.)">`, ""),
+			isbn: "9780306406157",
+		},
+		{
+			name: "isbn10 trailing x",
+			html: wrap("", `<span class="isbn">0-8044-2957-X</span>`),
+			isbn: "080442957X",
+		},
+		{
+			name: "isbn unrelated digits ignored",
+			html: wrap("", `<span class="isbn">call 555-1234</span>`),
+		},
+		{
+			name: "generic identifier not digit stripped",
+			html: wrap(`<meta name="DC.identifier" content="ID 978-0-306-40615-7 (pbk)">`, ""),
 		},
 		{
 			name:      "publisher label stripped",

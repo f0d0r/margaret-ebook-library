@@ -21,8 +21,8 @@
   the `<paper-publish-info>` `publisher` and `year` attributes are used.
   eReader and LRF expose only the publisher; no publication date is read for
   them. CHM reads declared default-topic meta tags and calibre-style
-  `span`/table heuristics; publisher is exposed and only checksum-valid ISBNs
-  are accepted.
+  `span`/table heuristics; publisher is exposed, ISBN-specific candidates are
+  reduced to digits, checksum-validated, and stored as canonical digits.
 - Identifier extraction from formats that declare them (EPUB, MOBI/KF8,
   eReader, PalmDOC, FB2/FB3 and LIT): `Metadata.Identifiers` exposes raw
   scheme/value pairs and `Metadata.Identifier` provides case-insensitive

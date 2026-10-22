@@ -20,8 +20,12 @@ var (
 		"date", "dc.date", "dc:date", "dcterms.date", "dcterms:date",
 		"dcterms.issued", "dcterms:issued",
 	}
-	isbnMetaKeys = []string{
-		"isbn", "dc.identifier", "dc:identifier",
+	isbnMetaKeys = []string{"isbn"}
+	// identifierMetaKeys are generic identifiers, so they are parsed
+	// strictly: unlike isbn-specific sources, surrounding text is not
+	// stripped down to digits.
+	identifierMetaKeys = []string{
+		"dc.identifier", "dc:identifier",
 		"dcterms.identifier", "dcterms:identifier", "identifier",
 	}
 )
@@ -46,17 +50,23 @@ func declaredDate(tags metaTags) string {
 }
 
 // isbnFromDoc validates declared and heuristically extracted ISBN candidates
-// and returns the first checksum-valid value with any scheme label removed.
-// Invalid candidates are skipped so a junk span or table cell cannot shadow a
-// valid value elsewhere.
+// and returns the first checksum-valid value. ISBN-specific sources (meta
+// name="isbn", span.isbn, labeled table cells) are reduced to their digits;
+// generic identifier meta tags are parsed strictly. Invalid candidates are
+// skipped so a junk span or table cell cannot shadow a valid value.
 func isbnFromDoc(doc *html.Node, tags metaTags) string {
 	for _, candidate := range tags.all(isbnMetaKeys...) {
+		if value, ok := cleanISBNDigits(candidate); ok {
+			return value
+		}
+	}
+	for _, candidate := range tags.all(identifierMetaKeys...) {
 		if value, ok := cleanISBN(candidate); ok {
 			return value
 		}
 	}
 	for _, candidate := range []string{classText(doc, "isbn"), tableValue(doc, "isbn")} {
-		if value, ok := cleanISBN(candidate); ok {
+		if value, ok := cleanISBNDigits(candidate); ok {
 			return value
 		}
 	}
@@ -227,6 +237,30 @@ func stripLabel(text, label string) string {
 		return text
 	}
 	return strings.TrimSpace(text[len(label):])
+}
+
+// cleanISBNDigits keeps only ISBN digits (ASCII 0-9 and X/x) from an
+// ISBN-specific source, validates the result and returns the canonical
+// digits. This tolerates surrounding text such as "ISBN: ... (pbk.)".
+func cleanISBNDigits(raw string) (string, bool) {
+	isbn, ok := tools.ParseISBN(isbnDigits(raw))
+	if !ok {
+		return "", false
+	}
+	return isbn.String(), true
+}
+
+func isbnDigits(raw string) string {
+	var sb strings.Builder
+	for _, r := range raw {
+		switch {
+		case r >= '0' && r <= '9':
+			sb.WriteRune(r)
+		case r == 'x' || r == 'X':
+			sb.WriteByte('X')
+		}
+	}
+	return sb.String()
 }
 
 // cleanISBN validates raw with tools.ParseISBN and removes a leading

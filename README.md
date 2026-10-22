@@ -294,9 +294,11 @@ For CHM, the native `#SYSTEM` metadata carries no publisher, date or ISBN.
 Declared default-topic meta tags (`publisher`, `date`, and Dublin Core forms)
 are used when present. Otherwise the publisher is taken from calibre-style
 `span.imprint` or labeled table cells, and the ISBN from declared meta tags,
-`span.isbn` or labeled table cells. Heuristic ISBN candidates are accepted
-only when they pass ISBN checksum validation; the value keeps its declared
-formatting. Free-text "pub date" heuristics are not treated as a publication
+`span.isbn` or labeled table cells. ISBN-specific candidates are reduced to
+their digits (ASCII `0`-`9` and `X`) before checksum validation, and the
+canonical digits are stored, so surrounding text such as `(pbk.)` is ignored.
+Generic Dublin Core identifiers are parsed strictly and are not reduced to
+digits. Free-text "pub date" heuristics are not treated as a publication
 date.
 
 ### Overriding the safety limits

@@ -49,8 +49,8 @@ type Metadata struct {
 
 	// Identifiers are the identifiers declared by the e-book metadata, in
 	// source order. Scheme prefixes are moved to Identifier.Scheme; values
-	// are not otherwise validated or normalized. Identifiers extracted
-	// heuristically (CHM) are checksum-validated before inclusion.
+	// are not otherwise validated or normalized. CHM ISBNs are
+	// checksum-validated and normalized to canonical digits.
 	Identifiers []Identifier
 
 	// Publisher is the publisher declared by the e-book metadata, with
