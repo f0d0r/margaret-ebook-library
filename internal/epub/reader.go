@@ -113,6 +113,7 @@ func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
 			Authors:     p.Authors(),
 			Description: p.Description(),
 			Languages:   p.Languages(),
+			Identifiers: p.Identifiers(),
 		},
 		resources: book.NewResourceSet(resources, readingOrder, cover),
 		version:   p.Version,

@@ -164,6 +164,12 @@ func TestFb2ReaderRead(t *testing.T) {
 		if len(md.Languages) != 1 || md.Languages[0] != "hu" {
 			t.Errorf("Languages = %q, want [hu]", md.Languages)
 		}
+		if len(md.Identifiers) != 3 ||
+			md.Identifiers[0].Value != "06182534-7d14-4ef9-a738-843ff09973d8" ||
+			md.Identifiers[1] != (book.Identifier{Scheme: "ISBN", Value: "978-0-306-40615-7"}) ||
+			md.Identifiers[2] != (book.Identifier{Scheme: "URL", Value: "http://example.com/source"}) {
+			t.Errorf("Identifiers = %+v, want document id, ISBN, and source URL", md.Identifiers)
+		}
 		if ebook.Resources() == nil {
 			t.Error("Resources() = nil, want non-nil")
 		}

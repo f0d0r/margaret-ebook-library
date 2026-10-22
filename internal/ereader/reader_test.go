@@ -43,7 +43,7 @@ func dropbookHeader(compression, hasMetadata, metadataOffset uint16) []byte {
 func TestReadDropbookMetadata(t *testing.T) {
 	r := NewEreaderReader(config.DefaultConfig())
 	rec0 := dropbookHeader(10, 1, 1)
-	rec1 := []byte("Test Title\x00Test Auth\xe9r\x00\x00publisher\x00")
+	rec1 := []byte("Test Title\x00Test Auth\xe9r\x00\x00publisher\x009780306406157\x00")
 	b := buildPDB(t, "Fallback Name", "PNRdPPrs", [][]byte{rec0, rec1})
 
 	bk, err := r.Read(b)
@@ -65,6 +65,25 @@ func TestReadDropbookMetadata(t *testing.T) {
 	}
 	if m.Description != "" || len(m.Languages) != 0 {
 		t.Errorf("Description/Languages = %q/%q, want empty", m.Description, m.Languages)
+	}
+	if isbn, ok := m.Identifier("ISBN"); !ok || isbn != "9780306406157" {
+		t.Errorf("Identifier(ISBN) = %q, %v, want %q, true", isbn, ok, "9780306406157")
+	}
+}
+
+func TestReadDropbookISBNKeptRaw(t *testing.T) {
+	r := NewEreaderReader(config.DefaultConfig())
+	rec0 := dropbookHeader(2, 1, 1)
+	rec1 := []byte("Title\x00Author\x00Copyright\x00Publisher\x000-306-40615-2\x00")
+	b := buildPDB(t, "Fallback Name", "PNRdPPrs", [][]byte{rec0, rec1})
+
+	bk, err := r.Read(b)
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+	want := []book.Identifier{{Scheme: "ISBN", Value: "0-306-40615-2"}}
+	if got := bk.Metadata().Identifiers; len(got) != 1 || got[0] != want[0] {
+		t.Errorf("Identifiers = %+v, want %+v", got, want)
 	}
 }
 

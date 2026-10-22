@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -76,6 +77,28 @@ func fixtureMeta() []byte {
 	b = append(b, ubOpen(31)...) // dc:Language
 	b = append(b, 0x00)
 	b = append(b, ubText("en")...)
+	b = append(b, ubClose()...)
+	b = append(b, ubOpen(29)...) // dc:Identifier
+	b = append(b, ubAttr(0x06, "isbn")...)
+	b = append(b, ubAttr(0x10, "ISBN")...)
+	b = append(b, 0x00)
+	b = append(b, ubText("978-0-306-40615-7")...)
+	b = append(b, ubClose()...)
+	b = append(b, ubOpen(29)...) // dc:Identifier
+	b = append(b, ubAttr(0x06, "uuid_id")...)
+	b = append(b, ubAttr(0x10, "uuid")...)
+	b = append(b, 0x00)
+	b = append(b, ubText("06182534-7d14-4ef9-a738-843ff09973d8")...)
+	b = append(b, ubClose()...)
+	b = append(b, ubOpen(29)...) // dc:Identifier
+	b = append(b, ubAttr(0x10, "calibre")...)
+	b = append(b, 0x00)
+	b = append(b, ubText("06182534-7d14-4ef9-a738-843ff09973d8")...)
+	b = append(b, ubClose()...)
+	b = append(b, ubOpen(30)...) // dc:Source
+	b = append(b, ubAttr(0x10, "ISBN")...)
+	b = append(b, 0x00)
+	b = append(b, ubText("9780375704024")...)
 	b = append(b, ubClose()...)
 	b = append(b, ubClose()...)  // dc-metadata
 	b = append(b, ubOpen(35)...) // x-metadata
@@ -199,6 +222,15 @@ func TestLitReadMetadata(t *testing.T) {
 	}
 	if len(md.Languages) != 1 || md.Languages[0] != "en" {
 		t.Errorf("Languages = %q, want [en]", md.Languages)
+	}
+	wantIdentifiers := []book.Identifier{
+		{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+		{Scheme: "UUID", Value: "06182534-7d14-4ef9-a738-843ff09973d8"},
+		{Scheme: "calibre", Value: "06182534-7d14-4ef9-a738-843ff09973d8"},
+		{Scheme: "ISBN", Value: "9780375704024"},
+	}
+	if !reflect.DeepEqual(md.Identifiers, wantIdentifiers) {
+		t.Errorf("Identifiers = %+v, want %+v", md.Identifiers, wantIdentifiers)
 	}
 	if ebook.FileType() != book.LIT {
 		t.Errorf("FileType = %q, want lit", ebook.FileType())

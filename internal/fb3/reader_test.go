@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -32,7 +33,7 @@ const (
 		`</Relationships>`
 
 	minimalDescription = `<?xml version="1.0" encoding="UTF-8"?>` +
-		`<fb3-description xmlns="http://www.fictionbook.org/FictionBook3/description" version="1.0">` +
+		`<fb3-description xmlns="http://www.fictionbook.org/FictionBook3/description" id="6079f35b-49cc-4211-adba-919ccaaff4f2" version="1.0">` +
 		`<title><main>Test Book</main><sub>ignored sub</sub></title>` +
 		`<fb3-relations>` +
 		`<subject link="author"><title><main>John Ronald Doe</main></title><first-name>John</first-name><middle-name>Ronald</middle-name><last-name>Doe</last-name></subject>` +
@@ -41,6 +42,7 @@ const (
 		`</fb3-relations>` +
 		`<fb3-classification><subject>test</subject></fb3-classification>` +
 		`<lang>hu</lang>` +
+		`<document-info created="2018-04-16T00:00:00" updated="2018-04-16T00:00:00"><isbn>978-0-306-40615-7</isbn></document-info>` +
 		`<annotation><p>First <strong>para</strong>.</p><br/><p>Second para.</p></annotation>` +
 		`</fb3-description>`
 
@@ -173,6 +175,13 @@ func TestFb3ReaderRead(t *testing.T) {
 		}
 		if len(md.Languages) != 1 || md.Languages[0] != "hu" {
 			t.Errorf("Languages = %q, want [hu]", md.Languages)
+		}
+		wantIdentifiers := []book.Identifier{
+			{Scheme: "UUID", Value: "6079f35b-49cc-4211-adba-919ccaaff4f2"},
+			{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+		}
+		if !reflect.DeepEqual(md.Identifiers, wantIdentifiers) {
+			t.Errorf("Identifiers = %+v, want %+v", md.Identifiers, wantIdentifiers)
 		}
 
 		rs := ebook.Resources()

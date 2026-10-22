@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -19,6 +20,8 @@ const palmDocBookHTMLPayload = `<HTML><HEAD><metadata><dc-metadata>` +
 	`<dc:Title>Test Palm Book</dc:Title>` +
 	`<dc:Creator>Jane Author</dc:Creator>` +
 	`<dc:Language>en</dc:Language>` +
+	`<dc:Identifier scheme="ISBN">urn:isbn:0-306-40615-2</dc:Identifier>` +
+	`<dc:Source>urn:isbn:9780375704024</dc:Source>` +
 	`</dc-metadata></metadata></HEAD><BODY><P>Hello PalmDOC</P></BODY></HTML>`
 
 const palmDocBookPlainPayload = "Just some plain text for PalmDOC.\nSecond line here."
@@ -179,6 +182,13 @@ func TestPalmDocBookReaderHTML(t *testing.T) {
 	}
 	if got := b.Metadata().Authors; len(got) != 1 || got[0] != "Jane Author" {
 		t.Errorf("Authors = %q, want [Jane Author]", got)
+	}
+	wantIDs := []book.Identifier{
+		{Scheme: "ISBN", Value: "0-306-40615-2"},
+		{Scheme: "ISBN", Value: "9780375704024"},
+	}
+	if got := b.Metadata().Identifiers; !reflect.DeepEqual(got, wantIDs) {
+		t.Errorf("Identifiers = %+v, want %+v", got, wantIDs)
 	}
 	all := b.Resources().All()
 	if len(all) != 1 {

@@ -9,27 +9,36 @@ import (
 	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
 	xmlx "github.com/f0d0r/margaret-ebook-library/internal/xml"
 	"golang.org/x/text/language"
 )
 
 // Element and attribute local names (matched namespace-agnostically).
 const (
-	elFb3Description = "fb3-description"
-	elFb3Body        = "fb3-body"
-	elTitle          = "title"
-	elMain           = "main"
-	elRelations      = "fb3-relations"
-	elSubject        = "subject"
-	elFirstName      = "first-name"
-	elMiddleName     = "middle-name"
-	elLastName       = "last-name"
-	elLang           = "lang"
-	elAnnotation     = "annotation"
-	elP              = "p"
-	elBr             = "br"
+	elFb3Description   = "fb3-description"
+	elFb3Body          = "fb3-body"
+	elTitle            = "title"
+	elMain             = "main"
+	elRelations        = "fb3-relations"
+	elSubject          = "subject"
+	elFirstName        = "first-name"
+	elMiddleName       = "middle-name"
+	elLastName         = "last-name"
+	elLang             = "lang"
+	elAnnotation       = "annotation"
+	elP                = "p"
+	elBr               = "br"
+	elDocumentInfo     = "document-info"
+	elPaperPublishInfo = "paper-publish-info"
+	elPeriodical       = "periodical"
+	elISBN             = "isbn"
+	elISSN             = "issn"
 
-	attrLink = "link"
+	attrLink   = "link"
+	attrID     = "id"
+	attrDOI    = "doi"
+	attrSrcURL = "src-url"
 
 	// linkAuthor is the only subject role mapped to authors.
 	linkAuthor = "author"
@@ -37,9 +46,15 @@ const (
 	linkCoAuthor = "co_author"
 )
 
-// parsedMeta is the parsed description metadata.
+// parsedMeta is the parsed description metadata and identifier fields.
 type parsedMeta struct {
-	metadata book.Metadata
+	metadata        book.Metadata
+	rootID          string
+	documentISBNs   []string
+	doi             string
+	srcURLs         []string
+	paperISBNs      []string
+	periodicalISSNs []string
 }
 
 // parseDescription extracts metadata from description-part bytes,
@@ -79,10 +94,16 @@ func parseDescriptionDoc(dec *xml.Decoder) (parsedMeta, error) {
 			return parsedMeta{}, fmt.Errorf("not an fb3-description document: root is %q", start.Name.Local)
 		}
 		var pm parsedMeta
+		for _, a := range start.Attr {
+			if a.Name.Local == attrID {
+				pm.rootID = strings.TrimSpace(a.Value)
+			}
+		}
 		if err := parseDescriptionChildren(dec, &pm); err != nil {
 			return parsedMeta{}, err
 		}
 		validateLang(&pm)
+		pm.metadata.Identifiers = fb3Identifiers(pm)
 		return pm, nil
 	}
 }
@@ -127,6 +148,18 @@ func parseDescriptionChildren(dec *xml.Decoder, pm *parsedMeta) error {
 				if pm.metadata.Description == "" {
 					pm.metadata.Description = text
 				}
+			case elDocumentInfo:
+				if err := parseDocumentInfo(dec, tok.Attr, pm); err != nil {
+					return err
+				}
+			case elPaperPublishInfo:
+				if err := parsePaperPublishInfo(dec, pm); err != nil {
+					return err
+				}
+			case elPeriodical:
+				if err := parsePeriodical(dec, pm); err != nil {
+					return err
+				}
 			default:
 				if err := skipElement(dec); err != nil {
 					return err
@@ -134,6 +167,108 @@ func parseDescriptionChildren(dec *xml.Decoder, pm *parsedMeta) error {
 			}
 		case xml.EndElement:
 			if tok.Name.Local == elFb3Description {
+				return nil
+			}
+		}
+	}
+}
+
+// parseDocumentInfo collects the document ISBNs, DOI and source URLs.
+func parseDocumentInfo(dec *xml.Decoder, attrs []xml.Attr, pm *parsedMeta) error {
+	for _, a := range attrs {
+		switch a.Name.Local {
+		case attrDOI:
+			if pm.doi == "" {
+				pm.doi = strings.TrimSpace(a.Value)
+			}
+		case attrSrcURL:
+			if value := strings.TrimSpace(a.Value); value != "" {
+				pm.srcURLs = append(pm.srcURLs, value)
+			}
+		}
+	}
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		switch tok := tok.(type) {
+		case xml.StartElement:
+			if tok.Name.Local != elISBN {
+				if err := skipElement(dec); err != nil {
+					return err
+				}
+				continue
+			}
+			text, err := textOf(dec)
+			if err != nil {
+				return err
+			}
+			if text != "" {
+				pm.documentISBNs = append(pm.documentISBNs, text)
+			}
+		case xml.EndElement:
+			if tok.Name.Local == elDocumentInfo {
+				return nil
+			}
+		}
+	}
+}
+
+// parsePaperPublishInfo collects the ISBNs of one paper publication.
+func parsePaperPublishInfo(dec *xml.Decoder, pm *parsedMeta) error {
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		switch tok := tok.(type) {
+		case xml.StartElement:
+			if tok.Name.Local != elISBN {
+				if err := skipElement(dec); err != nil {
+					return err
+				}
+				continue
+			}
+			text, err := textOf(dec)
+			if err != nil {
+				return err
+			}
+			if text != "" {
+				pm.paperISBNs = append(pm.paperISBNs, text)
+			}
+		case xml.EndElement:
+			if tok.Name.Local == elPaperPublishInfo {
+				return nil
+			}
+		}
+	}
+}
+
+// parsePeriodical collects the ISSN of the source periodical.
+func parsePeriodical(dec *xml.Decoder, pm *parsedMeta) error {
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		switch tok := tok.(type) {
+		case xml.StartElement:
+			if tok.Name.Local != elISSN {
+				if err := skipElement(dec); err != nil {
+					return err
+				}
+				continue
+			}
+			text, err := textOf(dec)
+			if err != nil {
+				return err
+			}
+			if text != "" {
+				pm.periodicalISSNs = append(pm.periodicalISSNs, text)
+			}
+		case xml.EndElement:
+			if tok.Name.Local == elPeriodical {
 				return nil
 			}
 		}
@@ -316,6 +451,34 @@ func parseAnnotation(dec *xml.Decoder) (string, error) {
 			}
 		}
 	}
+}
+
+// fb3Identifiers returns the book's own identifiers first, followed by the
+// source publication and provenance identifiers. Declarations are not deduped.
+func fb3Identifiers(pm parsedMeta) []book.Identifier {
+	var out []book.Identifier
+	appendID := func(value, explicit string) {
+		scheme, id := util.SplitIdentifier(value, explicit)
+		if id == "" {
+			return
+		}
+		out = append(out, book.Identifier{Scheme: scheme, Value: id})
+	}
+	appendID(pm.rootID, "UUID")
+	for _, isbn := range pm.documentISBNs {
+		appendID(isbn, "ISBN")
+	}
+	appendID(pm.doi, "DOI")
+	for _, isbn := range pm.paperISBNs {
+		appendID(isbn, "ISBN")
+	}
+	for _, issn := range pm.periodicalISSNs {
+		appendID(issn, "ISSN")
+	}
+	for _, srcURL := range pm.srcURLs {
+		appendID(srcURL, "URL")
+	}
+	return out
 }
 
 // validateLang keeps the language only if it parses.

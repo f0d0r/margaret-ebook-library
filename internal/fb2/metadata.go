@@ -11,6 +11,7 @@ import (
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/charset"
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
 	xmlx "github.com/f0d0r/margaret-ebook-library/internal/xml"
 	"golang.org/x/text/encoding/htmlindex"
 	"golang.org/x/text/encoding/unicode"
@@ -31,6 +32,10 @@ const (
 	elTitleInfo    = "title-info"
 	elSrcTitleInfo = "src-title-info"
 	elDocumentInfo = "document-info"
+	elPublishInfo  = "publish-info"
+	elISBN         = "isbn"
+	elID           = "id"
+	elSrcURL       = "src-url"
 	elBookTitle    = "book-title"
 	elLang         = "lang"
 	elAuthor       = "author"
@@ -252,12 +257,15 @@ type infoSection struct {
 	annotation string
 	lang       string
 	coverID    string
+	ids        []string
+	srcURLs    []string
+	isbns      []string
 }
 
 // parseDocument streams the XML until the description is consumed,
 // then applies the section fallback rules.
 func parseDocument(dec *xml.Decoder) (parsedMeta, error) {
-	var titleInfo, srcTitleInfo, docInfo infoSection
+	var titleInfo, srcTitleInfo, docInfo, publishInfo infoSection
 	var version string
 	seenRoot := false
 
@@ -283,13 +291,13 @@ func parseDocument(dec *xml.Decoder) (parsedMeta, error) {
 		}
 		switch start.Name.Local {
 		case elDescription:
-			if err := parseDescriptionChildren(dec, &titleInfo, &srcTitleInfo, &docInfo); err != nil {
+			if err := parseDescriptionChildren(dec, &titleInfo, &srcTitleInfo, &docInfo, &publishInfo); err != nil {
 				return parsedMeta{}, err
 			}
-			return assemble(titleInfo, srcTitleInfo, docInfo, version), nil
+			return assemble(titleInfo, srcTitleInfo, docInfo, publishInfo, version), nil
 		case elBody, elBinary:
 			// No description before content: nothing to collect.
-			return assemble(titleInfo, srcTitleInfo, docInfo, version), nil
+			return assemble(titleInfo, srcTitleInfo, docInfo, publishInfo, version), nil
 		default:
 			if err := skipElement(dec); err != nil {
 				return parsedMeta{}, err
@@ -299,11 +307,11 @@ func parseDocument(dec *xml.Decoder) (parsedMeta, error) {
 	if !seenRoot {
 		return parsedMeta{}, fmt.Errorf("no FictionBook root element")
 	}
-	return assemble(titleInfo, srcTitleInfo, docInfo, version), nil
+	return assemble(titleInfo, srcTitleInfo, docInfo, publishInfo, version), nil
 }
 
 // parseDescriptionChildren fills the first occurrence of each subsection.
-func parseDescriptionChildren(dec *xml.Decoder, titleInfo, srcTitleInfo, docInfo *infoSection) error {
+func parseDescriptionChildren(dec *xml.Decoder, titleInfo, srcTitleInfo, docInfo, publishInfo *infoSection) error {
 	seen := map[string]bool{}
 	for {
 		tok, err := dec.Token()
@@ -327,6 +335,8 @@ func parseDescriptionChildren(dec *xml.Decoder, titleInfo, srcTitleInfo, docInfo
 				dst = srcTitleInfo
 			case elDocumentInfo:
 				dst = docInfo
+			case elPublishInfo:
+				dst = publishInfo
 			default:
 				if err := skipElement(dec); err != nil {
 					return err
@@ -393,6 +403,30 @@ func parseInfoSection(dec *xml.Decoder, name string, dst *infoSection) error {
 				}
 				if dst.coverID == "" {
 					dst.coverID = coverID
+				}
+			case elID:
+				text, err := textOf(dec)
+				if err != nil {
+					return err
+				}
+				if text != "" {
+					dst.ids = append(dst.ids, text)
+				}
+			case elSrcURL:
+				text, err := textOf(dec)
+				if err != nil {
+					return err
+				}
+				if text != "" {
+					dst.srcURLs = append(dst.srcURLs, text)
+				}
+			case elISBN:
+				text, err := textOf(dec)
+				if err != nil {
+					return err
+				}
+				if text != "" {
+					dst.isbns = append(dst.isbns, text)
 				}
 			default:
 				if err := skipElement(dec); err != nil {
@@ -600,7 +634,7 @@ func skipElement(dec *xml.Decoder) error {
 
 // assemble merges sections: title-info wins, then src-title-info;
 // authors may come from document-info. Missing values stay empty.
-func assemble(titleInfo, srcTitleInfo, docInfo infoSection, version string) parsedMeta {
+func assemble(titleInfo, srcTitleInfo, docInfo, publishInfo infoSection, version string) parsedMeta {
 	pm := parsedMeta{version: version}
 	for _, s := range []infoSection{titleInfo, srcTitleInfo} {
 		if pm.metadata.Title == "" {
@@ -622,7 +656,31 @@ func assemble(titleInfo, srcTitleInfo, docInfo infoSection, version string) pars
 	if lang := strings.TrimSpace(titleInfo.lang); lang != "" {
 		pm.metadata.Languages = []string{lang}
 	}
+	pm.metadata.Identifiers = fb2Identifiers(docInfo, publishInfo)
 	return pm
+}
+
+// fb2Identifiers returns the document's own id first, followed by the
+// source publication ISBNs and source URLs. Declarations are not deduped.
+func fb2Identifiers(docInfo, publishInfo infoSection) []book.Identifier {
+	var out []book.Identifier
+	appendID := func(value, explicit string) {
+		scheme, id := util.SplitIdentifier(value, explicit)
+		if id == "" {
+			return
+		}
+		out = append(out, book.Identifier{Scheme: scheme, Value: id})
+	}
+	for _, id := range docInfo.ids {
+		appendID(id, "")
+	}
+	for _, isbn := range publishInfo.isbns {
+		appendID(isbn, "ISBN")
+	}
+	for _, srcURL := range docInfo.srcURLs {
+		appendID(srcURL, "URL")
+	}
+	return out
 }
 
 // fbVersion maps the root namespace to the declared version, else "".

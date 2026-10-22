@@ -13,6 +13,8 @@ import (
 	"path"
 	"strings"
 
+	"github.com/f0d0r/margaret-ebook-library/book"
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
 	xmlx "github.com/f0d0r/margaret-ebook-library/internal/xml"
 	"golang.org/x/text/language"
 )
@@ -32,11 +34,13 @@ func (p *Package) ResolvePath(href string) string {
 }
 
 type Metadata struct {
-	Title        []Title   `xml:"title"`
-	Creators     []Creator `xml:"creator"`
-	Descriptions []string  `xml:"description"`
-	Languages    []string  `xml:"language"`
-	Metas        []Meta    `xml:"meta"`
+	Title        []Title      `xml:"title"`
+	Creators     []Creator    `xml:"creator"`
+	Descriptions []string     `xml:"description"`
+	Languages    []string     `xml:"language"`
+	Identifiers  []Identifier `xml:"identifier"`
+	Sources      []Identifier `xml:"source"`
+	Metas        []Meta       `xml:"meta"`
 
 	// DirectLanguages holds capitalized language elements placed directly
 	// under metadata, as found in unbalanced MS-era packages where they
@@ -51,15 +55,25 @@ type Metadata struct {
 
 // DcMetadata carries OEB 1.x Dublin Core elements with capitalized names.
 type DcMetadata struct {
-	Titles       []Title   `xml:"Title"`
-	Creators     []Creator `xml:"Creator"`
-	Descriptions []string  `xml:"Description"`
-	Languages    []string  `xml:"Language"`
+	Titles       []Title      `xml:"Title"`
+	Creators     []Creator    `xml:"Creator"`
+	Descriptions []string     `xml:"Description"`
+	Languages    []string     `xml:"Language"`
+	Identifiers  []Identifier `xml:"Identifier"`
+	Sources      []Identifier `xml:"Source"`
 }
 
 // XMetadata carries OEB 1.x extended metadata elements.
 type XMetadata struct {
 	Metas []Meta `xml:"meta"`
+}
+
+// Identifier is a raw identifier-bearing Dublin Core element
+// (dc:identifier or dc:source).
+type Identifier struct {
+	Value  string `xml:",chardata"`
+	ID     string `xml:"id,attr"`
+	Scheme string `xml:"scheme,attr"`
 }
 
 type Title struct {
@@ -303,6 +317,73 @@ func metas(p Package) []Meta {
 	out := make([]Meta, 0, len(p.Metadata.Metas)+len(p.Metadata.XMeta.Metas))
 	out = append(out, p.Metadata.Metas...)
 	return append(out, p.Metadata.XMeta.Metas...)
+}
+
+// Identifiers extracts dc:identifier and dc:source values from a Package.
+// dc:identifier values come first, followed by dc:source values; each group
+// preserves its declared order. The scheme is resolved from the OPF 2 scheme
+// attribute, an EPUB 3 identifier-type meta refinement, or a value prefix. A
+// matching scheme prefix is removed from the value; values are not validated
+// or normalized.
+func (p Package) Identifiers() []book.Identifier {
+	count := len(p.Metadata.Identifiers) + len(p.Metadata.Sources)
+	if p.Metadata.Dc != nil {
+		count += len(p.Metadata.Dc.Identifiers) + len(p.Metadata.Dc.Sources)
+	}
+	ids := make([]Identifier, 0, count)
+	ids = append(ids, p.Metadata.Identifiers...)
+	if p.Metadata.Dc != nil {
+		ids = append(ids, p.Metadata.Dc.Identifiers...)
+	}
+	ids = append(ids, p.Metadata.Sources...)
+	if p.Metadata.Dc != nil {
+		ids = append(ids, p.Metadata.Dc.Sources...)
+	}
+
+	allMetas := metas(p)
+	out := make([]book.Identifier, 0, len(ids))
+	for _, id := range ids {
+		explicit := strings.TrimSpace(id.Scheme)
+		if explicit == "" {
+			explicit = identifierTypeScheme(allMetas, id.ID)
+		}
+		scheme, value := util.SplitIdentifier(id.Value, explicit)
+		if value == "" {
+			continue
+		}
+		out = append(out, book.Identifier{Scheme: scheme, Value: value})
+	}
+	return out
+}
+
+// identifierTypeScheme resolves an EPUB 3 identifier-type meta refinement.
+// Only the ONIX codelist 5 codes that map to a known scheme are interpreted.
+func identifierTypeScheme(all []Meta, id string) string {
+	if id == "" {
+		return ""
+	}
+	refines := "#" + id
+	for _, meta := range all {
+		if !strings.EqualFold(strings.TrimSpace(meta.Property), "identifier-type") ||
+			strings.TrimSpace(meta.Refines) != refines {
+			continue
+		}
+		scheme := strings.TrimSpace(meta.Scheme)
+		if strings.EqualFold(scheme, "onix:codelist5") {
+			switch strings.TrimSpace(meta.Value) {
+			case "02", "15", "24":
+				return "ISBN"
+			case "06":
+				return "DOI"
+			}
+			return ""
+		}
+		if scheme != "" {
+			return scheme
+		}
+		return strings.TrimSpace(meta.Value)
+	}
+	return ""
 }
 
 // ItemsByProperty returns all manifest items that have the specified property.

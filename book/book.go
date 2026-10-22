@@ -1,5 +1,7 @@
 package book
 
+import "strings"
+
 // Book represents a parsed e-book (EPUB, MOBI, etc.).
 // It provides access to normalized metadata, embedded resources, format type,
 // and format version.
@@ -18,6 +20,19 @@ type Book interface {
 	Version() string
 }
 
+// Identifier is an identifier declared by the e-book metadata.
+type Identifier struct {
+	// Scheme names the identifier system (e.g. "ISBN", "DOI", "UUID",
+	// "calibre"). It is empty when the format does not state one and no
+	// scheme prefix is present.
+	Scheme string
+
+	// Value is the identifier with any detected scheme prefix removed and
+	// surrounding whitespace trimmed. It is not otherwise validated or
+	// normalized.
+	Value string
+}
+
 // Metadata represents the extracted core information of an e-book.
 type Metadata struct {
 	// Title is the main title of the e-book.
@@ -31,4 +46,20 @@ type Metadata struct {
 
 	// Languages is the language(s) of the book.
 	Languages []string
+
+	// Identifiers are the identifiers declared by the e-book metadata, in
+	// source order. Scheme prefixes are moved to Identifier.Scheme; values
+	// are not otherwise validated or normalized.
+	Identifiers []Identifier
+}
+
+// Identifier returns the first identifier with the given scheme, matched
+// case-insensitively. It returns false when no such identifier exists.
+func (m Metadata) Identifier(scheme string) (string, bool) {
+	for _, id := range m.Identifiers {
+		if id.Value != "" && strings.EqualFold(id.Scheme, scheme) {
+			return id.Value, true
+		}
+	}
+	return "", false
 }
