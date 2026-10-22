@@ -2,6 +2,7 @@ package fb2
 
 import (
 	"bytes"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -26,6 +27,13 @@ const metadataFB2 = `<?xml version="1.0" encoding="UTF-8"?>
 </annotation>
 <lang>hu</lang>
 </title-info>
+<document-info>
+<author><nickname>docmaker</nickname></author>
+<id>06182534-7d14-4ef9-a738-843ff09973d8</id>
+<src-url>http://example.com/source</src-url>
+<src-ocr>OCR Person</src-ocr>
+</document-info>
+<publish-info><isbn>978-0-306-40615-7</isbn></publish-info>
 </description>
 <body><section><p>Hello</p></section></body>
 </FictionBook>`
@@ -68,6 +76,86 @@ func TestParseMetadataFull(t *testing.T) {
 	}
 	if version != "2.0" {
 		t.Errorf("version = %q, want %q", version, "2.0")
+	}
+	wantIdentifiers := []book.Identifier{
+		{Value: "06182534-7d14-4ef9-a738-843ff09973d8"},
+		{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+		{Scheme: "URL", Value: "http://example.com/source"},
+	}
+	if !reflect.DeepEqual(md.Identifiers, wantIdentifiers) {
+		t.Errorf("Identifiers = %+v, want %+v", md.Identifiers, wantIdentifiers)
+	}
+}
+
+func TestParseMetadataIdentifiers(t *testing.T) {
+	wrap := func(desc string) []byte {
+		return []byte(`<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0"><description>` + desc + `</description><body><p>x</p></body></FictionBook>`)
+	}
+
+	tests := []struct {
+		name string
+		desc string
+		want []book.Identifier
+	}{
+		{
+			name: "own id before sources",
+			desc: `<document-info><id>doc-id</id><src-url>https://example.com/book</src-url></document-info>` +
+				`<publish-info><isbn>978-0-306-40615-7</isbn></publish-info>`,
+			want: []book.Identifier{
+				{Value: "doc-id"},
+				{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+				{Scheme: "URL", Value: "https://example.com/book"},
+			},
+		},
+		{
+			name: "multiple isbns preserved",
+			desc: `<publish-info><isbn>978-0-306-40615-7</isbn><isbn>978-0-306-40615-7</isbn><isbn>0306406152</isbn></publish-info>`,
+			want: []book.Identifier{
+				{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+				{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+				{Scheme: "ISBN", Value: "0306406152"},
+			},
+		},
+		{
+			name: "scheme prefixes are stripped",
+			desc: `<document-info><id>uuid:06182534-7d14-4ef9-a738-843ff09973d8</id></document-info>` +
+				`<publish-info><isbn>urn:isbn:978-0-306-40615-7</isbn><isbn>isbn:0306406152</isbn></publish-info>`,
+			want: []book.Identifier{
+				{Scheme: "UUID", Value: "06182534-7d14-4ef9-a738-843ff09973d8"},
+				{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+				{Scheme: "ISBN", Value: "0306406152"},
+			},
+		},
+		{
+			name: "non matching prefix stays in value",
+			desc: `<publish-info><isbn>calibre:978-0-306-40615-7</isbn></publish-info>`,
+			want: []book.Identifier{{Scheme: "ISBN", Value: "calibre:978-0-306-40615-7"}},
+		},
+		{
+			name: "empty values skipped",
+			desc: `<document-info><id>  </id><src-url> </src-url></document-info>` +
+				`<publish-info><isbn> </isbn></publish-info>`,
+			want: nil,
+		},
+		{
+			name: "src ocr is not an identifier",
+			desc: `<document-info><src-ocr>OCR Person</src-ocr></document-info>`,
+			want: nil,
+		},
+		{
+			name: "no identifier fields",
+			desc: `<title-info><book-title>T</book-title></title-info>`,
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md, _ := parseBytes(t, wrap(tt.desc))
+			if !reflect.DeepEqual(md.Identifiers, tt.want) {
+				t.Errorf("Identifiers = %+v, want %+v", md.Identifiers, tt.want)
+			}
+		})
 	}
 }
 

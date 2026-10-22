@@ -4,6 +4,15 @@
 
 ### Added
 
+- ISBN-10/ISBN-13 handling in `tools`: `IsValidISBN` and `ParseISBN`
+  normalize and validate common URN (`urn:isbn:`), labelled, spaced, and
+  hyphenated forms. Parsed values report their `Kind` and convert with
+  `ToISBN10`/`ToISBN13`; 979-prefixed ISBN-13 values have no ISBN-10
+  equivalent.
+- Identifier extraction from formats that declare them (EPUB, MOBI/KF8,
+  eReader, PalmDOC, FB2/FB3 and LIT): `Metadata.Identifiers` exposes raw
+  scheme/value pairs and `Metadata.Identifier` provides case-insensitive
+  lookup.
 - eReader reading (`.pdb`, Peanut Press `PNRdPPrs`/`PNPdPPrs`): new
   `book.EREADER` file type (`ebook.EREADER`) with title/author metadata from
   the Dropbook (132-byte record 0) metadata record, PDB name fallback for

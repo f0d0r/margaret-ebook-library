@@ -14,6 +14,7 @@ import (
 // most common types without needing a second import of "book".
 type Book = book.Book
 type Metadata = book.Metadata
+type Identifier = book.Identifier
 type Resource = book.Resource
 type ResourceSet = book.ResourceSet
 type ReadingOrderItem = book.ReadingOrderItem

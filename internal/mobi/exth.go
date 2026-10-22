@@ -9,10 +9,14 @@ import (
 const (
 	AUTHOR           = 100
 	DESCRIPTION      = 103
+	ISBN             = 104
+	SOURCE           = 112
+	ASIN             = 113
 	KF8_HEADER_INDEX = 121
 	COVER_OFFSET     = 201
 	THUMBNAIL_OFFSET = 202
 	UPDATED_TITLE    = 503
+	ASIN_5XX         = 504
 	LANGUAGE         = 524
 )
 

@@ -33,6 +33,10 @@ func main() {
 	fmt.Printf("File Type: %s\n", book.FileType())
 	fmt.Printf("Version: %s\n", book.Version())
 
+	for identifier := range bookMeta.Identifiers {
+		fmt.Printf("Identifier: %s (Scheme: %s)\n", bookMeta.Identifiers[identifier].Value, bookMeta.Identifiers[identifier].Scheme)
+	}
+
 	if book.Resources() != nil {
 		if cover, ok := book.Resources().CoverImage(); ok {
 			fmt.Printf("Cover: %s (%d bytes) media type: %s href: %s\n", cover.Name, cover.Size, cover.MediaType, cover.ResolvedHref)

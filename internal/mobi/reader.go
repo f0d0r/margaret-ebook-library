@@ -82,6 +82,7 @@ func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 			Authors:     mobiDoc.Authors(),
 			Description: mobiDoc.Description(),
 			Languages:   languages,
+			Identifiers: mobiDoc.Identifiers(),
 		},
 		resources: book.NewResourceSet(all, readingOrder, coverAliased),
 		version:   mobiDoc.Version(),
@@ -110,6 +111,7 @@ func (r *MobiReader) readPalmDoc(pdbDb *pdb.PdbDb) (book.Book, error) {
 	var authors []string
 	var description string
 	var languages []string
+	var identifiers []book.Identifier
 	if isHTML {
 		if meta, merr := opf.ParseMetadata(strings.NewReader(decodeString(prefix, CP1252))); merr == nil {
 			pkg := opf.Package{Metadata: meta}
@@ -119,6 +121,7 @@ func (r *MobiReader) readPalmDoc(pdbDb *pdb.PdbDb) (book.Book, error) {
 			authors = pkg.Authors()
 			description = pkg.Description()
 			languages = pkg.Languages()
+			identifiers = pkg.Identifiers()
 		}
 	}
 
@@ -151,6 +154,7 @@ func (r *MobiReader) readPalmDoc(pdbDb *pdb.PdbDb) (book.Book, error) {
 			Authors:     authors,
 			Description: description,
 			Languages:   languages,
+			Identifiers: identifiers,
 		},
 		resources: book.NewResourceSet([]*book.Resource{content}, readingOrder, nil),
 		version:   mobiDoc.Version(),

@@ -10,7 +10,7 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 ## Features
 
 - Single stable `Book` abstraction over all supported formats
-- Normalized metadata (title, authors, description, languages)
+- Normalized metadata (title, authors, description, languages, identifiers)
 - Lazy streaming access to resources (no full in-memory load)
 - On-the-fly conversion of text resources to plain text (search indexing, LLM input, TTS)
 - Content fingerprinting (MinHash / SimHash) for deduplication and similarity
@@ -226,6 +226,32 @@ if err != nil {
 }
 fmt.Printf("Cover %q (%s): %d bytes\n", cover.Name, cover.MediaType, len(data))
 ```
+
+### Identifiers
+
+Identifiers are exposed as raw scheme/value pairs. Scheme prefixes such as
+`urn:isbn:` or `calibre:` are moved to `Identifier.Scheme`; values are
+otherwise not validated or normalized.
+
+```go
+for _, id := range meta.Identifiers {
+    fmt.Printf("%s: %s\n", id.Scheme, id.Value)
+}
+
+if isbn, ok := meta.Identifier("ISBN"); ok {
+    fmt.Println("ISBN:", isbn)
+}
+```
+
+`Metadata.Identifier` returns the first match case-insensitively. For EPUB,
+`dc:source` identifiers (the source publication the ebook was derived from)
+follow the publication's own `dc:identifier` values. FB2 and FB3 follow the
+same own-before-source order: FB2 reads `document-info/id`,
+`publish-info/isbn`, and `document-info/src-url`; FB3 reads the root UUID,
+`document-info/isbn`/`@doi`, `paper-publish-info/isbn`,
+`periodical/issn`, and `document-info/@src-url`. LIT reads the embedded
+OEB 1.0 OPF's `dc:Identifier` and `dc:Source` values, including their
+`scheme` attributes.
 
 ### Overriding the safety limits
 
@@ -467,6 +493,31 @@ Or from a blob:
 ```go
 hash, err := tools.CalculateFileHashFromBlob(ebook.NewPathBlob("books/my-book.epub"))
 ```
+
+### ISBN validation and conversion
+
+`IsValidISBN` accepts ISBN-10 and ISBN-13 identifiers in common forms such as
+`urn:isbn:` prefixes, `ISBN` labels, spaces, and hyphens:
+
+```go
+if tools.IsValidISBN("urn:isbn:978-0-306-40615-7") {
+    // valid ISBN-13
+}
+
+isbn, ok := tools.ParseISBN("ISBN-10: 0-306-40615-2")
+if ok {
+    fmt.Println(isbn, isbn.Kind()) // 0306406152 10
+
+    isbn13, _ := isbn.ToISBN13()
+    fmt.Println(isbn13) // 9780306406157
+
+    isbn10, _ := isbn13.ToISBN10()
+    fmt.Println(isbn10) // 0306406152
+}
+```
+
+`ToISBN10` returns `false` for 979-prefixed ISBN-13 values, which have no
+ISBN-10 equivalent.
 
 ### Content fingerprinting (MinHash / SimHash)
 

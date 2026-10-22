@@ -1,6 +1,7 @@
 package fb3
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -8,7 +9,8 @@ import (
 )
 
 const metadataFB3 = `<?xml version="1.0" encoding="UTF-8"?>` +
-	`<fb3-description xmlns="http://www.fictionbook.org/FictionBook3/description" version="1.0">` +
+	`<fb3-description xmlns="http://www.fictionbook.org/FictionBook3/description" id="6079f35b-49cc-4211-adba-919ccaaff4f2" version="1.0">` +
+	`<periodical id="18ea4ccf-daa9-102b-9003-10751c2f945c"><title><main>Source Mag</main></title><issn>1234-5678</issn><issue number="5" year="1998">Number 5</issue></periodical>` +
 	`<title><main>Test Book</main><sub>ignored</sub><alt>ignored alt</alt></title>` +
 	`<sequence><title><main>Series</main></title></sequence>` +
 	`<fb3-relations>` +
@@ -21,7 +23,8 @@ const metadataFB3 = `<?xml version="1.0" encoding="UTF-8"?>` +
 	`<fb3-classification><subject>test</subject></fb3-classification>` +
 	`<lang>hu</lang>` +
 	`<written><lang>ru</lang></written>` +
-	`<document-info created="2018-04-16T00:00:00"/>` +
+	`<document-info created="2018-04-16T00:00:00" updated="2018-04-16T00:00:00" doi="10.1000/xyz" src-url="http://example.com/source"><isbn>978-0-306-40615-7</isbn></document-info>` +
+	`<paper-publish-info title="Print Edition"><isbn>978-3-16-148410-0</isbn></paper-publish-info>` +
 	`<annotation><p>First <strong>para</strong> and <a href="http://example.com">link</a>.</p><br/><p>Second para.</p></annotation>` +
 	`</fb3-description>`
 
@@ -60,6 +63,98 @@ func TestParseDescriptionFull(t *testing.T) {
 	}
 	if len(md.Languages) != 1 || md.Languages[0] != "hu" {
 		t.Errorf("Languages = %q, want [hu]", md.Languages)
+	}
+	wantIdentifiers := []book.Identifier{
+		{Scheme: "UUID", Value: "6079f35b-49cc-4211-adba-919ccaaff4f2"},
+		{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+		{Scheme: "DOI", Value: "10.1000/xyz"},
+		{Scheme: "ISBN", Value: "978-3-16-148410-0"},
+		{Scheme: "ISSN", Value: "1234-5678"},
+		{Scheme: "URL", Value: "http://example.com/source"},
+	}
+	if !reflect.DeepEqual(md.Identifiers, wantIdentifiers) {
+		t.Errorf("Identifiers = %+v, want %+v", md.Identifiers, wantIdentifiers)
+	}
+}
+
+func TestParseDescriptionIdentifiers(t *testing.T) {
+	wrap := func(attrs, body string) []byte {
+		return []byte(`<fb3-description ` + attrs + `>` + body + `</fb3-description>`)
+	}
+
+	tests := []struct {
+		name string
+		data []byte
+		want []book.Identifier
+	}{
+		{
+			name: "own identifiers before sources",
+			data: wrap(`id="book-id"`, `<document-info created="2024-01-01T00:00:00" updated="2024-01-01T00:00:00"><isbn>978-0-306-40615-7</isbn></document-info>`+
+				`<paper-publish-info title="Print"><isbn>978-3-16-148410-0</isbn></paper-publish-info>`+
+				`<document-info created="2024-01-01T00:00:00" updated="2024-01-01T00:00:00" src-url="https://example.com/book"/>`),
+			want: []book.Identifier{
+				{Scheme: "UUID", Value: "book-id"},
+				{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+				{Scheme: "ISBN", Value: "978-3-16-148410-0"},
+				{Scheme: "URL", Value: "https://example.com/book"},
+			},
+		},
+		{
+			name: "multiple isbns and paper publications preserved",
+			data: wrap(`id="book-id"`, `<document-info created="2024-01-01T00:00:00" updated="2024-01-01T00:00:00"><isbn>978-0-306-40615-7</isbn><isbn>0306406152</isbn></document-info>`+
+				`<paper-publish-info title="Print 1"><isbn>978-3-16-148410-0</isbn></paper-publish-info>`+
+				`<paper-publish-info title="Print 2"><isbn>978-0-306-40615-7</isbn></paper-publish-info>`),
+			want: []book.Identifier{
+				{Scheme: "UUID", Value: "book-id"},
+				{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+				{Scheme: "ISBN", Value: "0306406152"},
+				{Scheme: "ISBN", Value: "978-3-16-148410-0"},
+				{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+			},
+		},
+		{
+			name: "scheme prefixes are stripped",
+			data: wrap(`id="uuid:06182534-7d14-4ef9-a738-843ff09973d8"`, `<periodical><issn>issn:1234-5678</issn></periodical>`+
+				`<document-info created="2024-01-01T00:00:00" updated="2024-01-01T00:00:00" doi="doi:10.1000/xyz" src-url="https://example.com/book"><isbn>urn:isbn:978-0-306-40615-7</isbn></document-info>`+
+				`<paper-publish-info title="Print"><isbn>isbn:978-3-16-148410-0</isbn></paper-publish-info>`),
+			want: []book.Identifier{
+				{Scheme: "UUID", Value: "06182534-7d14-4ef9-a738-843ff09973d8"},
+				{Scheme: "ISBN", Value: "978-0-306-40615-7"},
+				{Scheme: "DOI", Value: "10.1000/xyz"},
+				{Scheme: "ISBN", Value: "978-3-16-148410-0"},
+				{Scheme: "ISSN", Value: "1234-5678"},
+				{Scheme: "URL", Value: "https://example.com/book"},
+			},
+		},
+		{
+			name: "non matching prefix stays in value",
+			data: wrap(`id="book-id"`, `<document-info created="2024-01-01T00:00:00" updated="2024-01-01T00:00:00"><isbn>calibre:978-0-306-40615-7</isbn></document-info>`),
+			want: []book.Identifier{
+				{Scheme: "UUID", Value: "book-id"},
+				{Scheme: "ISBN", Value: "calibre:978-0-306-40615-7"},
+			},
+		},
+		{
+			name: "empty values skipped",
+			data: wrap(`id=" "`, `<document-info created="2024-01-01T00:00:00" updated="2024-01-01T00:00:00" doi=" " src-url=" "><isbn> </isbn></document-info>`+
+				`<paper-publish-info title="Print"><isbn> </isbn></paper-publish-info>`+
+				`<periodical><issn> </issn></periodical>`),
+			want: nil,
+		},
+		{
+			name: "no identifier fields",
+			data: wrap(``, `<title><main>T</main></title><lang>en</lang>`),
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md := parseFB3(t, tt.data)
+			if !reflect.DeepEqual(md.Identifiers, tt.want) {
+				t.Errorf("Identifiers = %+v, want %+v", md.Identifiers, tt.want)
+			}
+		})
 	}
 }
 
