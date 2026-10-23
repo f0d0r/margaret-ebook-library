@@ -4,6 +4,17 @@
 
 ### Added
 
+- Series extraction from EPUB/KEPUB, LIT, PalmDOC, FB2 and FB3 metadata:
+  `Metadata.Series` and `Metadata.SeriesIndex`. EPUB 3
+  `belongs-to-collection` with a `collection-type=series` refinement and
+  `group-position` is preferred, with `calibre:series`/`calibre:series_index`
+  as fallback; FB2 uses the first non-empty `title-info/sequence` with
+  `publish-info/sequence` fallback; FB3 uses the outermost direct
+  `fb3-description/sequence` with `paper-publish-info/sequence` fallback.
+  Values are trimmed, the index is kept verbatim (no float conversion or
+  Calibre-style `1.0` default), and the first non-empty series wins. Canonical
+  EPUB 3 series without `group-position` yield an empty index. MOBI/KF8,
+  eReader, CHM and LRF expose no series metadata and leave both fields empty.
 - ISBN-10/ISBN-13 handling in `tools`: `IsValidISBN` and `ParseISBN`
   normalize and validate common URN (`urn:isbn:`), labelled, spaced, and
   hyphenated forms. Parsed values report their `Kind` and convert with

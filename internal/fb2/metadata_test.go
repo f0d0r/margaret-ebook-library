@@ -226,6 +226,131 @@ func TestParseMetadataPublisherAndDate(t *testing.T) {
 	}
 }
 
+func TestParseMetadataSeries(t *testing.T) {
+	wrap := func(desc string) []byte {
+		return []byte(`<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0"><description>` + desc + `</description><body><p>x</p></body></FictionBook>`)
+	}
+
+	tests := []struct {
+		name      string
+		desc      string
+		want      string
+		wantIndex string
+	}{
+		{
+			name:      "title-info sequence",
+			desc:      `<title-info><sequence name="Saga" number="2"/></title-info>`,
+			want:      "Saga",
+			wantIndex: "2",
+		},
+		{
+			name: "title-info wins over publish-info",
+			desc: `<title-info><sequence name="Saga" number="2"/></title-info>` +
+				`<publish-info><sequence name="Published" number="9"/></publish-info>`,
+			want:      "Saga",
+			wantIndex: "2",
+		},
+		{
+			name:      "publish-info fallback",
+			desc:      `<title-info></title-info><publish-info><sequence name="Published" number="1"/></publish-info>`,
+			want:      "Published",
+			wantIndex: "1",
+		},
+		{
+			name: "first non-empty title-info sequence wins",
+			desc: `<title-info><sequence name=" "/>` +
+				`<sequence name="Second" number="2"/></title-info>`,
+			want:      "Second",
+			wantIndex: "2",
+		},
+		{
+			name: "first of multiple title-info sequences wins",
+			desc: `<title-info><sequence name="First" number="1"/>` +
+				`<sequence name="Second" number="2"/></title-info>`,
+			want:      "First",
+			wantIndex: "1",
+		},
+		{
+			name: "src-title-info is ignored",
+			desc: `<title-info></title-info>` +
+				`<src-title-info><sequence name="Source" number="3"/></src-title-info>`,
+			want:      "",
+			wantIndex: "",
+		},
+		{
+			name:      "missing number",
+			desc:      `<title-info><sequence name="Saga"/></title-info>`,
+			want:      "Saga",
+			wantIndex: "",
+		},
+		{
+			name:      "number trimmed verbatim",
+			desc:      `<title-info><sequence name="Saga" number=" 02 "/></title-info>`,
+			want:      "Saga",
+			wantIndex: "02",
+		},
+		{
+			name:      "negative number",
+			desc:      `<title-info><sequence name="Saga" number="-1"/></title-info>`,
+			want:      "Saga",
+			wantIndex: "-1",
+		},
+		{
+			name:      "malformed number kept",
+			desc:      `<title-info><sequence name="Saga" number="x"/></title-info>`,
+			want:      "Saga",
+			wantIndex: "x",
+		},
+		{
+			name: "nested sequence ignored",
+			desc: `<title-info><sequence name="Outer" number="1">` +
+				`<sequence name="Inner" number="2"/></sequence></title-info>`,
+			want:      "Outer",
+			wantIndex: "1",
+		},
+		{
+			name: "publish-info first non-empty sequence wins",
+			desc: `<publish-info><sequence name=" "/>` +
+				`<sequence name="Later" number="4"/></publish-info>`,
+			want:      "Later",
+			wantIndex: "4",
+		},
+		{
+			name:      "name trimmed",
+			desc:      `<title-info><sequence name="  Saga  " number="2"/></title-info>`,
+			want:      "Saga",
+			wantIndex: "2",
+		},
+		{
+			name:      "number without name ignored",
+			desc:      `<title-info><sequence number="2"/></title-info>`,
+			want:      "",
+			wantIndex: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md, _ := parseBytes(t, wrap(tt.desc))
+			if md.Series != tt.want || md.SeriesIndex != tt.wantIndex {
+				t.Errorf("Series = (%q, %q), want (%q, %q)",
+					md.Series, md.SeriesIndex, tt.want, tt.wantIndex)
+			}
+		})
+	}
+
+	t.Run("prefixed elements", func(t *testing.T) {
+		data := `<fb:FictionBook xmlns:fb="http://www.gribuser.ru/xml/fictionbook/2.0"><fb:description>` +
+			`<fb:title-info><fb:sequence name="Saga" number="5"/></fb:title-info>` +
+			`</fb:description><fb:body><fb:p>x</fb:p></fb:body></fb:FictionBook>`
+		md, _ := parseBytes(t, []byte(data))
+		if md.Series != "Saga" || md.SeriesIndex != "5" {
+			t.Errorf("Series = (%q, %q), want (%q, %q)",
+				md.Series, md.SeriesIndex, "Saga", "5")
+		}
+	})
+}
+
 func TestParseMetadataFallbacks(t *testing.T) {
 	wrap := func(desc string) []byte {
 		return []byte(`<FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0"><description>` + desc + `</description><body><p>x</p></body></FictionBook>`)

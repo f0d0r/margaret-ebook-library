@@ -63,6 +63,15 @@ type Metadata struct {
 	// metadata. It is returned as declared, without parsing or validation,
 	// so it may contain arbitrary or malformed text.
 	PublicationDate string
+
+	// Series is the series name declared by the e-book metadata, with
+	// surrounding whitespace trimmed.
+	Series string
+
+	// SeriesIndex is the raw series position declared by the e-book
+	// metadata, with surrounding whitespace trimmed but without conversion
+	// or normalization. It is empty when the source declares no position.
+	SeriesIndex string
 }
 
 // Identifier returns the first identifier with the given scheme, matched

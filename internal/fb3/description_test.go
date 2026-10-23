@@ -79,6 +79,135 @@ func TestParseDescriptionFull(t *testing.T) {
 	if !reflect.DeepEqual(md.Identifiers, wantIdentifiers) {
 		t.Errorf("Identifiers = %+v, want %+v", md.Identifiers, wantIdentifiers)
 	}
+	if md.Series != "Series" || md.SeriesIndex != "" {
+		t.Errorf("Series = (%q, %q), want (%q, %q)", md.Series, md.SeriesIndex, "Series", "")
+	}
+}
+
+func TestParseDescriptionSeries(t *testing.T) {
+	wrap := func(inner string) []byte {
+		return []byte(`<fb3-description xmlns="http://www.fictionbook.org/FictionBook3/description">` +
+			`<title><main>Test Book</main></title>` + inner + `</fb3-description>`)
+	}
+
+	tests := []struct {
+		name      string
+		inner     string
+		want      string
+		wantIndex string
+	}{
+		{
+			name:      "direct sequence",
+			inner:     `<sequence number="2"><title><main>Saga</main></title></sequence>`,
+			want:      "Saga",
+			wantIndex: "2",
+		},
+		{
+			name:      "direct sequence without number",
+			inner:     `<sequence><title><main>Saga</main></title></sequence>`,
+			want:      "Saga",
+			wantIndex: "",
+		},
+		{
+			name: "first non-empty direct sequence wins",
+			inner: `<sequence number="1"><title><main>First</main></title></sequence>` +
+				`<sequence number="2"><title><main>Second</main></title></sequence>`,
+			want:      "First",
+			wantIndex: "1",
+		},
+		{
+			name: "empty first sequence falls through",
+			inner: `<sequence number="1"><title><main>  </main></title></sequence>` +
+				`<sequence number="2"><title><main>Second</main></title></sequence>`,
+			want:      "Second",
+			wantIndex: "2",
+		},
+		{
+			name: "nested sequence ignored",
+			inner: `<sequence number="1"><title><main>Outer</main></title>` +
+				`<sequence number="2"><title><main>Inner</main></title></sequence></sequence>`,
+			want:      "Outer",
+			wantIndex: "1",
+		},
+		{
+			name:      "paper-publish-info fallback",
+			inner:     `<paper-publish-info title="Print"><sequence>Paper Saga</sequence></paper-publish-info>`,
+			want:      "Paper Saga",
+			wantIndex: "",
+		},
+		{
+			name: "direct sequence wins over paper fallback",
+			inner: `<sequence number="2"><title><main>Saga</main></title></sequence>` +
+				`<paper-publish-info title="Print"><sequence>Paper Saga</sequence></paper-publish-info>`,
+			want:      "Saga",
+			wantIndex: "2",
+		},
+		{
+			name: "first non-empty paper sequence wins",
+			inner: `<paper-publish-info title="Print 1"><sequence> </sequence></paper-publish-info>` +
+				`<paper-publish-info title="Print 2"><sequence>Second Paper</sequence></paper-publish-info>`,
+			want:      "Second Paper",
+			wantIndex: "",
+		},
+		{
+			name:      "missing",
+			inner:     `<lang>en</lang>`,
+			want:      "",
+			wantIndex: "",
+		},
+		{
+			name:      "name trimmed",
+			inner:     `<sequence><title><main>  Saga  </main></title></sequence>`,
+			want:      "Saga",
+			wantIndex: "",
+		},
+		{
+			name:      "number trimmed verbatim",
+			inner:     `<sequence number=" 02 "><title><main>Saga</main></title></sequence>`,
+			want:      "Saga",
+			wantIndex: "02",
+		},
+		{
+			name:      "malformed number kept",
+			inner:     `<sequence number="x"><title><main>Saga</main></title></sequence>`,
+			want:      "Saga",
+			wantIndex: "x",
+		},
+		{
+			name:      "title sub and alt ignored",
+			inner:     `<sequence number="4"><title><main>Saga</main><sub>Sub</sub><alt>Alt</alt></title></sequence>`,
+			want:      "Saga",
+			wantIndex: "4",
+		},
+		{
+			name:      "number without name ignored",
+			inner:     `<sequence number="2"><title><main> </main></title></sequence>`,
+			want:      "",
+			wantIndex: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md := parseFB3(t, wrap(tt.inner))
+			if md.Series != tt.want || md.SeriesIndex != tt.wantIndex {
+				t.Errorf("Series = (%q, %q), want (%q, %q)",
+					md.Series, md.SeriesIndex, tt.want, tt.wantIndex)
+			}
+		})
+	}
+
+	t.Run("prefixed elements", func(t *testing.T) {
+		data := `<fb3d:fb3-description xmlns:fb3d="http://www.fictionbook.org/FictionBook3/description">` +
+			`<fb3d:title><fb3d:main>Test Book</fb3d:main></fb3d:title>` +
+			`<fb3d:sequence number="5"><fb3d:title><fb3d:main>Saga</fb3d:main></fb3d:title></fb3d:sequence>` +
+			`</fb3d:fb3-description>`
+		md := parseFB3(t, []byte(data))
+		if md.Series != "Saga" || md.SeriesIndex != "5" {
+			t.Errorf("Series = (%q, %q), want (%q, %q)",
+				md.Series, md.SeriesIndex, "Saga", "5")
+		}
+	})
 }
 
 func TestParseDescriptionIdentifiers(t *testing.T) {

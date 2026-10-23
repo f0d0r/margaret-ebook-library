@@ -376,6 +376,57 @@ func publicationDate(dates []Date) string {
 	return fallback
 }
 
+// Series extracts the first declared series name and its optional position.
+// An EPUB 3 belongs-to-collection with a collection-type="series" refinement
+// wins over calibre:series/calibre:series_index. Values are trimmed; the
+// index is returned verbatim and is empty when no position is declared.
+func (p Package) Series() (name, index string) {
+	all := metas(p)
+	for _, meta := range all {
+		id := strings.TrimSpace(meta.Id)
+		if id == "" || !strings.EqualFold(strings.TrimSpace(meta.Property), "belongs-to-collection") {
+			continue
+		}
+		series := strings.TrimSpace(meta.Value)
+		if series == "" || refinementValue(all, id, "collection-type") != "series" {
+			continue
+		}
+		return series, refinementValue(all, id, "group-position")
+	}
+
+	for _, meta := range all {
+		if strings.TrimSpace(meta.Name) == "calibre:series_index" {
+			if index = strings.TrimSpace(meta.Content); index != "" {
+				break
+			}
+		}
+	}
+	for _, meta := range all {
+		if strings.TrimSpace(meta.Name) == "calibre:series" {
+			if name = strings.TrimSpace(meta.Content); name != "" {
+				return name, index
+			}
+		}
+	}
+	return "", ""
+}
+
+// refinementValue returns the first non-empty value of a property refining
+// the given element id.
+func refinementValue(all []Meta, id, property string) string {
+	refines := "#" + id
+	for _, meta := range all {
+		if !strings.EqualFold(strings.TrimSpace(meta.Property), property) ||
+			strings.TrimSpace(meta.Refines) != refines {
+			continue
+		}
+		if value := strings.TrimSpace(meta.Value); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 // metas returns all meta elements, including OEB 1.x wrapped ones.
 func metas(p Package) []Meta {
 	if p.Metadata.XMeta == nil {

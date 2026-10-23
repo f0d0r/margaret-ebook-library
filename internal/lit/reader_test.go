@@ -132,6 +132,14 @@ func fixtureMeta() []byte {
 	b = append(b, ubAttr(0x14, "cover")...)
 	b = append(b, ubAttr(0x15, "cover")...)
 	b = append(b, 0x00)          // self-close
+	b = append(b, ubLeaf(36)...) // meta
+	b = append(b, ubAttr(0x14, "calibre:series")...)
+	b = append(b, ubAttr(0x15, "Test Series")...)
+	b = append(b, 0x00)          // self-close
+	b = append(b, ubLeaf(36)...) // meta
+	b = append(b, ubAttr(0x14, "calibre:series_index")...)
+	b = append(b, ubAttr(0x15, "3")...)
+	b = append(b, 0x00)          // self-close
 	b = append(b, ubClose()...)  // x-metadata
 	b = append(b, ubClose()...)  // metadata
 	b = append(b, ubOpen(16)...) // manifest
@@ -253,6 +261,12 @@ func TestLitReadMetadata(t *testing.T) {
 	}
 	if md.PublicationDate != "1999-05-04" {
 		t.Errorf("PublicationDate = %q, want %q", md.PublicationDate, "1999-05-04")
+	}
+	if md.Series != "Test Series" {
+		t.Errorf("Series = %q, want %q", md.Series, "Test Series")
+	}
+	if md.SeriesIndex != "3" {
+		t.Errorf("SeriesIndex = %q, want %q", md.SeriesIndex, "3")
 	}
 	if len(md.Languages) != 1 || md.Languages[0] != "en" {
 		t.Errorf("Languages = %q, want [en]", md.Languages)

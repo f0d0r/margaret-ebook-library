@@ -46,6 +46,7 @@ const (
 	elGenre        = "genre"
 	elKeywords     = "keywords"
 	elCoverpage    = "coverpage"
+	elSequence     = "sequence"
 	elFirstName    = "first-name"
 	elMiddleName   = "middle-name"
 	elLastName     = "last-name"
@@ -64,6 +65,8 @@ const (
 	attrID          = "id"
 	attrContentType = "content-type"
 	attrHref        = "href"
+	attrName        = "name"
+	attrNumber      = "number"
 	xlinkNS         = "http://www.w3.org/1999/xlink"
 )
 
@@ -257,19 +260,21 @@ func rewriteDecl(data []byte) []byte {
 // passing UTF-8/16 and ASCII through.
 // infoSection holds metadata collected from one description subsection.
 type infoSection struct {
-	title      string
-	authors    []string
-	annotation string
-	genres     []string
-	keywords   []string
-	lang       string
-	coverID    string
-	ids        []string
-	srcURLs    []string
-	isbns      []string
-	publisher  string
-	year       string
-	date       string
+	title       string
+	authors     []string
+	annotation  string
+	genres      []string
+	keywords    []string
+	lang        string
+	coverID     string
+	ids         []string
+	srcURLs     []string
+	isbns       []string
+	publisher   string
+	year        string
+	date        string
+	series      string
+	seriesIndex string
 }
 
 // parseDocument streams the XML until the description is consumed,
@@ -430,6 +435,15 @@ func parseInfoSection(dec *xml.Decoder, name string, dst *infoSection) error {
 				if dst.coverID == "" {
 					dst.coverID = coverID
 				}
+			case elSequence:
+				name, number := sequenceAttrs(tok.Attr)
+				if err := skipElement(dec); err != nil {
+					return err
+				}
+				if dst.series == "" && name != "" {
+					dst.series = name
+					dst.seriesIndex = number
+				}
 			case elID:
 				text, err := textOf(dec)
 				if err != nil {
@@ -574,6 +588,19 @@ func parseCoverpage(dec *xml.Decoder) (string, error) {
 	}
 }
 
+// sequenceAttrs returns the trimmed name and number attributes of a sequence.
+func sequenceAttrs(attrs []xml.Attr) (name, number string) {
+	for _, a := range attrs {
+		switch a.Name.Local {
+		case attrName:
+			name = strings.TrimSpace(a.Value)
+		case attrNumber:
+			number = strings.TrimSpace(a.Value)
+		}
+	}
+	return name, number
+}
+
 // hrefAttr returns the href attribute, preferring xlink.
 func hrefAttr(attrs []xml.Attr) string {
 	for _, a := range attrs {
@@ -712,6 +739,14 @@ func assemble(titleInfo, srcTitleInfo, docInfo, publishInfo infoSection, version
 		pm.metadata.PublicationDate = strings.TrimSpace(publishInfo.date)
 	} else {
 		pm.metadata.PublicationDate = strings.TrimSpace(publishInfo.year)
+	}
+	switch {
+	case titleInfo.series != "":
+		pm.metadata.Series = titleInfo.series
+		pm.metadata.SeriesIndex = titleInfo.seriesIndex
+	case publishInfo.series != "":
+		pm.metadata.Series = publishInfo.series
+		pm.metadata.SeriesIndex = publishInfo.seriesIndex
 	}
 	pm.metadata.Identifiers = fb2Identifiers(docInfo, publishInfo)
 	return pm
