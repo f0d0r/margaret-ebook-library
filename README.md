@@ -7,6 +7,32 @@
 
 Margaret is a format-agnostic Go library that presents every ebook — whether EPUB, MOBI, KF8/AZW3, PalmDOC, eReader, FictionBook (FB2, FB3), LIT, CHM or LRF — through a single, stable `Book` abstraction. Instead of surfacing format-specific internals like EPUB manifests and spines or MOBI PDB records, it hides those details behind normalized metadata and a unified `ResourceSet`. Current format support is EPUB, MOBI, PalmDOC, FB, LIT, eReader, CHM and LRF reading.
 
+## Table of Contents
+
+- [Features](#features)
+- [Supported formats](#supported-formats)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+  - [1. Usage](#1-usage)
+  - [2. Reading an ebook and printing its metadata](#2-reading-an-ebook-and-printing-its-metadata)
+  - [3. Reading an ebook from a file path](#3-reading-an-ebook-from-a-file-path)
+  - [4. Reading an ebook from an already-open file](#4-reading-an-ebook-from-an-already-open-file)
+  - [5. Reading an ebook from a blob](#5-reading-an-ebook-from-a-blob)
+  - [6. Cover image extraction](#6-cover-image-extraction)
+  - [7. Identifiers](#7-identifiers)
+  - [8. Overriding the safety limits](#8-overriding-the-safety-limits)
+  - [9. Working with resources](#9-working-with-resources)
+  - [10. Converting resources (transformers)](#10-converting-resources-transformers)
+    - [Storage charset and byte-identical reads](#storage-charset-and-byte-identical-reads)
+    - [Custom transformers and isolated registries](#custom-transformers-and-isolated-registries)
+  - [11. Hashing a book](#11-hashing-a-book)
+  - [12. ISBN validation and conversion](#12-isbn-validation-and-conversion)
+  - [13. Content fingerprinting (MinHash / SimHash)](#13-content-fingerprinting-minhash--simhash)
+- [Error handling](#error-handling)
+- [Development](#development)
+- [License](#license)
+
 ## Features
 
 - Single stable `Book` abstraction over all supported formats
@@ -51,11 +77,6 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 > (section decryption is out of scope). Font obfuscation
 > (`adobe#RC`, `idpf.org/2008/embedding`) and leftover/empty `rights.xml`
 > files are not treated as DRM.
->
-> **LRF status:** the text flow is synthesized by the reader (UTF-16LE,
-> `application/x-lrf-text`) and is the only reading-order item; images and
-> fonts are manifest resources, the header thumbnail is the cover, and inline
-> plots are dropped from plain text.
 
 ## Requirements
 
@@ -71,32 +92,7 @@ Full API documentation: https://pkg.go.dev/github.com/f0d0r/margaret-ebook-libra
 
 ## Quickstart
 
-```go
-package main
-
-import (
-	"fmt"
-	"log"
-
-	ebook "github.com/f0d0r/margaret-ebook-library"
-)
-
-func main() {
-	b, err := ebook.Read("books/my-book.epub")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	meta := b.Metadata()
-	fmt.Println("Title:", meta.Title)
-	fmt.Println("Authors:", meta.Authors)
-	fmt.Println("Languages:", meta.Languages)
-	fmt.Println("FileType:", b.FileType())
-	fmt.Println("Version:", b.Version())
-}
-```
-
-## Usage
+### 1. Usage
 
 Import the library:
 
@@ -114,7 +110,68 @@ import (
 )
 ```
 
-### Reading an ebook from a file path
+### 2. Reading an ebook and printing its metadata
+
+```go
+package main
+
+import (
+	"fmt"
+	"log"
+	"strings"
+
+	ebook "github.com/f0d0r/margaret-ebook-library"
+)
+
+func main() {
+	b, err := ebook.Read("books/my-book.epub")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	bookMeta := b.Metadata()
+
+	fmt.Printf("Book Title: %s\n", bookMeta.Title)
+	fmt.Printf("Authors: %v\n", strings.Join(bookMeta.Authors, ", "))
+	fmt.Printf("Description: %s\n", bookMeta.Description)
+	fmt.Printf("Subjects: %v\n", strings.Join(bookMeta.Subjects, ", "))
+	fmt.Printf("Languages: %v\n", strings.Join(bookMeta.Languages, ", "))
+	fmt.Printf("Identifiers: %v\n", bookMeta.Identifiers)
+	fmt.Printf("Publisher: %s\n", bookMeta.Publisher)
+	fmt.Printf("Publication Date: %s\n", bookMeta.PublicationDate)
+	fmt.Printf("Series: %s\n", bookMeta.Series)
+	fmt.Printf("Series Index: %s\n", bookMeta.SeriesIndex)
+	fmt.Printf("File Type: %s\n", b.FileType())
+	fmt.Printf("Version: %s\n", b.Version())
+}
+```
+
+`Metadata()` returns the normalized metadata extracted from the ebook. Fields
+that a format does not provide keep their zero value (`""` or `nil`); missing
+metadata is not an error.
+
+| Field | Type | Description | Notes |
+| ----- | ---- | ----------- | ----- |
+| `Title` | `string` | Main title. | Empty when not declared; some formats use fallbacks (e.g. the CHM default-topic title). |
+| `Authors` | `[]string` | Creators or writers. | Split according to the source format; empty entries are dropped. |
+| `Description` | `string` | Summary or description as declared. | |
+| `Subjects` | `[]string` | Subject headings and keywords. | Source order; some formats deduplicate case-insensitively. |
+| `Languages` | `[]string` | Language tag(s). | Declared values in source order; trimmed, with empty or whitespace-only entries dropped; not validated or normalized. |
+| `Identifiers` | `[]Identifier` | `Scheme`/`Value` identifier pairs. | Prefixes like `urn:isbn:` move to `Scheme`; values are not validated or normalized. Use `Identifier("ISBN")` for lookup. |
+| `Publisher` | `string` | Publisher name. | |
+| `PublicationDate` | `string` | Raw publication date. | Not parsed or normalized. |
+| `Series` | `string` | Series name. | EPUB 3 `belongs-to-collection` with `collection-type="series"` wins over `calibre:series`. |
+| `SeriesIndex` | `string` | Series position. | Verbatim; empty when no position is declared. |
+
+The example also prints format information from separate `Book` methods, which
+are not part of `Metadata`:
+
+| Method | Type | Description |
+| ------ | ---- | ----------- |
+| `FileType()` | `book.FileType` | Detected format (`EPUB`, `MOBI`, `FB`, `LIT`, `PALMDOC`, `EREADER`, `CHM`, `LRF`). |
+| `Version()` | `string` | Format version declared by the container. |
+
+### 3. Reading an ebook from a file path
 
 The simplest way is to pass the file path directly:
 
@@ -135,7 +192,7 @@ import (
 )
 ```
 
-### Reading an ebook from an already-open file
+### 4. Reading an ebook from an already-open file
 
 Use this when you already have the file open:
 
@@ -155,7 +212,7 @@ if err != nil {
 The caller retains ownership of the file and must keep it open until
 all resource data (including the cover) has been consumed.
 
-### Reading an ebook from a blob
+### 5. Reading an ebook from a blob
 
 Blobs are random-access sources, so the same API works for local files,
 ebook entries inside an archive, or remote sources. The source position is
@@ -170,7 +227,7 @@ if err != nil {
 // also available: ebook.NewBytesBlob(data), ebook.NewReaderAtBlob(r, size), book.NewFileBlob(f)
 ```
 
-### Using the ebook
+### 6. Cover image extraction
 
 ```go
 import (
@@ -185,21 +242,6 @@ import (
 ```
 
 ```go
-meta := b.Metadata()
-fmt.Println("Title:", meta.Title)
-fmt.Println("Authors:", strings.Join(meta.Authors, ", "))
-fmt.Println("Languages:", meta.Languages)
-fmt.Println("Description:", meta.Description)
-fmt.Println("Subjects:", strings.Join(meta.Subjects, ", "))
-fmt.Println("Publisher:", meta.Publisher)
-fmt.Println("Publication Date:", meta.PublicationDate)
-fmt.Println("Series:", meta.Series)
-fmt.Println("Series Index:", meta.SeriesIndex)
-for _, id := range meta.Identifiers {
-    fmt.Printf("Identifier: %s (Scheme: %s)\n", id.Value, id.Scheme)
-}
-fmt.Println("FileType:", b.FileType())
-fmt.Println("Version:", b.Version())
 
 if cover, ok := b.Resources().CoverImage(); ok {
     rc, err := cover.Open()
@@ -236,7 +278,7 @@ if err != nil {
 fmt.Printf("Cover %q (%s): %d bytes\n", cover.Name, cover.MediaType, len(data))
 ```
 
-### Identifiers
+### 7. Identifiers
 
 Identifiers are exposed as raw scheme/value pairs. Scheme prefixes such as
 `urn:isbn:` or `calibre:` are moved to `Identifier.Scheme`; values are
@@ -262,110 +304,7 @@ same own-before-source order: FB2 reads `document-info/id`,
 OEB 1.0 OPF's `dc:Identifier` and `dc:Source` values, including their
 `scheme` attributes.
 
-### Subjects
-
-`Metadata.Subjects` lists the subject headings or keywords declared by the
-e-book metadata, in source order. Semicolon-separated values are split into
-separate entries; parts are whitespace-trimmed and empty entries are dropped.
-Commas and duplicates are preserved, except for the FB2, FB3 and LRF rules
-below, source order is kept, and values are not mapped to any controlled
-vocabulary.
-
-For EPUB and KEPUB, each `dc:subject` element is split on semicolons. LIT and
-PalmDOC read the OEB 1.x `dc-metadata/Subject` elements the same way. For
-MOBI and KF8, EXTH record 105 (subject) is used, including multiple records
-and semicolon-separated values. A non-empty KF8 subject list is preferred,
-falling back to the MOBI6 EXTH values.
-
-For FB2, `title-info/genre` elements are read in source order together with
-the comma-separated `title-info/keywords` value. If `title-info` declares
-neither, `src-title-info` is used instead; the two sections are never merged.
-FB2 keyword values are split on commas and semicolons. The combined FB2 list
-is deduplicated case-insensitively, keeping the first occurrence and spelling.
-
-For FB3, each `fb3-classification/subject` element is used in source order,
-with whitespace collapsed per the XSD token type; values are not split.
-`fb3-relations/subject` elements describe people and are not subjects, and
-`class`, `udc`, and `bbk` are not included. The FB3 list is deduplicated
-case-insensitively, keeping the first occurrence and spelling.
-
-For LRF, the repeatable `BookInfo/Category` elements and the single
-`BookInfo/Classification` value are read in source order, with each value split
-on commas and semicolons. `Info/Keyword` elements are appended whole, without
-splitting. `BookInfo/Label` is not used. The combined LRF list is deduplicated
-case-insensitively, keeping the first occurrence and spelling.
-
-### Publisher and publication date
-
-For EPUB and LIT, `Metadata.Publisher` is the first non-empty `dc:publisher`
-value from the OEB package, with surrounding whitespace trimmed.
-`Metadata.PublicationDate` is the raw `dc:date` string: it is not parsed or
-validated, so it may contain arbitrary text. Only an EPUB 2 date carrying
-`event="publication"` (or `opf:event="publication"`) or a date without an
-event is considered; dates carrying any other event (for example `creation`
-or `modification`) are ignored. An explicit publication date is preferred;
-otherwise the first non-empty unqualified `dc:date` is returned.
-`dcterms:modified` is not treated as the publication date.
-
-For MOBI and KF8, `Metadata.Publisher` is the first non-empty EXTH publisher
-record (type 101) and `Metadata.PublicationDate` is the raw EXTH publishing
-date record (type 106). Both are decoded with the book's text encoding and
-whitespace-trimmed; the date is returned as declared, not parsed or
-validated. A KF8 EXTH value is preferred when non-empty, otherwise the MOBI6
-EXTH is used. PalmDOC books carry both fields in the embedded HTML metadata,
-read under the same rules.
-
-For FB2 and FB3, `Metadata.Publisher` and `Metadata.PublicationDate` are
-extracted from the publication metadata sections:
-
-- **FB2** (`<publish-info>`): `<publisher>` element text and `<year>` or `<date>`
-  element text.
-- **FB3** (`<paper-publish-info>`): `publisher` attribute and `year` attribute.
-
-For eReader, `Metadata.Publisher` is the publisher field of the Dropbook
-metadata record. For LRF, it is the `BookInfo/Publisher` element. Neither
-format exposes a publication date, so `Metadata.PublicationDate` is empty.
-
-For CHM, the native `#SYSTEM` metadata carries no publisher, date or ISBN.
-Declared default-topic meta tags (`publisher`, `date`, and Dublin Core forms)
-are used when present. Otherwise the publisher is taken from calibre-style
-`span.imprint` or labeled table cells, and the ISBN from declared meta tags,
-`span.isbn` or labeled table cells. ISBN-specific candidates are reduced to
-their digits (ASCII `0`-`9` and `X`) before checksum validation, and the
-canonical digits are stored, so surrounding text such as `(pbk.)` is ignored.
-Generic Dublin Core identifiers are parsed strictly and are not reduced to
-digits. Free-text "pub date" heuristics are not treated as a publication
-date.
-
-### Series
-
-`Metadata.Series` is the series name and `Metadata.SeriesIndex` its position.
-Both are whitespace-trimmed. The index is returned as the raw declared string:
-it is not converted to a number and there is no Calibre-style `1.0` default, so
-it is empty when the source declares no position. Only one series is exposed;
-the first non-empty series wins.
-
-For EPUB, KEPUB, LIT and PalmDOC, an EPUB 3 `belongs-to-collection` meta with a
-`collection-type="series"` refinement is preferred, with the position taken
-from its `group-position` refinement. A canonical series without a
-`group-position` yields an empty index, even when a `calibre:series_index`
-exists. When no canonical series is declared, `calibre:series` and
-`calibre:series_index` are used. LIT and PalmDOC apply the same rules to the
-OEB 1.x metadata they embed, including `x-metadata` calibre values.
-
-For FB2, the first non-empty direct `title-info/sequence` supplies the `name`
-and `number` attributes; `publish-info/sequence` is the fallback.
-`src-title-info` and nested sequences are ignored.
-
-For FB3, the first non-empty direct `fb3-description/sequence` is used, with
-the name from `sequence/title/main` and the index from `@number`. Nested
-sequences are ignored. If there is no such sequence, the first non-empty
-`paper-publish-info/sequence` text is used as the name, with an empty index.
-
-MOBI/KF8, eReader, CHM and LRF declare no standard series metadata, so
-`Metadata.Series` and `Metadata.SeriesIndex` remain empty for them.
-
-### Overriding the safety limits
+### 8. Overriding the safety limits
 
 By default the library applies conservative safety limits (100 MB max resource
 size, 100 MB max single MOBI record, 256 max EXTH records). Override them
@@ -394,32 +333,8 @@ if err != nil {
 }
 ```
 
-### KF8 / MOBI8 fallback behaviour
 
-A joint MOBI6+KF8 file (a `.mobi`/`.azw` carrying both renderings, separated by
-a `BOUNDARY` record) is read from its KF8 part. When that KF8 part cannot be
-parsed — corrupt index tables, a broken flow table, unreadable markup — the
-reader falls back to the intact MOBI6 content, which is the same content the
-book exposes to older readers. This is the default so that a damaged KF8 part
-never costs the reader the book.
-
-The fallback is configurable. Turn it off for strict behaviour, so a KF8 parse
-failure is reported instead of silently serving different content:
-
-```go
-b, err := ebook.Read(
-    "books/dual.mobi",
-    ebook.WithKF8FallbackToMOBI6(false), // report KF8 parse failures
-)
-```
-
-The parse error does not abort the read: the returned content resource reports
-it from `Open` (matched with `errors.Is` against `ebook.ErrCorrupt` or
-`ebook.ErrParseFailed`), so metadata and the remaining resources stay usable.
-Two cases never fall back: a standalone KF8 file (there is no MOBI6 rendering to
-serve), and a DRM-protected file, which is rejected with `ebook.ErrDRM`.
-
-### Working with resources
+### 9. Working with resources
 
 ```go
 import (
@@ -463,7 +378,7 @@ if cover, ok := b.Resources().CoverImage(); ok {
 }
 ```
 
-### Converting resources (transformers)
+### 10. Converting resources (transformers)
 
 Resources are exposed lazily via `Open()`. Use `OpenAs` to convert on the fly
 between MIME types via a streaming `Transformer` registry. This is lazy as well:
@@ -588,7 +503,7 @@ converter.RegisterAliases(reg, func(from, to string) converter.Transformer {
 
 Registering is thread-safe via `Registry.Register`.
 
-### Hashing a book
+### 11. Hashing a book
 
 ```go
 import "github.com/f0d0r/margaret-ebook-library/tools"
@@ -606,7 +521,7 @@ Or from a blob:
 hash, err := tools.CalculateFileHashFromBlob(ebook.NewPathBlob("books/my-book.epub"))
 ```
 
-### ISBN validation and conversion
+### 12. ISBN validation and conversion
 
 `IsValidISBN` accepts ISBN-10 and ISBN-13 identifiers in common forms such as
 `urn:isbn:` prefixes, `ISBN` labels, spaces, and hyphens:
@@ -631,7 +546,7 @@ if ok {
 `ToISBN10` returns `false` for 979-prefixed ISBN-13 values, which have no
 ISBN-10 equivalent.
 
-### Content fingerprinting (MinHash / SimHash)
+### 13. Content fingerprinting (MinHash / SimHash)
 
 Fingerprints are computed over the normalized plain-text stream and are streaming-friendly — they implement `io.Writer` so they can be attached with `io.TeeReader`/`io.MultiWriter` in a single pass:
 
@@ -639,6 +554,7 @@ Fingerprints are computed over the normalized plain-text stream and are streamin
 import (
     "context"
     "io"
+    "strings"
 
     "github.com/f0d0r/margaret-ebook-library/mediatype"
     "github.com/f0d0r/margaret-ebook-library/tools"
@@ -655,6 +571,10 @@ fmt.Println(fp.MinHash, fp.SimHash)
 fmt.Println(tools.Jaccard(fp.MinHash, other.MinHash))
 fmt.Println(tools.Hamming(fp.SimHash, other.SimHash))
 
+// Arbitrary plain text or an io.Reader (streamed; the reader is not closed):
+fp, err = tools.FingerprintText("Some plain text to fingerprint")
+fp, err = tools.FingerprintReader(strings.NewReader("Some plain text"))
+
 // Streaming while copying plain text elsewhere:
 rc, handle, err := tools.OpenReadingOrderWithFingerprint(ctx, book.Resources(), mediatype.PlainText,
     tools.WithMinHash(tools.MinHashConfig{NumHashes: 128, ShingleSize: 5}),
@@ -664,6 +584,12 @@ defer rc.Close()
 io.Copy(io.Discard, rc) // or dst file
 fp = handle.Result()
 ```
+
+`FingerprintText` and `FingerprintReader` use the same NFKC, lowercasing,
+whitespace-collapse and word-shingle normalization as `FingerprintContent`, and
+treat input as plain text (no HTML conversion). Empty input yields an all-max
+MinHash signature and a zero SimHash; input shorter than the shingle size is
+fingerprinted as a single shingle.
 
 `MinHasher` and `SimHasher` also implement `io.Writer` directly:
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"strings"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/converter"
@@ -24,20 +25,14 @@ type FingerprintResult struct {
 // It holds the hashers that are fed via the returned ReadCloser.
 // Call Result() after the stream has been consumed (EOF) and closed.
 type FingerprintHandle struct {
-	minHasher *MinHasher
-	simHasher *SimHasher
+	hashers *fingerprintHashers
 }
 
 func (h *FingerprintHandle) Result() FingerprintResult {
-	var r FingerprintResult
-	if h.minHasher != nil {
-		r.MinHash = h.minHasher.Signature()
+	if h.hashers == nil {
+		return FingerprintResult{}
 	}
-	if h.simHasher != nil {
-		r.SimHash = h.simHasher.Sum64()
-		r.HasSimHash = true
-	}
-	return r
+	return h.hashers.result()
 }
 
 type fingerprintConfig struct {
@@ -97,6 +92,46 @@ func resolveFingerprintConfig(opts []FingerprintOption) fingerprintConfig {
 	return cfg
 }
 
+type fingerprintHashers struct {
+	min *MinHasher
+	sim *SimHasher
+	w   io.Writer
+}
+
+func newFingerprintHashers(cfg fingerprintConfig) (*fingerprintHashers, error) {
+	h := &fingerprintHashers{}
+	var writers []io.Writer
+	if cfg.minHash != nil {
+		h.min = newMinHasherWithConfig(*cfg.minHash)
+		writers = append(writers, h.min)
+	}
+	if cfg.simHash != nil {
+		h.sim = NewSimHasher(WithSimShingleSize(cfg.simHash.shingleSize))
+		writers = append(writers, h.sim)
+	}
+	if len(writers) == 0 {
+		return nil, fmt.Errorf("no hasher requested")
+	}
+	if len(writers) == 1 {
+		h.w = writers[0]
+	} else {
+		h.w = io.MultiWriter(writers...)
+	}
+	return h, nil
+}
+
+func (h *fingerprintHashers) result() FingerprintResult {
+	var r FingerprintResult
+	if h.min != nil {
+		r.MinHash = h.min.Signature()
+	}
+	if h.sim != nil {
+		r.SimHash = h.sim.Sum64()
+		r.HasSimHash = true
+	}
+	return r
+}
+
 // FingerprintContent computes fingerprints over the book's plain-text reading order.
 // It injects "\n" between spine chapters and streams with a single pass per
 // requested hasher (fan-out via MultiWriter). The book's resources are reopened
@@ -111,25 +146,9 @@ func FingerprintContent(ctx context.Context, b book.Book, opts ...FingerprintOpt
 	}
 	cfg := resolveFingerprintConfig(opts)
 
-	var minHasher *MinHasher
-	var simHasher *SimHasher
-	var writers []io.Writer
-	if cfg.minHash != nil {
-		minHasher = newMinHasherWithConfig(*cfg.minHash)
-		writers = append(writers, minHasher)
-	}
-	if cfg.simHash != nil {
-		simHasher = NewSimHasher(WithSimShingleSize(cfg.simHash.shingleSize))
-		writers = append(writers, simHasher)
-	}
-	if len(writers) == 0 {
-		return FingerprintResult{}, fmt.Errorf("no hasher requested")
-	}
-	var mw io.Writer
-	if len(writers) == 1 {
-		mw = writers[0]
-	} else {
-		mw = io.MultiWriter(writers...)
+	hashers, err := newFingerprintHashers(cfg)
+	if err != nil {
+		return FingerprintResult{}, err
 	}
 
 	rc, err := openDelimitedReadingOrder(ctx, rs, mediatype.PlainText, cfg.delimiter)
@@ -138,20 +157,45 @@ func FingerprintContent(ctx context.Context, b book.Book, opts ...FingerprintOpt
 	}
 	defer func() { _ = rc.Close() }()
 
-	tee := io.TeeReader(rc, mw)
+	tee := io.TeeReader(rc, hashers.w)
 	if _, err := io.Copy(io.Discard, tee); err != nil {
 		return FingerprintResult{}, err
 	}
+	return hashers.result(), nil
+}
 
-	var res FingerprintResult
-	if minHasher != nil {
-		res.MinHash = minHasher.Signature()
+// FingerprintReader computes fingerprints over the normalized plain-text stream
+// read from r. It streams r without buffering the whole input and does not close
+// r. If no hasher option is supplied, both MinHash (128 hashes, shingle size 5)
+// and SimHash (shingle size 5) are computed; only explicitly requested hashers
+// are populated in the result.
+//
+// Input is treated as plain text: normalization is NFKC plus lowercasing,
+// whitespace collapse and word shingles; no HTML conversion is performed. Empty
+// input yields an all-max MinHash signature and a zero SimHash (HasSimHash is
+// still true when SimHash is requested). Input with fewer words than the shingle
+// size is fingerprinted as a single shingle.
+func FingerprintReader(r io.Reader, opts ...FingerprintOption) (FingerprintResult, error) {
+	if r == nil {
+		return FingerprintResult{}, fmt.Errorf("reader is nil")
 	}
-	if simHasher != nil {
-		res.SimHash = simHasher.Sum64()
-		res.HasSimHash = true
+	cfg := resolveFingerprintConfig(opts)
+
+	hashers, err := newFingerprintHashers(cfg)
+	if err != nil {
+		return FingerprintResult{}, err
 	}
-	return res, nil
+	if _, err := io.Copy(io.Discard, io.TeeReader(r, hashers.w)); err != nil {
+		return FingerprintResult{}, err
+	}
+	return hashers.result(), nil
+}
+
+// FingerprintText is a convenience wrapper over FingerprintReader for plain-text
+// input. See FingerprintReader for normalization, defaults and empty/short-input
+// behavior.
+func FingerprintText(text string, opts ...FingerprintOption) (FingerprintResult, error) {
+	return FingerprintReader(strings.NewReader(text), opts...)
 }
 
 // OpenReadingOrderWithFingerprint returns a ReadCloser over the reading order
@@ -166,38 +210,17 @@ func OpenReadingOrderWithFingerprint(ctx context.Context, rs *book.ResourceSet, 
 	}
 	cfg := resolveFingerprintConfig(opts)
 
-	var minHasher *MinHasher
-	var simHasher *SimHasher
-	var writers []io.Writer
-	if cfg.minHash != nil {
-		minHasher = newMinHasherWithConfig(*cfg.minHash)
-		writers = append(writers, minHasher)
-	}
-	if cfg.simHash != nil {
-		simHasher = NewSimHasher(WithSimShingleSize(cfg.simHash.shingleSize))
-		writers = append(writers, simHasher)
-	}
-	// If for some reason no writer (should not happen due to default), just open raw.
-	if len(writers) == 0 {
-		rc, err := openDelimitedReadingOrder(ctx, rs, target, cfg.delimiter)
-		if err != nil {
-			return nil, nil, err
-		}
-		return rc, &FingerprintHandle{}, nil
-	}
-	var mw io.Writer
-	if len(writers) == 1 {
-		mw = writers[0]
-	} else {
-		mw = io.MultiWriter(writers...)
+	hashers, err := newFingerprintHashers(cfg)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	rc, err := openDelimitedReadingOrder(ctx, rs, target, cfg.delimiter)
 	if err != nil {
 		return nil, nil, err
 	}
-	handle := &FingerprintHandle{minHasher: minHasher, simHasher: simHasher}
-	frc := &fingerprintingReadCloser{rc: rc, tee: io.TeeReader(rc, mw), handle: handle}
+	handle := &FingerprintHandle{hashers: hashers}
+	frc := &fingerprintingReadCloser{rc: rc, tee: io.TeeReader(rc, hashers.w), handle: handle}
 	return frc, handle, nil
 }
 

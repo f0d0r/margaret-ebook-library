@@ -48,7 +48,9 @@ type Metadata struct {
 	// metadata, in source order.
 	Subjects []string
 
-	// Languages is the language(s) of the book.
+	// Languages are the language declarations of the book, in source order.
+	// Values are trimmed, and empty or whitespace-only entries are dropped;
+	// they are not otherwise validated or normalized.
 	Languages []string
 
 	// Identifiers are the identifiers declared by the e-book metadata, in
