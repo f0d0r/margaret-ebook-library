@@ -2,6 +2,7 @@ package mobi
 
 import (
 	"encoding/binary"
+	"reflect"
 	"testing"
 
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
@@ -283,6 +284,77 @@ func TestExthAuthors(t *testing.T) {
 				if got[i] != tt.want[i] {
 					t.Errorf("Authors()[%d] = %q, want %q", i, got[i], tt.want[i])
 				}
+			}
+		})
+	}
+}
+
+func TestExthSubjects(t *testing.T) {
+	tests := []struct {
+		name         string
+		records      map[uint32][][]byte
+		textEncoding TextEncodingType
+		want         []string
+	}{
+		{
+			name:         "No subject record",
+			records:      map[uint32][][]byte{AUTHOR: {[]byte("Author")}},
+			textEncoding: UTF8,
+			want:         nil,
+		},
+		{
+			name:         "Single subject",
+			records:      map[uint32][][]byte{SUBJECT: {[]byte("Fantasy")}},
+			textEncoding: UTF8,
+			want:         []string{"Fantasy"},
+		},
+		{
+			name: "Multiple records in source order",
+			records: map[uint32][][]byte{
+				SUBJECT: {[]byte("Fantasy"), []byte("Adventure")},
+			},
+			textEncoding: UTF8,
+			want:         []string{"Fantasy", "Adventure"},
+		},
+		{
+			name:         "Semicolons split",
+			records:      map[uint32][][]byte{SUBJECT: {[]byte("Fantasy; Adventure")}},
+			textEncoding: UTF8,
+			want:         []string{"Fantasy", "Adventure"},
+		},
+		{
+			name: "Records and semicolons preserve order",
+			records: map[uint32][][]byte{
+				SUBJECT: {[]byte("A; B"), []byte("C")},
+			},
+			textEncoding: UTF8,
+			want:         []string{"A", "B", "C"},
+		},
+		{
+			name:         "Parts trimmed and empty dropped",
+			records:      map[uint32][][]byte{SUBJECT: {[]byte(" Science ; ; History ; ")}},
+			textEncoding: UTF8,
+			want:         []string{"Science", "History"},
+		},
+		{
+			name:         "CP1252 subject",
+			records:      map[uint32][][]byte{SUBJECT: {cp1252Bytes(t, "Café; History")}},
+			textEncoding: CP1252,
+			want:         []string{"Café", "History"},
+		},
+		{
+			name:         "Duplicates preserved",
+			records:      map[uint32][][]byte{SUBJECT: {[]byte("A; A"), []byte("A")}},
+			textEncoding: UTF8,
+			want:         []string{"A", "A", "A"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exth := &Exth{Records: tt.records, textEncoding: tt.textEncoding}
+			if got := exth.Subjects(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Subjects() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}

@@ -173,6 +173,9 @@ func TestFb3ReaderRead(t *testing.T) {
 		if md.Description != "First para.\n\nSecond para." {
 			t.Errorf("Description = %q", md.Description)
 		}
+		if want := []string{"test"}; !reflect.DeepEqual(md.Subjects, want) {
+			t.Errorf("Subjects = %#v, want %#v", md.Subjects, want)
+		}
 		if len(md.Languages) != 1 || md.Languages[0] != "hu" {
 			t.Errorf("Languages = %q, want [hu]", md.Languages)
 		}

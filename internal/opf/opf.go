@@ -37,6 +37,7 @@ type Metadata struct {
 	Title        []Title      `xml:"title"`
 	Creators     []Creator    `xml:"creator"`
 	Descriptions []string     `xml:"description"`
+	Subjects     []string     `xml:"subject"`
 	Languages    []string     `xml:"language"`
 	Identifiers  []Identifier `xml:"identifier"`
 	Sources      []Identifier `xml:"source"`
@@ -60,6 +61,7 @@ type DcMetadata struct {
 	Titles       []Title      `xml:"Title"`
 	Creators     []Creator    `xml:"Creator"`
 	Descriptions []string     `xml:"Description"`
+	Subjects     []string     `xml:"Subject"`
 	Languages    []string     `xml:"Language"`
 	Identifiers  []Identifier `xml:"Identifier"`
 	Sources      []Identifier `xml:"Source"`
@@ -269,6 +271,18 @@ func (p Package) Description() string {
 		return firstNonEmpty(p.Metadata.Dc.Descriptions)
 	}
 	return ""
+}
+
+// Subjects extracts dc:subject values from a Package in source order. OEB 1.x
+// wrapped values follow direct values. Values are split on semicolons, trimmed
+// and empty entries dropped; commas and duplicates are preserved, source order
+// is kept, and no vocabulary normalization is applied.
+func (p Package) Subjects() []string {
+	values := append([]string(nil), p.Metadata.Subjects...)
+	if p.Metadata.Dc != nil {
+		values = append(values, p.Metadata.Dc.Subjects...)
+	}
+	return util.SplitSubjects(values)
 }
 
 func firstNonEmpty(values []string) string {

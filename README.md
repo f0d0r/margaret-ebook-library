@@ -10,8 +10,8 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 ## Features
 
 - Single stable `Book` abstraction over all supported formats
-- Normalized metadata (title, authors, description, languages, identifiers,
-  publisher, publication date)
+- Normalized metadata (title, authors, description, subjects, languages,
+  identifiers, publisher, publication date)
 - Lazy streaming access to resources (no full in-memory load)
 - On-the-fly conversion of text resources to plain text (search indexing, LLM input, TTS)
 - Content fingerprinting (MinHash / SimHash) for deduplication and similarity
@@ -190,6 +190,7 @@ fmt.Println("Title:", meta.Title)
 fmt.Println("Authors:", strings.Join(meta.Authors, ", "))
 fmt.Println("Languages:", meta.Languages)
 fmt.Println("Description:", meta.Description)
+fmt.Println("Subjects:", strings.Join(meta.Subjects, ", "))
 fmt.Println("Publisher:", meta.Publisher)
 fmt.Println("Publication Date:", meta.PublicationDate)
 for _, id := range meta.Identifiers {
@@ -258,6 +259,39 @@ same own-before-source order: FB2 reads `document-info/id`,
 `periodical/issn`, and `document-info/@src-url`. LIT reads the embedded
 OEB 1.0 OPF's `dc:Identifier` and `dc:Source` values, including their
 `scheme` attributes.
+
+### Subjects
+
+`Metadata.Subjects` lists the subject headings or keywords declared by the
+e-book metadata, in source order. Semicolon-separated values are split into
+separate entries; parts are whitespace-trimmed and empty entries are dropped.
+Commas and duplicates are preserved, except for the FB2, FB3 and LRF rules
+below, source order is kept, and values are not mapped to any controlled
+vocabulary.
+
+For EPUB and KEPUB, each `dc:subject` element is split on semicolons. LIT and
+PalmDOC read the OEB 1.x `dc-metadata/Subject` elements the same way. For
+MOBI and KF8, EXTH record 105 (subject) is used, including multiple records
+and semicolon-separated values. A non-empty KF8 subject list is preferred,
+falling back to the MOBI6 EXTH values.
+
+For FB2, `title-info/genre` elements are read in source order together with
+the comma-separated `title-info/keywords` value. If `title-info` declares
+neither, `src-title-info` is used instead; the two sections are never merged.
+FB2 keyword values are split on commas and semicolons. The combined FB2 list
+is deduplicated case-insensitively, keeping the first occurrence and spelling.
+
+For FB3, each `fb3-classification/subject` element is used in source order,
+with whitespace collapsed per the XSD token type; values are not split.
+`fb3-relations/subject` elements describe people and are not subjects, and
+`class`, `udc`, and `bbk` are not included. The FB3 list is deduplicated
+case-insensitively, keeping the first occurrence and spelling.
+
+For LRF, the repeatable `BookInfo/Category` elements and the single
+`BookInfo/Classification` value are read in source order, with each value split
+on commas and semicolons. `Info/Keyword` elements are appended whole, without
+splitting. `BookInfo/Label` is not used. The combined LRF list is deduplicated
+case-insensitively, keeping the first occurrence and spelling.
 
 ### Publisher and publication date
 

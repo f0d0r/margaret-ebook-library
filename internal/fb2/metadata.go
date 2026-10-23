@@ -43,6 +43,8 @@ const (
 	elLang         = "lang"
 	elAuthor       = "author"
 	elAnnotation   = "annotation"
+	elGenre        = "genre"
+	elKeywords     = "keywords"
 	elCoverpage    = "coverpage"
 	elFirstName    = "first-name"
 	elMiddleName   = "middle-name"
@@ -258,6 +260,8 @@ type infoSection struct {
 	title      string
 	authors    []string
 	annotation string
+	genres     []string
+	keywords   []string
 	lang       string
 	coverID    string
 	ids        []string
@@ -401,6 +405,22 @@ func parseInfoSection(dec *xml.Decoder, name string, dst *infoSection) error {
 				}
 				if dst.annotation == "" {
 					dst.annotation = annotation
+				}
+			case elGenre:
+				text, err := textOf(dec)
+				if err != nil {
+					return err
+				}
+				if text != "" {
+					dst.genres = append(dst.genres, text)
+				}
+			case elKeywords:
+				text, err := textOf(dec)
+				if err != nil {
+					return err
+				}
+				if text != "" {
+					dst.keywords = append(dst.keywords, text)
 				}
 			case elCoverpage:
 				coverID, err := parseCoverpage(dec)
@@ -683,6 +703,7 @@ func assemble(titleInfo, srcTitleInfo, docInfo, publishInfo infoSection, version
 			break
 		}
 	}
+	pm.metadata.Subjects = fb2Subjects(titleInfo, srcTitleInfo)
 	if lang := strings.TrimSpace(titleInfo.lang); lang != "" {
 		pm.metadata.Languages = []string{lang}
 	}
@@ -694,6 +715,24 @@ func assemble(titleInfo, srcTitleInfo, docInfo, publishInfo infoSection, version
 	}
 	pm.metadata.Identifiers = fb2Identifiers(docInfo, publishInfo)
 	return pm
+}
+
+// fb2Subjects returns the subjects declared by the first info section that
+// declares any. Genres come in source order, followed by keyword values split
+// on commas and semicolons; duplicate entries are dropped case-insensitively,
+// keeping the first occurrence and spelling.
+func fb2Subjects(titleInfo, srcTitleInfo infoSection) []string {
+	for _, s := range []infoSection{titleInfo, srcTitleInfo} {
+		if len(s.genres) == 0 && len(s.keywords) == 0 {
+			continue
+		}
+		values := append([]string(nil), s.genres...)
+		for _, keywords := range s.keywords {
+			values = append(values, strings.Split(keywords, ",")...)
+		}
+		return util.DedupeSubjects(util.SplitSubjects(values))
+	}
+	return nil
 }
 
 // fb2Identifiers returns the document's own id first, followed by the

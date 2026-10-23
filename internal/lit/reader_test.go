@@ -74,6 +74,22 @@ func fixtureMeta() []byte {
 	b = append(b, 0x00)
 	b = append(b, ubText("A description")...)
 	b = append(b, ubClose()...)
+	b = append(b, ubOpen(22)...) // dc:Subject
+	b = append(b, 0x00)
+	b = append(b, ubText("Fantasy")...)
+	b = append(b, ubClose()...)
+	b = append(b, ubOpen(22)...) // dc:Subject
+	b = append(b, 0x00)
+	b = append(b, ubText("  Adventure  ")...)
+	b = append(b, ubClose()...)
+	b = append(b, ubOpen(22)...) // dc:Subject
+	b = append(b, 0x00)
+	b = append(b, ubText(" ")...)
+	b = append(b, ubClose()...)
+	b = append(b, ubOpen(22)...) // dc:Subject
+	b = append(b, 0x00)
+	b = append(b, ubText("Science; History")...)
+	b = append(b, ubClose()...)
 	b = append(b, ubOpen(24)...) // dc:Publisher
 	b = append(b, 0x00)
 	b = append(b, ubText("Test Publisher")...)
@@ -228,6 +244,9 @@ func TestLitReadMetadata(t *testing.T) {
 	}
 	if md.Description != "A description" {
 		t.Errorf("Description = %q, want %q", md.Description, "A description")
+	}
+	if want := []string{"Fantasy", "Adventure", "Science", "History"}; !reflect.DeepEqual(md.Subjects, want) {
+		t.Errorf("Subjects = %#v, want %#v", md.Subjects, want)
 	}
 	if md.Publisher != "Test Publisher" {
 		t.Errorf("Publisher = %q, want %q", md.Publisher, "Test Publisher")

@@ -2,6 +2,7 @@ package mobi
 
 import (
 	"encoding/binary"
+	"reflect"
 	"testing"
 
 	"github.com/f0d0r/margaret-ebook-library/internal/config"
@@ -431,6 +432,87 @@ func TestMobiPublisher(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := tt.mobi.Publisher(); got != tt.want {
 				t.Errorf("Publisher() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMobiSubjects(t *testing.T) {
+	exth := func(records map[uint32][][]byte) *Exth {
+		return &Exth{Records: records, textEncoding: UTF8}
+	}
+
+	tests := []struct {
+		name string
+		mobi *Mobi
+		want []string
+	}{
+		{
+			name: "nil Mobi",
+			want: nil,
+		},
+		{
+			name: "No EXTH, no KF8",
+			mobi: &Mobi{},
+			want: nil,
+		},
+		{
+			name: "MOBI6 EXTH",
+			mobi: &Mobi{EXTH: exth(map[uint32][][]byte{
+				SUBJECT: {[]byte("MOBI6; Subject")},
+			})},
+			want: []string{"MOBI6", "Subject"},
+		},
+		{
+			name: "KF8 EXTH preferred",
+			mobi: &Mobi{
+				KF8: &Mobi{EXTH: exth(map[uint32][][]byte{
+					SUBJECT: {[]byte("KF8; Subject")},
+				})},
+				EXTH: exth(map[uint32][][]byte{
+					SUBJECT: {[]byte("MOBI6; Subject")},
+				}),
+			},
+			want: []string{"KF8", "Subject"},
+		},
+		{
+			name: "Empty KF8 value falls back to MOBI6",
+			mobi: &Mobi{
+				KF8: &Mobi{EXTH: exth(map[uint32][][]byte{
+					SUBJECT: {[]byte(" ; ")},
+				})},
+				EXTH: exth(map[uint32][][]byte{
+					SUBJECT: {[]byte("MOBI6")},
+				}),
+			},
+			want: []string{"MOBI6"},
+		},
+		{
+			name: "KF8 without subjects falls back to MOBI6",
+			mobi: &Mobi{
+				KF8: &Mobi{EXTH: exth(map[uint32][][]byte{
+					AUTHOR: {[]byte("KF8 Author")},
+				})},
+				EXTH: exth(map[uint32][][]byte{
+					SUBJECT: {[]byte("MOBI6")},
+				}),
+			},
+			want: []string{"MOBI6"},
+		},
+		{
+			name: "KF8 without EXTH falls back to MOBI6",
+			mobi: &Mobi{
+				KF8:  &Mobi{},
+				EXTH: exth(map[uint32][][]byte{SUBJECT: {[]byte("MOBI6")}}),
+			},
+			want: []string{"MOBI6"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.mobi.Subjects(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Subjects() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}

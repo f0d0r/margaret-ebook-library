@@ -25,6 +25,7 @@ const metadataFB2 = `<?xml version="1.0" encoding="UTF-8"?>
 <empty-line/>
 <p>Second para.</p>
 </annotation>
+<keywords>fantasy, adventure</keywords>
 <lang>hu</lang>
 </title-info>
 <document-info>
@@ -70,6 +71,10 @@ func TestParseMetadataFull(t *testing.T) {
 	}
 	if md.Description != wantAnnotation {
 		t.Errorf("Description = %q, want %q", md.Description, wantAnnotation)
+	}
+	wantSubjects := []string{"sf", "fantasy", "adventure"}
+	if !reflect.DeepEqual(md.Subjects, wantSubjects) {
+		t.Errorf("Subjects = %#v, want %#v", md.Subjects, wantSubjects)
 	}
 	if strings.Join(md.Languages, "|") != "hu" {
 		t.Errorf("Languages = %q, want [hu]", md.Languages)

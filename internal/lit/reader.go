@@ -104,6 +104,7 @@ func (r *LitReader) Read(b book.Blob) (book.Book, error) {
 			Title:           p.Title(),
 			Authors:         p.Authors(),
 			Description:     p.Description(),
+			Subjects:        p.Subjects(),
 			Languages:       p.Languages(),
 			Identifiers:     p.Identifiers(),
 			Publisher:       p.Publisher(),

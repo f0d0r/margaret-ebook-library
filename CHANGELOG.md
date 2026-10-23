@@ -9,6 +9,23 @@
   hyphenated forms. Parsed values report their `Kind` and convert with
   `ToISBN10`/`ToISBN13`; 979-prefixed ISBN-13 values have no ISBN-10
   equivalent.
+- Subject extraction from EPUB/KEPUB, LIT, PalmDOC, MOBI, KF8, FB2, FB3 and
+  LRF metadata: `Metadata.Subjects` exposes subject values in source order.
+  Semicolon-separated values are split into separate entries; parts are trimmed
+  and empty entries are dropped. Commas and duplicates are preserved, and source
+  order is kept. OEB 1.x `dc-metadata/Subject` values are included. For
+  MOBI/KF8, EXTH record 105 (subject) is used, including multiple records,
+  with a non-empty KF8 subject list preferred over the MOBI6 EXTH values.
+  For FB2, `title-info/genre` elements are combined with comma-separated
+  `title-info/keywords`, falling back to `src-title-info` as a whole; keyword
+  values are also comma-split. For FB3, `fb3-classification/subject` elements
+  are used with whitespace collapsed; `fb3-relations/subject` values are not
+  subjects. For LRF, repeatable `BookInfo/Category` elements and
+  `BookInfo/Classification` are split on commas and semicolons, while
+  `Info/Keyword` elements are used whole; `BookInfo/Label` is ignored. FB2, FB3
+  and LRF subject lists are deduplicated case-insensitively, keeping the first
+  occurrence. Elsewhere values are not deduplicated or mapped to any
+  vocabulary.
 - Publisher and raw publication-date extraction from EPUB, LIT, MOBI/KF8,
   eReader, LRF, FB2 and FB3 metadata: `Metadata.Publisher` and
   `Metadata.PublicationDate`. The date is returned as declared, without parsing
