@@ -19,9 +19,14 @@ import (
 const palmDocBookHTMLPayload = `<HTML><HEAD><metadata><dc-metadata>` +
 	`<dc:Title>Test Palm Book</dc:Title>` +
 	`<dc:Creator>Jane Author</dc:Creator>` +
+	`<dc:Subject>Fantasy</dc:Subject>` +
+	`<dc:Subject>  Adventure  </dc:Subject>` +
+	`<dc:Subject>Science; History</dc:Subject>` +
 	`<dc:Language>en</dc:Language>` +
 	`<dc:Identifier scheme="ISBN">urn:isbn:0-306-40615-2</dc:Identifier>` +
 	`<dc:Source>urn:isbn:9780375704024</dc:Source>` +
+	`<dc:Publisher>Test Publisher</dc:Publisher>` +
+	`<dc:Date>1999-05-04</dc:Date>` +
 	`</dc-metadata></metadata></HEAD><BODY><P>Hello PalmDOC</P></BODY></HTML>`
 
 const palmDocBookPlainPayload = "Just some plain text for PalmDOC.\nSecond line here."
@@ -182,6 +187,15 @@ func TestPalmDocBookReaderHTML(t *testing.T) {
 	}
 	if got := b.Metadata().Authors; len(got) != 1 || got[0] != "Jane Author" {
 		t.Errorf("Authors = %q, want [Jane Author]", got)
+	}
+	if got, want := b.Metadata().Subjects, []string{"Fantasy", "Adventure", "Science", "History"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Subjects = %#v, want %#v", got, want)
+	}
+	if got := b.Metadata().Publisher; got != "Test Publisher" {
+		t.Errorf("Publisher = %q, want Test Publisher", got)
+	}
+	if got := b.Metadata().PublicationDate; got != "1999-05-04" {
+		t.Errorf("PublicationDate = %q, want 1999-05-04", got)
 	}
 	wantIDs := []book.Identifier{
 		{Scheme: "ISBN", Value: "0-306-40615-2"},

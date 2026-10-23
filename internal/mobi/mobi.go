@@ -358,6 +358,20 @@ func (m *Mobi) Description() string {
 	return description
 }
 
+// Subjects returns the subjects from the KF8 EXTH when present, falling back
+// to the MOBI6 EXTH otherwise.
+func (m *Mobi) Subjects() []string {
+	if m == nil {
+		return nil
+	}
+	if m.KF8 != nil {
+		if subjects := m.KF8.exthSubjects(); len(subjects) > 0 {
+			return subjects
+		}
+	}
+	return m.exthSubjects()
+}
+
 // Publisher returns the publisher from the book metadata.
 func (m *Mobi) Publisher() string {
 	if m == nil {
@@ -383,6 +397,13 @@ func (m *Mobi) PublicationDate() string {
 		}
 	}
 	return m.exthPublicationDate()
+}
+
+func (m *Mobi) exthSubjects() []string {
+	if m.EXTH == nil {
+		return nil
+	}
+	return m.EXTH.Subjects()
 }
 
 func (m *Mobi) exthPublisher() string {

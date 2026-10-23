@@ -5,6 +5,7 @@ import (
 	"compress/zlib"
 	"encoding/binary"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf16"
@@ -53,8 +54,12 @@ func TestReadMetadata(t *testing.T) {
 	xmlData := []byte("\xEF\xBB\xBF<Info version=\"1.1\"><BookInfo>" +
 		"<Title>  The Title </Title>" +
 		"<Author>Ann Lee &amp; Bob &amp;&amp; Co, and Carol with Dan</Author>" +
+		"<Category>Fiction, Fantasy; Adventure</Category>" +
+		"<Category>Drama</Category>" +
+		"<Classification>FIC009000; Epic</Classification>" +
 		"<FreeText>Summary</FreeText>" +
-		"</BookInfo><DocInfo><Language> hu </Language></DocInfo></Info>")
+		"</BookInfo><DocInfo><Language> hu </Language></DocInfo>" +
+		"<Keyword> magic </Keyword><Keyword>dragons</Keyword><Keyword>Drama</Keyword></Info>")
 
 	md, version := readBook(t, buildLrf(t, 1000, xmlData))
 	if version != "1000" {
@@ -71,6 +76,83 @@ func TestReadMetadata(t *testing.T) {
 	}
 	if got, want := strings.Join(md.Languages, "|"), "hu"; got != want {
 		t.Errorf("Languages = %q, want %q", got, want)
+	}
+	wantSubjects := []string{"Fiction", "Fantasy", "Adventure", "Drama", "FIC009000", "Epic", "magic", "dragons"}
+	if !reflect.DeepEqual(md.Subjects, wantSubjects) {
+		t.Errorf("Subjects = %#v, want %#v", md.Subjects, wantSubjects)
+	}
+}
+
+func TestReadMetadataSubjects(t *testing.T) {
+	tests := []struct {
+		name    string
+		xmlData string
+		want    []string
+	}{
+		{
+			name: "all sources in source order",
+			xmlData: "<Info><BookInfo><Category>Fantasy</Category>" +
+				"<Classification>FIC009000</Classification></BookInfo>" +
+				"<DocInfo/><Keyword>magic</Keyword><Keyword>dragons</Keyword></Info>",
+			want: []string{"Fantasy", "FIC009000", "magic", "dragons"},
+		},
+		{
+			name: "multiple categories preserve order",
+			xmlData: "<Info><BookInfo><Category>Fantasy</Category><Category>Adventure</Category>" +
+				"</BookInfo></Info>",
+			want: []string{"Fantasy", "Adventure"},
+		},
+		{
+			name:    "category split on commas and semicolons",
+			xmlData: "<Info><BookInfo><Category> Fiction, Fantasy; Adventure </Category></BookInfo></Info>",
+			want:    []string{"Fiction", "Fantasy", "Adventure"},
+		},
+		{
+			name:    "classification split on commas and semicolons",
+			xmlData: "<Info><BookInfo><Classification> A, B; C </Classification></BookInfo></Info>",
+			want:    []string{"A", "B", "C"},
+		},
+		{
+			name:    "keywords are kept whole",
+			xmlData: "<Info><BookInfo/><DocInfo/><Keyword> science fiction, fantasy </Keyword></Info>",
+			want:    []string{"science fiction, fantasy"},
+		},
+		{
+			name: "empty values are dropped",
+			xmlData: "<Info><BookInfo><Category> , ; </Category><Classification> </Classification>" +
+				"</BookInfo><DocInfo/><Keyword> </Keyword></Info>",
+			want: nil,
+		},
+		{
+			name: "duplicates are deduplicated case-insensitively",
+			xmlData: "<Info><BookInfo><Category>Fantasy; fantasy, FANTASY</Category></BookInfo>" +
+				"<DocInfo/><Keyword>fanTASY</Keyword></Info>",
+			want: []string{"Fantasy"},
+		},
+		{
+			name: "label and free text are ignored",
+			xmlData: "<Info><BookInfo><Label>label</Label><FreeText>summary</FreeText>" +
+				"</BookInfo></Info>",
+			want: nil,
+		},
+		{
+			name:    "unknown category is kept",
+			xmlData: "<Info><BookInfo><Category>Unknown</Category></BookInfo></Info>",
+			want:    []string{"Unknown"},
+		},
+		{
+			name:    "missing values",
+			xmlData: "<Info><BookInfo/><DocInfo/></Info>",
+			want:    nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			md, _ := readBook(t, buildLrf(t, 1000, []byte(tt.xmlData)))
+			if !reflect.DeepEqual(md.Subjects, tt.want) {
+				t.Errorf("Subjects = %#v, want %#v", md.Subjects, tt.want)
+			}
+		})
 	}
 }
 
@@ -103,7 +185,7 @@ func TestReadMetadataUTF16(t *testing.T) {
 
 func TestReadMetadataMissingElements(t *testing.T) {
 	md, _ := readBook(t, buildLrf(t, 1000, []byte("<Info><BookInfo/><DocInfo/></Info>")))
-	if md.Title != "" || len(md.Authors) != 0 || md.Description != "" || len(md.Languages) != 0 {
+	if md.Title != "" || len(md.Authors) != 0 || md.Description != "" || len(md.Languages) != 0 || len(md.Subjects) != 0 {
 		t.Errorf("Metadata = %+v, want zero value", md)
 	}
 }

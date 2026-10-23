@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/f0d0r/margaret-ebook-library/book"
@@ -160,6 +161,9 @@ func TestFb2ReaderRead(t *testing.T) {
 		}
 		if md.Description != wantAnnotation {
 			t.Errorf("Description = %q, want %q", md.Description, wantAnnotation)
+		}
+		if want := []string{"sf", "fantasy", "adventure"}; !reflect.DeepEqual(md.Subjects, want) {
+			t.Errorf("Subjects = %#v, want %#v", md.Subjects, want)
 		}
 		if len(md.Languages) != 1 || md.Languages[0] != "hu" {
 			t.Errorf("Languages = %q, want [hu]", md.Languages)

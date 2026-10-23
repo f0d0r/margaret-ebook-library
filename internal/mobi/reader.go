@@ -81,6 +81,7 @@ func (r *MobiReader) Read(b book.Blob) (book.Book, error) {
 			Title:           mobiDoc.Title(),
 			Authors:         mobiDoc.Authors(),
 			Description:     mobiDoc.Description(),
+			Subjects:        mobiDoc.Subjects(),
 			Languages:       languages,
 			Identifiers:     mobiDoc.Identifiers(),
 			Publisher:       mobiDoc.Publisher(),
@@ -112,6 +113,7 @@ func (r *MobiReader) readPalmDoc(pdbDb *pdb.PdbDb) (book.Book, error) {
 	title := pdbDb.Name
 	var authors []string
 	var description string
+	var subjects []string
 	var languages []string
 	var identifiers []book.Identifier
 	var publisher string
@@ -124,6 +126,7 @@ func (r *MobiReader) readPalmDoc(pdbDb *pdb.PdbDb) (book.Book, error) {
 			}
 			authors = pkg.Authors()
 			description = pkg.Description()
+			subjects = pkg.Subjects()
 			languages = pkg.Languages()
 			identifiers = pkg.Identifiers()
 			publisher = pkg.Publisher()
@@ -159,6 +162,7 @@ func (r *MobiReader) readPalmDoc(pdbDb *pdb.PdbDb) (book.Book, error) {
 			Title:           title,
 			Authors:         authors,
 			Description:     description,
+			Subjects:        subjects,
 			Languages:       languages,
 			Identifiers:     identifiers,
 			Publisher:       publisher,

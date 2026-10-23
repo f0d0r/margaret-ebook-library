@@ -20,7 +20,7 @@ const metadataFB3 = `<?xml version="1.0" encoding="UTF-8"?>` +
 	`<subject link="editor"><first-name>Ed</first-name><last-name>Itor</last-name></subject>` +
 	`<object link="alt_media"><title><main>Other</main></title></object>` +
 	`</fb3-relations>` +
-	`<fb3-classification><subject>test</subject></fb3-classification>` +
+	`<fb3-classification><subject>test</subject><subject>Fantasy</subject><subject>fantasy</subject></fb3-classification>` +
 	`<lang>hu</lang>` +
 	`<written><lang>ru</lang></written>` +
 	`<document-info created="2018-04-16T00:00:00" updated="2018-04-16T00:00:00" doi="10.1000/xyz" src-url="http://example.com/source"><isbn>978-0-306-40615-7</isbn></document-info>` +
@@ -60,6 +60,10 @@ func TestParseDescriptionFull(t *testing.T) {
 	}
 	if md.Description != wantFB3Annotation {
 		t.Errorf("Description = %q, want %q", md.Description, wantFB3Annotation)
+	}
+	wantSubjects := []string{"test", "Fantasy"}
+	if !reflect.DeepEqual(md.Subjects, wantSubjects) {
+		t.Errorf("Subjects = %#v, want %#v", md.Subjects, wantSubjects)
 	}
 	if len(md.Languages) != 1 || md.Languages[0] != "hu" {
 		t.Errorf("Languages = %q, want [hu]", md.Languages)

@@ -44,13 +44,15 @@ type Metadata struct {
 	// Description is a brief summary or description of the book.
 	Description string
 
+	// Subjects are the subject headings or keywords declared by the e-book
+	// metadata, in source order.
+	Subjects []string
+
 	// Languages is the language(s) of the book.
 	Languages []string
 
 	// Identifiers are the identifiers declared by the e-book metadata, in
-	// source order. Scheme prefixes are moved to Identifier.Scheme; values
-	// are not otherwise validated or normalized. CHM ISBNs are
-	// checksum-validated and normalized to canonical digits.
+	// source order. Scheme prefixes are moved to Identifier.Scheme;
 	Identifiers []Identifier
 
 	// Publisher is the publisher declared by the e-book metadata, with

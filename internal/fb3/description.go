@@ -22,6 +22,7 @@ const (
 	elMain             = "main"
 	elRelations        = "fb3-relations"
 	elSubject          = "subject"
+	elClassification   = "fb3-classification"
 	elFirstName        = "first-name"
 	elMiddleName       = "middle-name"
 	elLastName         = "last-name"
@@ -107,6 +108,7 @@ func parseDescriptionDoc(dec *xml.Decoder) (parsedMeta, error) {
 			return parsedMeta{}, err
 		}
 		validateLang(&pm)
+		pm.metadata.Subjects = util.DedupeSubjects(pm.metadata.Subjects)
 		pm.metadata.Identifiers = fb3Identifiers(pm)
 		pm.metadata.Publisher = strings.TrimSpace(pm.publisher)
 		pm.metadata.PublicationDate = strings.TrimSpace(pm.publicationDate)
@@ -138,6 +140,12 @@ func parseDescriptionChildren(dec *xml.Decoder, pm *parsedMeta) error {
 					return err
 				}
 				pm.metadata.Authors = append(pm.metadata.Authors, authors...)
+			case elClassification:
+				subjects, err := parseClassification(dec)
+				if err != nil {
+					return err
+				}
+				pm.metadata.Subjects = append(pm.metadata.Subjects, subjects...)
 			case elLang:
 				text, err := textOf(dec)
 				if err != nil {
@@ -343,6 +351,38 @@ func parseRelations(dec *xml.Decoder) ([]string, error) {
 		case xml.EndElement:
 			if tok.Name.Local == elRelations {
 				return authors, nil
+			}
+		}
+	}
+}
+
+// parseClassification returns the genre subjects of an fb3-classification
+// element in document order. Subject whitespace is collapsed per xs:token.
+func parseClassification(dec *xml.Decoder) ([]string, error) {
+	var subjects []string
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return subjects, err
+		}
+		switch tok := tok.(type) {
+		case xml.StartElement:
+			if tok.Name.Local != elSubject {
+				if err := skipElement(dec); err != nil {
+					return subjects, err
+				}
+				continue
+			}
+			text, err := textOf(dec)
+			if err != nil {
+				return subjects, err
+			}
+			if text = strings.Join(strings.Fields(text), " "); text != "" {
+				subjects = append(subjects, text)
+			}
+		case xml.EndElement:
+			if tok.Name.Local == elClassification {
+				return subjects, nil
 			}
 		}
 	}

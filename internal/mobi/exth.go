@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+
+	"github.com/f0d0r/margaret-ebook-library/internal/util"
 )
 
 const (
@@ -11,6 +13,7 @@ const (
 	PUBLISHER        = 101
 	DESCRIPTION      = 103
 	ISBN             = 104
+	SUBJECT          = 105
 	PUBLICATION_DATE = 106
 	SOURCE           = 112
 	ASIN             = 113
@@ -100,6 +103,19 @@ func (e *Exth) Authors() []string {
 		}
 	}
 	return authors
+}
+
+// Subjects returns the subject values from the EXTH record.
+func (e *Exth) Subjects() []string {
+	raw := e.Records[SUBJECT]
+	if len(raw) == 0 {
+		return nil
+	}
+	values := make([]string, 0, len(raw))
+	for _, v := range raw {
+		values = append(values, decodeString(v, e.textEncoding))
+	}
+	return util.SplitSubjects(values)
 }
 
 // Publisher returns the publisher from the EXTH record.

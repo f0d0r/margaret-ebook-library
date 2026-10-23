@@ -15,14 +15,16 @@ import (
 type Info struct {
 	BookInfo BookInfo `xml:"BookInfo"`
 	DocInfo  DocInfo  `xml:"DocInfo"`
+	Keywords []string `xml:"Keyword"`
 }
 
 type BookInfo struct {
-	Title       string `xml:"Title"`
-	Author      string `xml:"Author"`
-	Publisher   string `xml:"Publisher"`
-	Category    string `xml:"Category"`
-	Description string `xml:"FreeText"`
+	Title          string   `xml:"Title"`
+	Author         string   `xml:"Author"`
+	Publisher      string   `xml:"Publisher"`
+	Categories     []string `xml:"Category"`
+	Classification string   `xml:"Classification"`
+	Description    string   `xml:"FreeText"`
 }
 
 type DocInfo struct {
@@ -55,11 +57,41 @@ func (r *LrfReader) readMetadata(b book.Blob, header *LrfHeader) (book.Metadata,
 		Authors:     splitAuthors(info.BookInfo.Author),
 		Description: strings.TrimSpace(info.BookInfo.Description),
 		Publisher:   strings.TrimSpace(info.BookInfo.Publisher),
+		Subjects:    lrfSubjects(info),
 	}
 	if lang := strings.TrimSpace(info.DocInfo.Language); lang != "" {
 		md.Languages = []string{lang}
 	}
 	return md, nil
+}
+
+// lrfSubjects combines the repeatable Category elements, the Classification
+// value and the Keyword elements in source order. Category and Classification
+// are split on commas and semicolons; Keyword elements are kept whole.
+func lrfSubjects(info Info) []string {
+	var subjects []string
+	for _, category := range info.BookInfo.Categories {
+		subjects = append(subjects, splitCommaSemicolon(category)...)
+	}
+	subjects = append(subjects, splitCommaSemicolon(info.BookInfo.Classification)...)
+	for _, keyword := range info.Keywords {
+		if keyword = strings.TrimSpace(keyword); keyword != "" {
+			subjects = append(subjects, keyword)
+		}
+	}
+	return util.DedupeSubjects(subjects)
+}
+
+func splitCommaSemicolon(raw string) []string {
+	var parts []string
+	for _, part := range strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ',' || r == ';'
+	}) {
+		if part = strings.TrimSpace(part); part != "" {
+			parts = append(parts, part)
+		}
+	}
+	return parts
 }
 
 // splitAuthors splits an author string: '&&' escapes a literal '&' and
