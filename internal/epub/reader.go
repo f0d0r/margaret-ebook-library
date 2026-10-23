@@ -106,6 +106,7 @@ func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
 	}
 
 	resources, readingOrder, cover := r.readResources(zr, p)
+	series, seriesIndex := p.Series()
 
 	return &epubBook{
 		metadata: book.Metadata{
@@ -117,6 +118,8 @@ func (r *EpubReader) Read(b book.Blob) (book.Book, error) {
 			Identifiers:     p.Identifiers(),
 			Publisher:       p.Publisher(),
 			PublicationDate: p.PublicationDate(),
+			Series:          series,
+			SeriesIndex:     seriesIndex,
 		},
 		resources: book.NewResourceSet(resources, readingOrder, cover),
 		version:   p.Version,

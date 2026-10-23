@@ -11,7 +11,7 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 
 - Single stable `Book` abstraction over all supported formats
 - Normalized metadata (title, authors, description, subjects, languages,
-  identifiers, publisher, publication date)
+  identifiers, publisher, publication date, series)
 - Lazy streaming access to resources (no full in-memory load)
 - On-the-fly conversion of text resources to plain text (search indexing, LLM input, TTS)
 - Content fingerprinting (MinHash / SimHash) for deduplication and similarity
@@ -193,6 +193,8 @@ fmt.Println("Description:", meta.Description)
 fmt.Println("Subjects:", strings.Join(meta.Subjects, ", "))
 fmt.Println("Publisher:", meta.Publisher)
 fmt.Println("Publication Date:", meta.PublicationDate)
+fmt.Println("Series:", meta.Series)
+fmt.Println("Series Index:", meta.SeriesIndex)
 for _, id := range meta.Identifiers {
     fmt.Printf("Identifier: %s (Scheme: %s)\n", id.Value, id.Scheme)
 }
@@ -334,6 +336,34 @@ canonical digits are stored, so surrounding text such as `(pbk.)` is ignored.
 Generic Dublin Core identifiers are parsed strictly and are not reduced to
 digits. Free-text "pub date" heuristics are not treated as a publication
 date.
+
+### Series
+
+`Metadata.Series` is the series name and `Metadata.SeriesIndex` its position.
+Both are whitespace-trimmed. The index is returned as the raw declared string:
+it is not converted to a number and there is no Calibre-style `1.0` default, so
+it is empty when the source declares no position. Only one series is exposed;
+the first non-empty series wins.
+
+For EPUB, KEPUB, LIT and PalmDOC, an EPUB 3 `belongs-to-collection` meta with a
+`collection-type="series"` refinement is preferred, with the position taken
+from its `group-position` refinement. A canonical series without a
+`group-position` yields an empty index, even when a `calibre:series_index`
+exists. When no canonical series is declared, `calibre:series` and
+`calibre:series_index` are used. LIT and PalmDOC apply the same rules to the
+OEB 1.x metadata they embed, including `x-metadata` calibre values.
+
+For FB2, the first non-empty direct `title-info/sequence` supplies the `name`
+and `number` attributes; `publish-info/sequence` is the fallback.
+`src-title-info` and nested sequences are ignored.
+
+For FB3, the first non-empty direct `fb3-description/sequence` is used, with
+the name from `sequence/title/main` and the index from `@number`. Nested
+sequences are ignored. If there is no such sequence, the first non-empty
+`paper-publish-info/sequence` text is used as the name, with an empty index.
+
+MOBI/KF8, eReader, CHM and LRF declare no standard series metadata, so
+`Metadata.Series` and `Metadata.SeriesIndex` remain empty for them.
 
 ### Overriding the safety limits
 

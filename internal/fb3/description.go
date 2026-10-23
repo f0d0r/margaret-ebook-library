@@ -20,6 +20,7 @@ const (
 	elFb3Body          = "fb3-body"
 	elTitle            = "title"
 	elMain             = "main"
+	elSequence         = "sequence"
 	elRelations        = "fb3-relations"
 	elSubject          = "subject"
 	elClassification   = "fb3-classification"
@@ -42,6 +43,7 @@ const (
 	attrSrcURL    = "src-url"
 	attrPublisher = "publisher"
 	attrYear      = "year"
+	attrNumber    = "number"
 
 	// linkAuthor is the only subject role mapped to authors.
 	linkAuthor = "author"
@@ -60,6 +62,9 @@ type parsedMeta struct {
 	periodicalISSNs []string
 	publisher       string
 	publicationDate string
+	series          string
+	seriesIndex     string
+	paperSeries     string
 }
 
 // parseDescription extracts metadata from description-part bytes,
@@ -112,6 +117,13 @@ func parseDescriptionDoc(dec *xml.Decoder) (parsedMeta, error) {
 		pm.metadata.Identifiers = fb3Identifiers(pm)
 		pm.metadata.Publisher = strings.TrimSpace(pm.publisher)
 		pm.metadata.PublicationDate = strings.TrimSpace(pm.publicationDate)
+		switch {
+		case pm.series != "":
+			pm.metadata.Series = pm.series
+			pm.metadata.SeriesIndex = pm.seriesIndex
+		case pm.paperSeries != "":
+			pm.metadata.Series = pm.paperSeries
+		}
 		return pm, nil
 	}
 }
@@ -133,6 +145,15 @@ func parseDescriptionChildren(dec *xml.Decoder, pm *parsedMeta) error {
 				}
 				if pm.metadata.Title == "" {
 					pm.metadata.Title = title
+				}
+			case elSequence:
+				name, index, err := parseSequence(dec, tok.Attr)
+				if err != nil {
+					return err
+				}
+				if pm.series == "" && name != "" {
+					pm.series = name
+					pm.seriesIndex = index
 				}
 			case elRelations:
 				authors, err := parseRelations(dec)
@@ -250,7 +271,8 @@ func parsePaperPublishInfo(dec *xml.Decoder, attrs []xml.Attr, pm *parsedMeta) e
 		}
 		switch tok := tok.(type) {
 		case xml.StartElement:
-			if tok.Name.Local == elISBN {
+			switch tok.Name.Local {
+			case elISBN:
 				text, err := textOf(dec)
 				if err != nil {
 					return err
@@ -258,8 +280,18 @@ func parsePaperPublishInfo(dec *xml.Decoder, attrs []xml.Attr, pm *parsedMeta) e
 				if text != "" {
 					pm.paperISBNs = append(pm.paperISBNs, text)
 				}
-			} else if err := skipElement(dec); err != nil {
-				return err
+			case elSequence:
+				text, err := textOf(dec)
+				if err != nil {
+					return err
+				}
+				if pm.paperSeries == "" && text != "" {
+					pm.paperSeries = text
+				}
+			default:
+				if err := skipElement(dec); err != nil {
+					return err
+				}
 			}
 		case xml.EndElement:
 			if tok.Name.Local == elPaperPublishInfo {
@@ -322,6 +354,45 @@ func parseTitle(dec *xml.Decoder) (string, error) {
 			}
 		}
 	}
+}
+
+// parseSequence returns the title-main name and @number of a sequence,
+// ignoring nested sequences.
+func parseSequence(dec *xml.Decoder, attrs []xml.Attr) (name, index string, err error) {
+	index = attrValue(attrs, attrNumber)
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return "", "", err
+		}
+		switch tok := tok.(type) {
+		case xml.StartElement:
+			if tok.Name.Local == elTitle && name == "" {
+				name, err = parseTitle(dec)
+				if err != nil {
+					return "", "", err
+				}
+				continue
+			}
+			if err := skipElement(dec); err != nil {
+				return "", "", err
+			}
+		case xml.EndElement:
+			if tok.Name.Local == elSequence {
+				return name, index, nil
+			}
+		}
+	}
+}
+
+// attrValue returns a trimmed attribute value matched by local name.
+func attrValue(attrs []xml.Attr, name string) string {
+	for _, a := range attrs {
+		if a.Name.Local == name {
+			return strings.TrimSpace(a.Value)
+		}
+	}
+	return ""
 }
 
 // parseRelations returns author subjects in document order.

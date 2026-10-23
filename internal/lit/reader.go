@@ -98,6 +98,7 @@ func (r *LitReader) Read(b book.Blob) (book.Book, error) {
 	p.OpfPath = "content.opf"
 
 	all, order, cover := c.buildResources(p, r.cfg.MaxResourceSize)
+	series, seriesIndex := p.Series()
 
 	return &litBook{
 		metadata: book.Metadata{
@@ -109,6 +110,8 @@ func (r *LitReader) Read(b book.Blob) (book.Book, error) {
 			Identifiers:     p.Identifiers(),
 			Publisher:       p.Publisher(),
 			PublicationDate: p.PublicationDate(),
+			Series:          series,
+			SeriesIndex:     seriesIndex,
 		},
 		resources: book.NewResourceSet(all, order, cover),
 		version:   litVersionString,
