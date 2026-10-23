@@ -639,6 +639,7 @@ Fingerprints are computed over the normalized plain-text stream and are streamin
 import (
     "context"
     "io"
+    "strings"
 
     "github.com/f0d0r/margaret-ebook-library/mediatype"
     "github.com/f0d0r/margaret-ebook-library/tools"
@@ -655,6 +656,10 @@ fmt.Println(fp.MinHash, fp.SimHash)
 fmt.Println(tools.Jaccard(fp.MinHash, other.MinHash))
 fmt.Println(tools.Hamming(fp.SimHash, other.SimHash))
 
+// Arbitrary plain text or an io.Reader (streamed; the reader is not closed):
+fp, err = tools.FingerprintText("Some plain text to fingerprint")
+fp, err = tools.FingerprintReader(strings.NewReader("Some plain text"))
+
 // Streaming while copying plain text elsewhere:
 rc, handle, err := tools.OpenReadingOrderWithFingerprint(ctx, book.Resources(), mediatype.PlainText,
     tools.WithMinHash(tools.MinHashConfig{NumHashes: 128, ShingleSize: 5}),
@@ -664,6 +669,12 @@ defer rc.Close()
 io.Copy(io.Discard, rc) // or dst file
 fp = handle.Result()
 ```
+
+`FingerprintText` and `FingerprintReader` use the same NFKC, lowercasing,
+whitespace-collapse and word-shingle normalization as `FingerprintContent`, and
+treat input as plain text (no HTML conversion). Empty input yields an all-max
+MinHash signature and a zero SimHash; input shorter than the shingle size is
+fingerprinted as a single shingle.
 
 `MinHasher` and `SimHasher` also implement `io.Writer` directly:
 
