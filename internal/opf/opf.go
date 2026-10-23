@@ -16,7 +16,6 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
 	xmlx "github.com/f0d0r/margaret-ebook-library/internal/xml"
-	"golang.org/x/text/language"
 )
 
 type Package struct {
@@ -294,42 +293,30 @@ func firstNonEmpty(values []string) string {
 	return ""
 }
 
-// Languages extracts and validates the list of languages from a Package.
+// Languages extracts the declared languages from a Package in source order.
+// Values are trimmed, and empty or whitespace-only entries are dropped; they
+// are not validated or normalized. The first non-empty source group wins.
 func (p Package) Languages() []string {
-	if langs := validLanguages(p.Metadata.Languages); len(langs) > 0 {
+	if langs := declaredLanguages(p.Metadata.Languages); len(langs) > 0 {
 		return langs
 	}
 	if p.Metadata.Dc != nil {
-		if langs := validLanguages(p.Metadata.Dc.Languages); len(langs) > 0 {
+		if langs := declaredLanguages(p.Metadata.Dc.Languages); len(langs) > 0 {
 			return langs
 		}
 	}
-	return validLanguages(p.Metadata.DirectLanguages)
+	return declaredLanguages(p.Metadata.DirectLanguages)
 }
 
-func validLanguages(values []string) []string {
+func declaredLanguages(values []string) []string {
 	if len(values) == 0 {
 		return nil
 	}
 	languages := make([]string, 0, len(values))
 	for _, lang := range values {
-		lang = strings.TrimSpace(lang)
-		if lang == "" {
-			continue
+		if lang = strings.TrimSpace(lang); lang != "" {
+			languages = append(languages, lang)
 		}
-		tag, err := language.Parse(lang)
-		if err != nil {
-			continue
-		}
-
-		if tag.String() == "und" {
-			continue
-		}
-		_, confidence := tag.Base()
-		if confidence == language.No {
-			continue
-		}
-		languages = append(languages, lang)
 	}
 	return languages
 }

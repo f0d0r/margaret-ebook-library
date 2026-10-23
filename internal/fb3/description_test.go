@@ -305,11 +305,17 @@ func TestParseDescriptionLang(t *testing.T) {
 			t.Errorf("Languages for %q = %q, want [%s]", lang, md.Languages, lang)
 		}
 	}
-	for _, lang := range []string{"und", "not a language!!!", ""} {
+	for _, lang := range []string{"und", "not a language!!!"} {
 		md := parseFB3(t, wrap(lang))
-		if len(md.Languages) != 0 {
-			t.Errorf("Languages for %q = %q, want empty", lang, md.Languages)
+		if strings.Join(md.Languages, "|") != lang {
+			t.Errorf("Languages for %q = %q, want [%s]", lang, md.Languages, lang)
 		}
+	}
+	if md := parseFB3(t, wrap("")); len(md.Languages) != 0 {
+		t.Errorf("Languages for empty value = %q, want empty", md.Languages)
+	}
+	if md := parseFB3(t, wrap("   ")); len(md.Languages) != 0 {
+		t.Errorf("Languages for whitespace value = %q, want empty", md.Languages)
 	}
 }
 

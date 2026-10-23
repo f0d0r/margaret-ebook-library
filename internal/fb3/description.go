@@ -11,7 +11,6 @@ import (
 	"github.com/f0d0r/margaret-ebook-library/book"
 	"github.com/f0d0r/margaret-ebook-library/internal/util"
 	xmlx "github.com/f0d0r/margaret-ebook-library/internal/xml"
-	"golang.org/x/text/language"
 )
 
 // Element and attribute local names (matched namespace-agnostically).
@@ -112,7 +111,6 @@ func parseDescriptionDoc(dec *xml.Decoder) (parsedMeta, error) {
 		if err := parseDescriptionChildren(dec, &pm); err != nil {
 			return parsedMeta{}, err
 		}
-		validateLang(&pm)
 		pm.metadata.Subjects = util.DedupeSubjects(pm.metadata.Subjects)
 		pm.metadata.Identifiers = fb3Identifiers(pm)
 		pm.metadata.Publisher = strings.TrimSpace(pm.publisher)
@@ -604,26 +602,6 @@ func fb3Identifiers(pm parsedMeta) []book.Identifier {
 		appendID(srcURL, "URL")
 	}
 	return out
-}
-
-// validateLang keeps the language only if it parses.
-func validateLang(pm *parsedMeta) {
-	if len(pm.metadata.Languages) == 0 {
-		return
-	}
-	lang := strings.TrimSpace(pm.metadata.Languages[0])
-	pm.metadata.Languages = nil
-	if lang == "" {
-		return
-	}
-	tag, err := language.Parse(lang)
-	if err != nil || tag.String() == "und" {
-		return
-	}
-	if _, confidence := tag.Base(); confidence == language.No {
-		return
-	}
-	pm.metadata.Languages = []string{lang}
 }
 
 // textOf returns an element's concatenated text, trimmed.
