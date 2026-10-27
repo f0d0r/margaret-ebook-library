@@ -20,6 +20,13 @@
   hyphenated forms. Parsed values report their `Kind` and convert with
   `ToISBN10`/`ToISBN13`; 979-prefixed ISBN-13 values have no ISBN-10
   equivalent.
+- Text ISBN extraction in `tools`: `ExtractISBNs` finds validated ISBN-10/13
+  values in arbitrary text, including markered and bare forms, with NFKC and
+  Unicode digit normalization and canonical ISBN-13 deduplication.
+  `CanonicalISBN13` normalizes and converts a single value. `FindBookISBNs`
+  scans a book's linear reading-order head, non-linear spine items and
+  manifest-only textual resources, with configurable scan window and result
+  limit.
 - Subject extraction from EPUB/KEPUB, LIT, PalmDOC, MOBI, KF8, FB2, FB3 and
   LRF metadata: `Metadata.Subjects` exposes subject values in source order.
   Semicolon-separated values are split into separate entries; parts are trimmed
