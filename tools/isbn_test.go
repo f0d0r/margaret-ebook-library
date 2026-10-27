@@ -80,6 +80,34 @@ func TestParseISBN(t *testing.T) {
 	}
 }
 
+func TestCanonicalISBN13(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+		ok    bool
+	}{
+		{"isbn13", "978-0-306-40615-7", "9780306406157", true},
+		{"isbn10", "0-306-40615-2", "9780306406157", true},
+		{"isbn13 label", "ISBN-13: 978-0-306-40615-7", "9780306406157", true},
+		{"arabic indic", "٩٧٨٠٣٠٦٤٠٦١٥٧", "9780306406157", true},
+		{"persian", "۹۷۸۰۳۰۶۴۰۶۱۵۷", "9780306406157", true},
+		{"full width", "９７８０３０６４０６１５７", "9780306406157", true},
+		{"979", "9798400000003", "9798400000003", true},
+		{"invalid", "9780306406158", "", false},
+		{"empty", "", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := CanonicalISBN13(tt.input)
+			if got != tt.want || ok != tt.ok {
+				t.Fatalf("CanonicalISBN13(%q) = (%q, %v), want (%q, %v)", tt.input, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
 func TestParseISBNInvalid(t *testing.T) {
 	isbn, ok := ParseISBN("9780306406158")
 	if ok {

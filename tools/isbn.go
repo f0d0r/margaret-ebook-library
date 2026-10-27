@@ -4,6 +4,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/text/unicode/norm"
 )
 
 // ISBNKind identifies whether an ISBN is the 10- or 13-digit variant.
@@ -52,6 +54,37 @@ func ParseISBN(s string) (ISBN, bool) {
 		return ISBN{}, false
 	}
 	return ISBN{digits: digits}, true
+}
+
+// CanonicalISBN13 normalizes value as text, validates it as an ISBN and
+// returns the canonical ISBN-13 digits. Unlike ParseISBN, it folds fullwidth,
+// Arabic-Indic and Persian digits to ASCII before validation.
+func CanonicalISBN13(value string) (string, bool) {
+	isbn, ok := ParseISBN(normalizeISBNText(value))
+	if !ok {
+		return "", false
+	}
+	isbn13, ok := isbn.ToISBN13()
+	if !ok {
+		return "", false
+	}
+	return isbn13.String(), true
+}
+
+// normalizeISBNText applies NFKC and converts Arabic-Indic and Persian digits
+// to ASCII digits.
+func normalizeISBNText(value string) string {
+	value = norm.NFKC.String(value)
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r >= '\u0660' && r <= '\u0669':
+			return '0' + (r - '\u0660')
+		case r >= '\u06F0' && r <= '\u06F9':
+			return '0' + (r - '\u06F0')
+		default:
+			return r
+		}
+	}, value)
 }
 
 // String returns the canonical digits of the ISBN.

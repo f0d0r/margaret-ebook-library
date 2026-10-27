@@ -546,6 +546,29 @@ if ok {
 `ToISBN10` returns `false` for 979-prefixed ISBN-13 values, which have no
 ISBN-10 equivalent.
 
+`CanonicalISBN13` folds fullwidth, Arabic-Indic and Persian digits before
+validation and returns canonical ISBN-13 digits. `ExtractISBNs` finds
+validated ISBN-10 and ISBN-13 values in arbitrary text, so callers that
+extract text from non-ebook formats (plain text, RTF, PDF) can use the same
+logic. `FindBookISBNs` applies it to a book's linear reading-order head,
+non-linear spine items and manifest-only textual resources:
+
+```go
+isbn13, ok := tools.CanonicalISBN13("ISBN ٩٧٨٠٣٠٦٤٠٦١٥٧")
+fmt.Println(isbn13, ok) // 9780306406157 true
+
+isbns := tools.ExtractISBNs("Copyright ISBN 978-0-306-40615-7")
+fmt.Println(isbns) // [9780306406157]
+
+bookISBNs, err := tools.FindBookISBNs(ctx, b, tools.WithISBNLimit(1))
+fmt.Println(bookISBNs, err)
+```
+
+`FindBookISBNs` inspects the first 64 KiB of the linear reading order, then
+the first 64 KiB of each non-linear spine item and manifest-only textual
+resource. Use `WithISBNScanBytes` to change the window and `WithISBNLimit` to
+stop after a number of unique ISBNs.
+
 ### 13. Content fingerprinting (MinHash / SimHash)
 
 Fingerprints are computed over the normalized plain-text stream and are streaming-friendly — they implement `io.Writer` so they can be attached with `io.TeeReader`/`io.MultiWriter` in a single pass:
