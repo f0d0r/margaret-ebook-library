@@ -132,10 +132,11 @@ func (h *fingerprintHashers) result() FingerprintResult {
 	return r
 }
 
-// FingerprintContent computes fingerprints over the book's plain-text reading order.
-// It injects "\n" between spine chapters and streams with a single pass per
-// requested hasher (fan-out via MultiWriter). The book's resources are reopened
-// lazily; no extra buffering of the whole book is performed.
+// FingerprintContent computes fingerprints over the book's plain-text reading
+// order. It runs a FingerprintProcessor through ScanReadingOrder, so the
+// reading order is opened once and the requested hashers are fed in a single
+// pass (fan-out via MultiWriter). The book's resources are opened lazily; no
+// extra buffering of the whole book is performed.
 func FingerprintContent(ctx context.Context, b book.Book, opts ...FingerprintOption) (FingerprintResult, error) {
 	if isNilBook(b) {
 		return FingerprintResult{}, fmt.Errorf("book is nil")
@@ -144,24 +145,14 @@ func FingerprintContent(ctx context.Context, b book.Book, opts ...FingerprintOpt
 	if rs == nil {
 		return FingerprintResult{}, fmt.Errorf("resource set is nil")
 	}
-	cfg := resolveFingerprintConfig(opts)
-
-	hashers, err := newFingerprintHashers(cfg)
+	proc, err := NewFingerprintProcessor(opts...)
 	if err != nil {
 		return FingerprintResult{}, err
 	}
-
-	rc, err := openDelimitedReadingOrder(ctx, rs, mediatype.PlainText, cfg.delimiter)
-	if err != nil {
+	if err := ScanReadingOrder(ctx, rs, proc); err != nil {
 		return FingerprintResult{}, err
 	}
-	defer func() { _ = rc.Close() }()
-
-	tee := io.TeeReader(rc, hashers.w)
-	if _, err := io.Copy(io.Discard, tee); err != nil {
-		return FingerprintResult{}, err
-	}
-	return hashers.result(), nil
+	return proc.Result(), nil
 }
 
 // FingerprintReader computes fingerprints over the normalized plain-text stream

@@ -9,6 +9,13 @@
 // plain text. The fingerprint hashers implement io.Writer so they can be
 // attached with io.TeeReader/io.MultiWriter in a single pass.
 //
+// ScanReadingOrder is the single-pass pipeline behind FingerprintContent and
+// FindBookISBNs. Callers attach processors that implement the capabilities
+// they need (TextProcessor, HeadProcessor, FallbackProcessor, FinishProcessor);
+// the pipeline discovers the capabilities and feeds every processor from one
+// plain-text reading order. Processors keep their own results, so callers read
+// them from the processor instances after the scan.
+//
 // IsValidISBN and ParseISBN normalize and validate ISBN-10/ISBN-13
 // identifiers in common URN, labelled, spaced, and hyphenated forms.
 // Parsed values expose their Kind and can be converted with ToISBN10 and
