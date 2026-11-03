@@ -43,10 +43,10 @@ func WithISBNLimit(n int) ISBNScanOption {
 }
 
 // FindBookISBNs returns the validated ISBNs found in the book's text
-// resources. It scans the head of the linear reading order first, then the
-// head of each non-linear spine item, then the head of each manifest-only
-// textual resource. Unreadable optional resources are skipped; context
-// cancellation is returned.
+// resources. It runs an ISBNProcessor through ScanReadingOrder: the head of the
+// linear reading order is scanned first, then the head of each non-linear spine
+// item, then the head of each manifest-only textual resource. Unreadable
+// optional resources are skipped; context cancellation is returned.
 func FindBookISBNs(ctx context.Context, b book.Book, opts ...ISBNScanOption) ([]ISBN, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -62,102 +62,11 @@ func FindBookISBNs(ctx context.Context, b book.Book, opts ...ISBNScanOption) ([]
 	for _, opt := range opts {
 		opt(&cfg)
 	}
-
-	out := make([]ISBN, 0, 1)
-	seen := make(map[string]struct{})
-	add := func(found []ISBN) bool {
-		for _, isbn := range found {
-			isbn13, ok := isbn.ToISBN13()
-			if !ok {
-				continue
-			}
-			key := isbn13.String()
-			if _, exists := seen[key]; exists {
-				continue
-			}
-			seen[key] = struct{}{}
-			out = append(out, isbn)
-			if cfg.limit > 0 && len(out) >= cfg.limit {
-				return true
-			}
-		}
-		return false
-	}
-
-	head, err := readReadingOrderHead(ctx, rs, cfg.maxBytes)
-	if err != nil {
+	proc := NewISBNProcessor(cfg.maxBytes, cfg.limit)
+	if err := ScanReadingOrder(ctx, rs, proc); err != nil {
 		return nil, err
 	}
-	if add(ExtractISBNs(head)) {
-		return out, nil
-	}
-
-	linear := make(map[*book.Resource]struct{})
-	for _, item := range rs.ReadingOrder() {
-		if item.Linear && item.Resource != nil {
-			linear[item.Resource] = struct{}{}
-		}
-	}
-	scanned := make(map[*book.Resource]struct{})
-	scan := func(res *book.Resource) (bool, error) {
-		if res == nil {
-			return false, nil
-		}
-		if _, ok := linear[res]; ok {
-			return false, nil
-		}
-		if _, ok := scanned[res]; ok {
-			return false, nil
-		}
-		scanned[res] = struct{}{}
-		if !canConvertToText(res.MediaType) {
-			return false, nil
-		}
-		text, err := readResourceHead(ctx, res, cfg.maxBytes)
-		if err != nil {
-			if ctx.Err() != nil {
-				return false, ctx.Err()
-			}
-			return false, nil
-		}
-		return add(ExtractISBNs(text)), nil
-	}
-
-	for _, item := range rs.ReadingOrder() {
-		if item.Linear {
-			continue
-		}
-		done, err := scan(item.Resource)
-		if err != nil {
-			return nil, err
-		}
-		if done {
-			return out, nil
-		}
-	}
-	for _, res := range rs.All() {
-		done, err := scan(res)
-		if err != nil {
-			return nil, err
-		}
-		if done {
-			return out, nil
-		}
-	}
-	return out, nil
-}
-
-func readReadingOrderHead(ctx context.Context, rs *book.ResourceSet, limit int) (string, error) {
-	rc, err := openDelimitedReadingOrder(ctx, rs, mediatype.PlainText, "\n")
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(io.LimitReader(rc, int64(limit)))
-	if err != nil {
-		return "", err
-	}
-	return strings.ToValidUTF8(string(data), ""), nil
+	return proc.Result(), nil
 }
 
 func readResourceHead(ctx context.Context, res *book.Resource, limit int) (string, error) {

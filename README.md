@@ -29,6 +29,7 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
   - [11. Hashing a book](#11-hashing-a-book)
   - [12. ISBN validation and conversion](#12-isbn-validation-and-conversion)
   - [13. Content fingerprinting (MinHash / SimHash)](#13-content-fingerprinting-minhash--simhash)
+  - [14. Single-pass reading-order processing](#14-single-pass-reading-order-processing)
 - [Error handling](#error-handling)
 - [Development](#development)
 - [License](#license)
@@ -41,6 +42,7 @@ Margaret is a format-agnostic Go library that presents every ebook — whether E
 - Lazy streaming access to resources (no full in-memory load)
 - On-the-fly conversion of text resources to plain text (search indexing, LLM input, TTS)
 - Content fingerprinting (MinHash / SimHash) for deduplication and similarity
+- One-pass text pipeline for fingerprints, ISBNs, head capture and custom processors
 - Conservative safety limits with functional-option overrides
 
 ## Supported formats
@@ -627,6 +629,44 @@ tee := io.TeeReader(rc, io.MultiWriter(mh, sh))
 io.Copy(io.Discard, tee)
 fmt.Println(mh.Signature(), sh.Sum64())
 ```
+
+### 14. Single-pass reading-order processing
+
+`ScanReadingOrder` reads the plain-text reading order once and feeds every
+attached processor that implements one of the capability interfaces:
+`TextProcessor` (the whole stream), `HeadProcessor` (the first bytes),
+`FallbackProcessor` (resources outside the linear reading order) and
+`FinishProcessor` (finalization). Capabilities are detected by type assertion,
+so a processor implements only what it needs. The library ships processors for
+fingerprints, head capture and ISBN extraction:
+
+```go
+import (
+    "context"
+    "fmt"
+
+    "github.com/f0d0r/margaret-ebook-library/tools"
+)
+
+fingerprints, err := tools.NewFingerprintProcessor(
+    tools.WithMinHash(tools.MinHashConfig{NumHashes: 128, ShingleSize: 5}),
+)
+isbns := tools.NewISBNProcessor(64<<10, 1)
+head := tools.NewTextHead(64<<10)
+
+err = tools.ScanReadingOrder(ctx, book.Resources(), fingerprints, isbns, head)
+fmt.Println(fingerprints.Result().MinHash)
+fmt.Println(isbns.Result())
+fmt.Println(head.Text())
+```
+
+Custom streaming processors implement `Process([]byte) error`. Processors that
+only need the head implement `HeadLimit() int` and `ProcessHead([]byte) error`;
+the pipeline calls them as soon as the requested prefix is available, and when
+no streaming processor is attached it stops reading there instead of walking the
+whole book. `NewISBNProcessor` keeps the same head-first, then non-linear spine,
+then manifest-only fallback order as `FindBookISBNs`, but reuses the head that
+the pipeline already read.
 
 ## Error handling
 

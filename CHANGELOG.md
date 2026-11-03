@@ -27,6 +27,15 @@
   scans a book's linear reading-order head, non-linear spine items and
   manifest-only textual resources, with configurable scan window and result
   limit.
+- Single-pass reading-order pipeline in `tools`: the `Processor` marker plus
+  optional `TextProcessor`, `HeadProcessor`, `FallbackProcessor` and
+  `FinishProcessor` capabilities. `ScanReadingOrder` feeds every attached
+  processor from one plain-text stream, calls head processors as soon as their
+  limit is available, and stops reading early when only head, fallback or
+  finish processors are attached. `NewFingerprintProcessor`, `NewTextHead` and
+  `NewISBNProcessor` cover fingerprints, head capture and ISBN extraction
+  (including the non-linear fallback) without reopening the reading order.
+  `FindBookISBNs` and `FingerprintContent` now run on the same pipeline.
 - Subject extraction from EPUB/KEPUB, LIT, PalmDOC, MOBI, KF8, FB2, FB3 and
   LRF metadata: `Metadata.Subjects` exposes subject values in source order.
   Semicolon-separated values are split into separate entries; parts are trimmed
