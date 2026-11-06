@@ -42,7 +42,17 @@ func WithISBNLimit(n int) ISBNScanOption {
 	}
 }
 
-// FindBookISBNs returns the validated ISBNs found in the book's text
+// FindBookISBN scans a book's reading order and returns the first book-valid
+// ISBN. It reports false when no book-valid ISBN is found.
+func FindBookISBN(ctx context.Context, b book.Book) (ISBN, bool, error) {
+	found, err := FindBookISBNs(ctx, b, WithISBNLimit(1))
+	if err != nil || len(found) == 0 {
+		return ISBN{}, false, err
+	}
+	return found[0], true, nil
+}
+
+// FindBookISBNs returns the book-valid ISBNs found in the book's text
 // resources. It runs an ISBNProcessor through ScanReadingOrder: the head of the
 // linear reading order is scanned first, then the head of each non-linear spine
 // item, then the head of each manifest-only textual resource. Unreadable

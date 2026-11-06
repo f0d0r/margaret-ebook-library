@@ -21,23 +21,23 @@ type ISBN struct {
 	digits string
 }
 
-// IsValidISBN reports whether s is a valid ISBN-10 or ISBN-13.
+// IsValidISBN reports whether s is acceptable as a book ISBN-10 or ISBN-13.
 //
 // It accepts common representations: an optional "urn:isbn:" prefix or
-// "ISBN", "ISBN-10", "ISBN-13" label, and whitespace or hyphen separators.
-// ISBN-10 values may end in an upper- or lowercase "X"; ISBN-13 values must
-// start with 978 or 979.
+// "ISBN", "ISBN-10", "ISBN-13" label, whitespace or hyphen separators, and
+// Unicode digits. ISBN-10 values may end in an upper- or lowercase "X";
+// ISBN-13 values must start with 978 or 979. The value must also pass
+// [ValidateBookISBN], so known placeholder ISBNs are rejected.
 func IsValidISBN(s string) bool {
-	_, ok := ParseISBN(s)
+	_, ok := ValidateBookISBN(s)
 	return ok
 }
 
-// ParseISBN normalizes and validates s as an ISBN-10 or ISBN-13.
-//
-// On success it returns the canonical digits with an uppercase X for
-// ISBN-10. It reports false for malformed or checksum-invalid input.
-func ParseISBN(s string) (ISBN, bool) {
-	digits, ok := normalizeISBN(s)
+// NormalizeISBN parses one ISBN candidate. It accepts labels, separators and
+// Unicode digits, validates the checksum and returns the canonical value. It
+// does not decide whether the ISBN is a plausible book identifier.
+func NormalizeISBN(s string) (ISBN, bool) {
+	digits, ok := normalizeISBN(normalizeISBNText(s))
 	if !ok {
 		return ISBN{}, false
 	}
@@ -56,19 +56,14 @@ func ParseISBN(s string) (ISBN, bool) {
 	return ISBN{digits: digits}, true
 }
 
-// CanonicalISBN13 normalizes value as text, validates it as an ISBN and
-// returns the canonical ISBN-13 digits. Unlike ParseISBN, it folds fullwidth,
-// Arabic-Indic and Persian digits to ASCII before validation.
-func CanonicalISBN13(value string) (string, bool) {
-	isbn, ok := ParseISBN(normalizeISBNText(value))
-	if !ok {
-		return "", false
+// ValidateBookISBN reports whether s is acceptable as a book identifier:
+// valid ISBN syntax and checksum, and not a known placeholder.
+func ValidateBookISBN(s string) (ISBN, bool) {
+	isbn, ok := NormalizeISBN(s)
+	if !ok || isbn.PlaceholderKind() != NotPlaceholder {
+		return ISBN{}, false
 	}
-	isbn13, ok := isbn.ToISBN13()
-	if !ok {
-		return "", false
-	}
-	return isbn13.String(), true
+	return isbn, true
 }
 
 // normalizeISBNText applies NFKC and converts Arabic-Indic and Persian digits

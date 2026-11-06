@@ -118,6 +118,13 @@ func TestMetadataPublisherDateISBN(t *testing.T) {
 			isbn:      "",
 		},
 		{
+			name:      "placeholder isbn ignored",
+			html:      wrap(`<meta name="isbn" content="978-1-234567-89-7">`, ""),
+			publisher: "",
+			date:      "",
+			isbn:      "",
+		},
+		{
 			name: "invalid declared falls back to valid heuristic",
 			html: wrap(`<meta name="isbn" content="12345">`,
 				`<span class="isbn">978-0-306-40615-7</span>`),

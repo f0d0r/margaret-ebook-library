@@ -525,15 +525,20 @@ hash, err := tools.CalculateFileHashFromBlob(ebook.NewPathBlob("books/my-book.ep
 
 ### 12. ISBN validation and conversion
 
-`IsValidISBN` accepts ISBN-10 and ISBN-13 identifiers in common forms such as
-`urn:isbn:` prefixes, `ISBN` labels, spaces, and hyphens:
+`NormalizeISBN` accepts ISBN-10 and ISBN-13 identifiers in common forms such
+as `urn:isbn:` prefixes, `ISBN` labels, spaces, hyphens and Unicode digits, and
+validates the checksum. It does not reject well-formed placeholder values.
+
+`ValidateBookISBN` and its boolean convenience form `IsValidISBN` add the
+book-level check: the value must be a valid ISBN and must not be a known
+placeholder such as a test pattern:
 
 ```go
 if tools.IsValidISBN("urn:isbn:978-0-306-40615-7") {
-    // valid ISBN-13
+    // plausible book ISBN
 }
 
-isbn, ok := tools.ParseISBN("ISBN-10: 0-306-40615-2")
+isbn, ok := tools.NormalizeISBN("ISBN-10: 0-306-40615-2")
 if ok {
     fmt.Println(isbn, isbn.Kind()) // 0306406152 10
 
@@ -548,28 +553,26 @@ if ok {
 `ToISBN10` returns `false` for 979-prefixed ISBN-13 values, which have no
 ISBN-10 equivalent.
 
-`CanonicalISBN13` folds fullwidth, Arabic-Indic and Persian digits before
-validation and returns canonical ISBN-13 digits. `ExtractISBNs` finds
-validated ISBN-10 and ISBN-13 values in arbitrary text, so callers that
-extract text from non-ebook formats (plain text, RTF, PDF) can use the same
-logic. `FindBookISBNs` applies it to a book's linear reading-order head,
-non-linear spine items and manifest-only textual resources:
+`FindISBNs` finds book-valid ISBN-10 and ISBN-13 values in arbitrary text, so
+callers that extract text from non-ebook formats (plain text, RTF, PDF) can use
+the same logic. `FindBookISBN` returns the first book-valid ISBN from a book's
+reading order, and `FindBookISBNs` returns up to `WithISBNLimit` values:
 
 ```go
-isbn13, ok := tools.CanonicalISBN13("ISBN ٩٧٨٠٣٠٦٤٠٦١٥٧")
-fmt.Println(isbn13, ok) // 9780306406157 true
-
-isbns := tools.ExtractISBNs("Copyright ISBN 978-0-306-40615-7")
+isbns := tools.FindISBNs("Copyright ISBN 978-0-306-40615-7")
 fmt.Println(isbns) // [9780306406157]
+
+isbn, ok, err := tools.FindBookISBN(ctx, b)
+fmt.Println(isbn, ok, err)
 
 bookISBNs, err := tools.FindBookISBNs(ctx, b, tools.WithISBNLimit(1))
 fmt.Println(bookISBNs, err)
 ```
 
-`FindBookISBNs` inspects the first 64 KiB of the linear reading order, then
-the first 64 KiB of each non-linear spine item and manifest-only textual
-resource. Use `WithISBNScanBytes` to change the window and `WithISBNLimit` to
-stop after a number of unique ISBNs.
+`FindBookISBN` and `FindBookISBNs` inspect the first 64 KiB of the linear
+reading order, then the first 64 KiB of each non-linear spine item and
+manifest-only textual resource. Use `WithISBNScanBytes` to change the window
+and `WithISBNLimit` to stop after a number of unique ISBNs.
 
 ### 13. Content fingerprinting (MinHash / SimHash)
 
@@ -667,8 +670,8 @@ only need the head implement `HeadLimit() int` and `ProcessHead([]byte) error`;
 the pipeline calls them as soon as the requested prefix is available, and when
 no streaming processor is attached it stops reading there instead of walking the
 whole book. `NewISBNProcessor` keeps the same head-first, then non-linear spine,
-then manifest-only fallback order as `FindBookISBNs`, but reuses the head that
-the pipeline already read.
+then manifest-only fallback order as `FindBookISBNs`, returns only book-valid
+ISBNs, and reuses the head that the pipeline already read.
 
 ## Error handling
 
