@@ -240,10 +240,10 @@ func stripLabel(text, label string) string {
 }
 
 // cleanISBNDigits keeps only ISBN digits (ASCII 0-9 and X/x) from an
-// ISBN-specific source, validates the result and returns the canonical
+// ISBN-specific source, validates it as a book ISBN and returns the canonical
 // digits. This tolerates surrounding text such as "ISBN: ... (pbk.)".
 func cleanISBNDigits(raw string) (string, bool) {
-	isbn, ok := tools.ParseISBN(isbnDigits(raw))
+	isbn, ok := tools.ValidateBookISBN(isbnDigits(raw))
 	if !ok {
 		return "", false
 	}
@@ -263,11 +263,11 @@ func isbnDigits(raw string) string {
 	return sb.String()
 }
 
-// cleanISBN validates raw with tools.ParseISBN and removes a leading
-// "urn:isbn:", "ISBN", "ISBN-10" or "ISBN-13" label, preserving the declared
-// formatting (hyphens) of the remaining value.
+// cleanISBN validates raw as a book ISBN and removes a leading "urn:isbn:",
+// "ISBN", "ISBN-10" or "ISBN-13" label, preserving the declared formatting
+// (hyphens) of the remaining value.
 func cleanISBN(raw string) (string, bool) {
-	if _, ok := tools.ParseISBN(raw); !ok {
+	if _, ok := tools.ValidateBookISBN(raw); !ok {
 		return "", false
 	}
 	value := strings.TrimSpace(raw)

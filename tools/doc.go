@@ -18,13 +18,14 @@
 // plain-text reading order. Processors keep their own results, so callers read
 // them from the processor instances after the scan.
 //
-// IsValidISBN and ParseISBN normalize and validate ISBN-10/ISBN-13
-// identifiers in common URN, labelled, spaced, and hyphenated forms.
-// Parsed values expose their Kind and can be converted with ToISBN10 and
-// ToISBN13. CanonicalISBN13 additionally folds Unicode digits and returns
-// canonical ISBN-13 digits.
+// NormalizeISBN parses and checksum-validates one ISBN-10/ISBN-13 candidate in
+// common URN, labelled, spaced, hyphenated and Unicode-digit forms. Normalized
+// values expose their Kind and convert with ToISBN10 and ToISBN13.
+// ValidateBookISBN and IsValidISBN add the book-level check that rejects known
+// placeholder values; ISBN.PlaceholderKind reports the reason.
 //
-// ExtractISBNs finds validated ISBNs in arbitrary text. FindBookISBNs applies
-// the same extraction to a book's linear reading-order head, non-linear spine
-// items, and manifest-only textual resources.
+// FindISBNs finds book-valid ISBNs in arbitrary text. FindBookISBN returns the
+// first book-valid ISBN from a book's reading order, while FindBookISBNs scans
+// the linear reading-order head, non-linear spine items, and manifest-only
+// textual resources.
 package tools

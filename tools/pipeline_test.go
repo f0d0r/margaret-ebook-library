@@ -239,6 +239,19 @@ func TestISBNProcessorHead(t *testing.T) {
 	}
 }
 
+func TestISBNProcessorSkipsPlaceholder(t *testing.T) {
+	r := testScanResource("c1", mediatype.XHTML, `<p>ISBN 978-1-234567-89-7 and 978-0-306-40615-7</p>`)
+	b := testScanBook([]*book.Resource{r}, []book.ReadingOrderItem{{Resource: r, Linear: true}})
+
+	proc := NewISBNProcessor(64*1024, 1)
+	if err := ScanReadingOrder(context.Background(), b.Resources(), proc); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"9780306406157"}; !slices.Equal(canonicalStrings(proc.Result()), want) {
+		t.Fatalf("ISBNs = %v, want %v", canonicalStrings(proc.Result()), want)
+	}
+}
+
 func TestISBNProcessorFallback(t *testing.T) {
 	linear := testScanResource("c1", mediatype.XHTML, `<p>No identifier here.</p>`)
 	notes := testScanResource("c2", mediatype.XHTML, `<p>ISBN 978-0-306-40615-7</p>`)

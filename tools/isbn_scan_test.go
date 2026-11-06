@@ -163,6 +163,53 @@ func TestFindBookISBNsDeduplicates(t *testing.T) {
 	}
 }
 
+func TestFindBookISBN(t *testing.T) {
+	first := testScanResource("c1", mediatype.XHTML, `<p>ISBN 978-0-306-40615-7</p>`)
+	second := testScanResource("c2", mediatype.XHTML, `<p>ISBN 9780375704024</p>`)
+	b := testScanBook(
+		[]*book.Resource{first, second},
+		[]book.ReadingOrderItem{{Resource: first, Linear: true}, {Resource: second, Linear: true}},
+	)
+
+	got, ok, err := FindBookISBN(context.Background(), b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || got.String() != "9780306406157" {
+		t.Fatalf("FindBookISBN() = (%q, %v), want (%q, true)", got.String(), ok, "9780306406157")
+	}
+}
+
+func TestFindBookISBNSkipsPlaceholder(t *testing.T) {
+	first := testScanResource("c1", mediatype.XHTML, `<p>ISBN 978-1-234567-89-7</p>`)
+	second := testScanResource("c2", mediatype.XHTML, `<p>ISBN 9780375704024</p>`)
+	b := testScanBook(
+		[]*book.Resource{first, second},
+		[]book.ReadingOrderItem{{Resource: first, Linear: true}, {Resource: second, Linear: true}},
+	)
+
+	got, ok, err := FindBookISBN(context.Background(), b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || got.String() != "9780375704024" {
+		t.Fatalf("FindBookISBN() = (%q, %v), want (%q, true)", got.String(), ok, "9780375704024")
+	}
+}
+
+func TestFindBookISBNNotFound(t *testing.T) {
+	r := testScanResource("c1", mediatype.XHTML, `<p>No identifier here.</p>`)
+	b := testScanBook([]*book.Resource{r}, []book.ReadingOrderItem{{Resource: r, Linear: true}})
+
+	got, ok, err := FindBookISBN(context.Background(), b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || got.String() != "" {
+		t.Fatalf("FindBookISBN() = (%q, %v), want (\"\", false)", got.String(), ok)
+	}
+}
+
 func TestFindBookISBNsContextCanceled(t *testing.T) {
 	r := testScanResource("c1", mediatype.XHTML, `<p>ISBN 978-0-306-40615-7</p>`)
 	b := testScanBook([]*book.Resource{r}, []book.ReadingOrderItem{{Resource: r, Linear: true}})

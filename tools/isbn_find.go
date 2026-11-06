@@ -20,12 +20,12 @@ var (
 	isbn10Pattern = regexp.MustCompile(`(?i)(` + isbn10Core + `)`)
 )
 
-// ExtractISBNs returns the validated ISBNs found in text in order of first
-// appearance, deduplicated by canonical ISBN-13. It accepts markered and bare
-// ISBN-10/ISBN-13 forms and normalizes NFKC and Unicode digits before
+// FindISBNs scans arbitrary text and returns book-valid ISBNs in order of
+// first appearance, deduplicated by canonical ISBN-13. It accepts markered and
+// bare ISBN-10/ISBN-13 forms and normalizes NFKC and Unicode digits before
 // matching. Returned values keep the form in which they were found; use
 // ISBN.ToISBN13 for canonical values.
-func ExtractISBNs(text string) []ISBN {
+func FindISBNs(text string) []ISBN {
 	if text == "" {
 		return nil
 	}
@@ -46,7 +46,7 @@ func ExtractISBNs(text string) []ISBN {
 			if !isbnBoundaryAfter(text, end) {
 				continue
 			}
-			isbn, ok := ParseISBN(text[start:end])
+			isbn, ok := ValidateBookISBN(text[start:end])
 			if !ok {
 				continue
 			}

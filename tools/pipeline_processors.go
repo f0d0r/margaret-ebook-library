@@ -62,7 +62,7 @@ func (p *TextHead) ProcessHead(head []byte) error {
 // Text returns the captured head.
 func (p *TextHead) Text() string { return p.text }
 
-// ISBNProcessor extracts at most limit validated ISBNs from the reading-order
+// ISBNProcessor extracts at most limit book-valid ISBNs from the reading-order
 // head and, when the head has none, from non-linear and manifest-only textual
 // resources. It implements HeadProcessor and FallbackProcessor. Results are
 // available after ScanReadingOrder returns.
@@ -94,7 +94,7 @@ func (p *ISBNProcessor) ProcessHead(head []byte) error {
 	if len(head) > p.maxBytes {
 		head = head[:p.maxBytes]
 	}
-	p.add(ExtractISBNs(strings.ToValidUTF8(string(head), "")))
+	p.add(FindISBNs(strings.ToValidUTF8(string(head), "")))
 	return nil
 }
 
@@ -126,7 +126,7 @@ func (p *ISBNProcessor) ProcessFallback(ctx context.Context, rs *book.ResourceSe
 			}
 			return false, nil
 		}
-		p.add(ExtractISBNs(text))
+		p.add(FindISBNs(text))
 		return p.done(), nil
 	}
 

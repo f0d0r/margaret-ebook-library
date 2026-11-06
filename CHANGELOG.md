@@ -15,15 +15,17 @@
   Calibre-style `1.0` default), and the first non-empty series wins. Canonical
   EPUB 3 series without `group-position` yield an empty index. MOBI/KF8,
   eReader, CHM and LRF expose no series metadata and leave both fields empty.
-- ISBN-10/ISBN-13 handling in `tools`: `IsValidISBN` and `ParseISBN`
-  normalize and validate common URN (`urn:isbn:`), labelled, spaced, and
-  hyphenated forms. Parsed values report their `Kind` and convert with
-  `ToISBN10`/`ToISBN13`; 979-prefixed ISBN-13 values have no ISBN-10
-  equivalent.
-- Text ISBN extraction in `tools`: `ExtractISBNs` finds validated ISBN-10/13
-  values in arbitrary text, including markered and bare forms, with NFKC and
-  Unicode digit normalization and canonical ISBN-13 deduplication.
-  `CanonicalISBN13` normalizes and converts a single value. `FindBookISBNs`
+- ISBN-10/ISBN-13 handling in `tools`: `NormalizeISBN` parses and
+  checksum-validates one candidate in common URN (`urn:isbn:`), labelled,
+  spaced, hyphenated and Unicode-digit forms. Normalized values report their
+  `Kind` and convert with `ToISBN10`/`ToISBN13`; 979-prefixed ISBN-13 values
+  have no ISBN-10 equivalent. `ValidateBookISBN` and `IsValidISBN` add the
+  book-level check that rejects known placeholder values, with
+  `ISBN.PlaceholderKind` explaining the rejection.
+- Text ISBN search in `tools`: `FindISBNs` returns book-valid ISBN-10/13 values
+  from arbitrary text, including markered and bare forms, with NFKC and Unicode
+  digit normalization and canonical ISBN-13 deduplication. `FindBookISBN`
+  returns the first book-valid ISBN from a book's reading order. `FindBookISBNs`
   scans a book's linear reading-order head, non-linear spine items and
   manifest-only textual resources, with configurable scan window and result
   limit.

@@ -17,7 +17,7 @@ func canonicalStrings(values []ISBN) []string {
 	return out
 }
 
-func TestExtractISBNs(t *testing.T) {
+func TestFindISBNs(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		in   string
@@ -39,14 +39,16 @@ func TestExtractISBNs(t *testing.T) {
 		{"order", "9780375704024 then 9780306406157", []string{"9780375704024", "9780306406157"}},
 		{"adjacent bare", "9780306406157 9780375704024", []string{"9780306406157", "9780375704024"}},
 		{"adjacent after marker", "ISBN 9780306406157 9780375704024", []string{"9780306406157", "9780375704024"}},
+		{"placeholder skipped", "ISBN 978‑1‑234567‑89‑7 and 978-0-306-40615-7", []string{"9780306406157"}},
+		{"placeholder only", "ISBN 978‑1‑234567‑89‑7", nil},
 		{"digit prefix", "19780306406157", nil},
 		{"digit suffix", "97803064061570", nil},
 		{"surrounded by letters", "x9780306406157y", []string{"9780306406157"}},
 		{"empty", "", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := canonicalStrings(ExtractISBNs(tc.in)); !slices.Equal(got, tc.want) {
-				t.Errorf("ExtractISBNs(%q) = %v, want %v", tc.in, got, tc.want)
+			if got := canonicalStrings(FindISBNs(tc.in)); !slices.Equal(got, tc.want) {
+				t.Errorf("FindISBNs(%q) = %v, want %v", tc.in, got, tc.want)
 			}
 		})
 	}
