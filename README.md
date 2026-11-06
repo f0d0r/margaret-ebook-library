@@ -610,10 +610,12 @@ io.Copy(io.Discard, rc) // or dst file
 fp = handle.Result()
 ```
 
-`FingerprintText` and `FingerprintReader` use the same NFKC, lowercasing,
-whitespace-collapse and word-shingle normalization as `FingerprintContent`, and
-treat input as plain text (no HTML conversion). Empty input yields an all-max
-MinHash signature and a zero SimHash; input shorter than the shingle size is
+`FingerprintText` and `FingerprintReader` use the same normalization as
+`FingerprintContent`: NFKC, Unicode full case folding, punctuation and symbol
+boundaries, removal of invisible format characters (soft hyphen, BOM,
+zero-width characters), whitespace collapse and word shingles. Input is treated
+as plain text (no HTML conversion). Empty input yields an all-max MinHash
+signature and a zero SimHash; input shorter than the shingle size is
 fingerprinted as a single shingle.
 
 `MinHasher` and `SimHasher` also implement `io.Writer` directly:

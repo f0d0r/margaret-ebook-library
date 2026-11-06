@@ -163,6 +163,53 @@ func TestFingerprintText_Normalizes(t *testing.T) {
 	}
 }
 
+func TestFingerprintText_Normalization_PunctuationAndInvisible(t *testing.T) {
+	pairs := [][2]string{
+		{"word. word!", "word word"},
+		{"Hello—world", "Hello world"},
+		{"foo\u200bbar baz", "foobar baz"},
+		{"Sze\u00adchenyi", "Szechenyi"},
+		{"Straße", "STRASSE"},
+	}
+	opts := []FingerprintOption{
+		WithMinHash(MinHashConfig{NumHashes: 32, ShingleSize: 2}),
+		WithSimHash(),
+	}
+	for _, pair := range pairs {
+		a, err := FingerprintText(pair[0], opts...)
+		if err != nil {
+			t.Fatalf("FingerprintText(%q) failed: %v", pair[0], err)
+		}
+		b, err := FingerprintText(pair[1], opts...)
+		if err != nil {
+			t.Fatalf("FingerprintText(%q) failed: %v", pair[1], err)
+		}
+		if !equalSigs(a.MinHash, b.MinHash) {
+			t.Fatalf("%q vs %q MinHash mismatch: Jaccard=%f", pair[0], pair[1], Jaccard(a.MinHash, b.MinHash))
+		}
+		if a.SimHash != b.SimHash {
+			t.Fatalf("%q vs %q SimHash mismatch: %#x vs %#x", pair[0], pair[1], a.SimHash, b.SimHash)
+		}
+	}
+}
+
+func TestFingerprintText_Normalization_KeepsDifferentTextApart(t *testing.T) {
+	opts := []FingerprintOption{
+		WithMinHash(MinHashConfig{NumHashes: 64, ShingleSize: 2}),
+	}
+	a, err := FingerprintText("legdöbbenetesebb. tisztelendő A dűne a fűszerről szól.", opts...)
+	if err != nil {
+		t.Fatalf("FingerprintText failed: %v", err)
+	}
+	b, err := FingerprintText("teljesen más szerző könyve, egészen eltérő mondatokkal.", opts...)
+	if err != nil {
+		t.Fatalf("FingerprintText failed: %v", err)
+	}
+	if j := Jaccard(a.MinHash, b.MinHash); j >= 0.2 {
+		t.Fatalf("unrelated text Jaccard = %.3f, want < 0.2", j)
+	}
+}
+
 func TestFingerprintReader_DoesNotClose(t *testing.T) {
 	r := &trackingReadCloser{Reader: strings.NewReader(fingerprintSample)}
 	if _, err := FingerprintReader(r); err != nil {

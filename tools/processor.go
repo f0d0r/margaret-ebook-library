@@ -5,12 +5,17 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/text/cases"
 	"golang.org/x/text/unicode/norm"
 )
 
+// caseFolder implements Unicode full case folding for caseless comparison.
+var caseFolder = cases.Fold()
+
 // wordShingler is a streaming word-based shingler that normalizes text
-// (NFKC + lower + whitespace collapse) and emits k-word shingles via callback.
-// It is the shared core for MinHasher and SimHasher.
+// (NFKC + case folding + punctuation and invisible-character removal) and
+// emits k-word shingles via callback. It is the shared core for MinHasher and
+// SimHasher.
 type wordShingler struct {
 	k         int
 	leftover  []byte
@@ -54,11 +59,7 @@ func (w *wordShingler) Write(p []byte) (int, error) {
 		}
 		r, size := utf8.DecodeRune(buf[i:])
 		i += size
-		if unicode.IsSpace(r) {
-			w.flushWord()
-		} else {
-			w.cur = append(w.cur, r)
-		}
+		w.consume(r)
 	}
 	if i < len(buf) {
 		w.leftover = append(w.leftover, buf[i:]...)
@@ -66,14 +67,26 @@ func (w *wordShingler) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// consume applies the per-rune normalization rules: format characters are
+// dropped, separators and symbols delimit words, everything else is word text.
+func (w *wordShingler) consume(r rune) {
+	switch {
+	case unicode.Is(unicode.Cf, r):
+		return
+	case unicode.IsSpace(r), unicode.IsPunct(r), unicode.IsSymbol(r), unicode.IsControl(r):
+		w.flushWord()
+	default:
+		w.cur = append(w.cur, r)
+	}
+}
+
 func (w *wordShingler) flushWord() {
 	if len(w.cur) == 0 {
 		return
 	}
 	word := string(w.cur)
-	// NFKC then lower.
 	word = norm.NFKC.String(word)
-	word = strings.ToLower(word)
+	word = caseFolder.String(word)
 	// After normalization word may contain spaces (unlikely for single word),
 	// but we treat it as one token as normalized.
 	w.total++
@@ -120,27 +133,15 @@ func (w *wordShingler) Flush() {
 		w.leftover = w.leftover[:0]
 		for len(buf) > 0 {
 			if !utf8.FullRune(buf) {
-				// Incomplete trailing bytes — treat as bytes to avoid loss: decode with replacement.
-				// Use DecodeRune which will return RuneError for incomplete.
-				// Break to avoid infinite loop; treat remaining as word chars.
-				// We flush cur and break.
-				// Append remaining bytes as runes lossily.
+				// Incomplete trailing bytes: decode lossily to avoid silent loss.
 				for _, r := range string(buf) {
-					if unicode.IsSpace(r) {
-						w.flushWord()
-					} else {
-						w.cur = append(w.cur, r)
-					}
+					w.consume(r)
 				}
 				break
 			}
 			r, size := utf8.DecodeRune(buf)
 			buf = buf[size:]
-			if unicode.IsSpace(r) {
-				w.flushWord()
-			} else {
-				w.cur = append(w.cur, r)
-			}
+			w.consume(r)
 		}
 	}
 	if len(w.cur) > 0 {

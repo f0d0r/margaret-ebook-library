@@ -377,6 +377,63 @@ func TestFingerprintContent_RealEPUB_vs_MOBI_SameBook(t *testing.T) {
 	}
 }
 
+func TestFingerprintContent_MinifiedVsPrettyHTML(t *testing.T) {
+	ctx := context.Background()
+	minified := "<div><p>the quick brown fox jumps over the lazy dog</p><p>the quick brown fox jumps over the lazy dog</p></div>"
+	pretty := "<div>\n  <p>the quick brown fox jumps over the lazy dog</p>\n  <p>the quick brown fox jumps over the lazy dog</p>\n</div>"
+	opts := []FingerprintOption{
+		WithMinHash(MinHashConfig{NumHashes: 64, ShingleSize: 3}),
+		WithSimHash(),
+	}
+	fpMin, err := FingerprintContent(ctx, &fakeBook{rs: newTestResources(t, []string{minified})}, opts...)
+	if err != nil {
+		t.Fatalf("minified fingerprint failed: %v", err)
+	}
+	fpPretty, err := FingerprintContent(ctx, &fakeBook{rs: newTestResources(t, []string{pretty})}, opts...)
+	if err != nil {
+		t.Fatalf("pretty fingerprint failed: %v", err)
+	}
+	if j := Jaccard(fpMin.MinHash, fpPretty.MinHash); j != 1 {
+		t.Fatalf("minified vs pretty Jaccard = %.4f, want 1", j)
+	}
+	if fpMin.SimHash != fpPretty.SimHash {
+		t.Fatalf("minified vs pretty SimHash = %x vs %x", fpMin.SimHash, fpPretty.SimHash)
+	}
+}
+
+func TestFingerprintContent_PunctuationAndInvisibleVariants(t *testing.T) {
+	ctx := context.Background()
+	glued := "<p>\ufefflegdöbbenetesebb.tisztelendő A dűne\u00adről szól.</p>"
+	spaced := "<p>legdöbbenetesebb. tisztelendő A dűneről szól.</p>"
+	opts := []FingerprintOption{
+		WithMinHash(MinHashConfig{NumHashes: 64, ShingleSize: 2}),
+		WithSimHash(),
+	}
+	fpGlued, err := FingerprintContent(ctx, &fakeBook{rs: newTestResources(t, []string{glued})}, opts...)
+	if err != nil {
+		t.Fatalf("glued fingerprint failed: %v", err)
+	}
+	fpSpaced, err := FingerprintContent(ctx, &fakeBook{rs: newTestResources(t, []string{spaced})}, opts...)
+	if err != nil {
+		t.Fatalf("spaced fingerprint failed: %v", err)
+	}
+	if j := Jaccard(fpGlued.MinHash, fpSpaced.MinHash); j != 1 {
+		t.Fatalf("punctuation/invisible variants Jaccard = %.4f, want 1", j)
+	}
+	if fpGlued.SimHash != fpSpaced.SimHash {
+		t.Fatalf("punctuation/invisible variants SimHash = %x vs %x", fpGlued.SimHash, fpSpaced.SimHash)
+	}
+
+	other := "<p>teljesen más szerző könyve, egészen eltérő mondatokkal.</p>"
+	fpOther, err := FingerprintContent(ctx, &fakeBook{rs: newTestResources(t, []string{other})}, opts...)
+	if err != nil {
+		t.Fatalf("other fingerprint failed: %v", err)
+	}
+	if j := Jaccard(fpGlued.MinHash, fpOther.MinHash); j >= 0.2 {
+		t.Fatalf("unrelated content Jaccard = %.3f, want < 0.2", j)
+	}
+}
+
 func TestFingerprintContent_SyntheticDedup(t *testing.T) {
 	ctx := context.Background()
 	base := "<p>the quick brown fox jumps over the lazy dog</p>"
