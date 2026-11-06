@@ -240,10 +240,9 @@ func TestKepubTextExtractionExact(t *testing.T) {
 		t.Fatalf("ReadAll() error: %v", err)
 	}
 	// Fragment-internal spaces are preserved, no artefacts are added at
-	// koboSpan boundaries and no inline text is dropped; paragraphs
-	// concatenate like plain EPUB (the transformer adds no block
-	// separators, and head <title> text is included as with plain EPUB).
-	const want = "Chapter 1Hello brave new world.Second paragraph here."
+	// koboSpan boundaries and no inline text is dropped; paragraphs are
+	// separated by a block boundary and head metadata is excluded.
+	const want = "Hello brave new world.\nSecond paragraph here."
 	if string(data) != want {
 		t.Errorf("plain text = %q, want %q", string(data), want)
 	}

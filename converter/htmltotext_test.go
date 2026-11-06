@@ -45,15 +45,26 @@ func TestHtmlToTextTransformer_FindAndTransform(t *testing.T) {
 		{"plain text", mediatype.XHTML, "Hello, World!", "Hello, World!"},
 		{"simple tag", mediatype.XHTML, "<p>Hello</p>", "Hello"},
 		{"nested", mediatype.XHTML, "<div><p><span>Nested</span></p></div>", "Nested"},
-		{"multiple", mediatype.XHTML, "<p>First</p><p>Second</p>", "FirstSecond"},
-		{"whitespace", mediatype.XHTML, "<p>First</p> <p>Second</p>", "First Second"},
+		{"multiple", mediatype.XHTML, "<p>First</p><p>Second</p>", "First\nSecond"},
+		{"whitespace", mediatype.XHTML, "<p>First</p> <p>Second</p>", "First\nSecond"},
 		{"entities", mediatype.XHTML, "<p>&lt;tag&gt;</p>", "<tag>"},
 		{"unicode", mediatype.XHTML, "<p>Hello 世界 🌍</p>", "Hello 世界 🌍"},
-		{"comment ignored", mediatype.XHTML, "<p>Before</p><!-- comment --><p>After</p>", "BeforeAfter"},
+		{"comment ignored", mediatype.XHTML, "<p>Before</p><!-- comment --><p>After</p>", "Before\nAfter"},
 		{"doctype", mediatype.XHTML, "<!DOCTYPE html><p>Content</p>", "Content"},
 		{"html alias", mediatype.HTML, "<p>HTML</p>", "HTML"},
 		{"mobi alias", mediatype.MobiHTML, "<div>Mobi</div>", "Mobi"},
 		{"oeb1 alias", mediatype.OEB1Document, "<p>OEB1</p>", "OEB1"},
+		{"minified blocks", mediatype.XHTML, "<div><p>First</p><p>Second</p></div>", "First\nSecond"},
+		{"pretty blocks", mediatype.XHTML, "<div>\n  <p>First</p>\n  <p>Second</p>\n</div>", "First\nSecond"},
+		{"inline transparent", mediatype.XHTML, "<p>Hello <em>world</em>.</p>", "Hello world."},
+		{"line break", mediatype.XHTML, "<p>A<br/>B</p>", "A\nB"},
+		{"script and style skipped", mediatype.XHTML, "<p>Before</p><script>alert(1)</script><style>p{color:red}</style><p>After</p>", "Before\nAfter"},
+		{"noscript skipped", mediatype.XHTML, "<p>Before</p><noscript><p>hidden</p></noscript><p>After</p>", "Before\nAfter"},
+		{"head skipped", mediatype.XHTML, "<html><head><title>T</title><style>p{}</style></head><body><p>Body</p></body></html>", "Body"},
+		{"head without closing tag", mediatype.XHTML, "<html><head><title>T</title><body><p>Body</p></body></html>", "Body"},
+		{"head and body without closing tags", mediatype.XHTML, "<html><head><title>T</title><p>Body</p></html>", "Body"},
+		{"whitespace between blocks", mediatype.XHTML, "<p>First</p> \n\t <p>Second</p>", "First\nSecond"},
+		{"nbsp between blocks", mediatype.XHTML, "<p>First</p>&#160;<p>Second</p>", "First\nSecond"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -179,8 +190,32 @@ func TestHtmlToTextTransformer_Streaming_MultipleTokens(t *testing.T) {
 			t.Fatalf("Read failed: %v", err)
 		}
 	}
-	if got := out.String(); got != "FirstSecondThird" {
-		t.Fatalf("multiple tokens got %q, want %q", got, "FirstSecondThird")
+	if got := out.String(); got != "First\nSecond\nThird" {
+		t.Fatalf("multiple tokens got %q, want %q", got, "First\nSecond\nThird")
+	}
+}
+
+func TestHtmlToTextTransformer_Streaming_BlockBoundaryOneByte(t *testing.T) {
+	tr, _ := DefaultRegistry.Find(mediatype.XHTML, mediatype.PlainText)
+	rc, _ := tr.Transform(context.Background(), strings.NewReader("<p>First</p><p>Second</p>"))
+	defer func() { _ = rc.Close() }()
+
+	buf := make([]byte, 1)
+	var out bytes.Buffer
+	for {
+		n, err := rc.Read(buf)
+		if n > 0 {
+			out.Write(buf[:n])
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("Read failed: %v", err)
+		}
+	}
+	if got := out.String(); got != "First\nSecond" {
+		t.Fatalf("boundary with 1-byte reads got %q, want %q", got, "First\nSecond")
 	}
 }
 

@@ -377,6 +377,30 @@ func TestFingerprintContent_RealEPUB_vs_MOBI_SameBook(t *testing.T) {
 	}
 }
 
+func TestFingerprintContent_MinifiedVsPrettyHTML(t *testing.T) {
+	ctx := context.Background()
+	minified := "<div><p>the quick brown fox jumps over the lazy dog</p><p>the quick brown fox jumps over the lazy dog</p></div>"
+	pretty := "<div>\n  <p>the quick brown fox jumps over the lazy dog</p>\n  <p>the quick brown fox jumps over the lazy dog</p>\n</div>"
+	opts := []FingerprintOption{
+		WithMinHash(MinHashConfig{NumHashes: 64, ShingleSize: 3}),
+		WithSimHash(),
+	}
+	fpMin, err := FingerprintContent(ctx, &fakeBook{rs: newTestResources(t, []string{minified})}, opts...)
+	if err != nil {
+		t.Fatalf("minified fingerprint failed: %v", err)
+	}
+	fpPretty, err := FingerprintContent(ctx, &fakeBook{rs: newTestResources(t, []string{pretty})}, opts...)
+	if err != nil {
+		t.Fatalf("pretty fingerprint failed: %v", err)
+	}
+	if j := Jaccard(fpMin.MinHash, fpPretty.MinHash); j != 1 {
+		t.Fatalf("minified vs pretty Jaccard = %.4f, want 1", j)
+	}
+	if fpMin.SimHash != fpPretty.SimHash {
+		t.Fatalf("minified vs pretty SimHash = %x vs %x", fpMin.SimHash, fpPretty.SimHash)
+	}
+}
+
 func TestFingerprintContent_SyntheticDedup(t *testing.T) {
 	ctx := context.Background()
 	base := "<p>the quick brown fox jumps over the lazy dog</p>"
