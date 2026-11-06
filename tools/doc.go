@@ -4,10 +4,12 @@
 // CalculateFileHash computes hex-encoded SHA-256 over a file or Blob, while
 // FingerprintContent and OpenReadingOrderWithFingerprint derive streaming
 // MinHash signatures with Jaccard similarity and SimHash with Hamming
-// distance over the normalized plain-text reading order. FingerprintText and
-// FingerprintReader apply the same normalization and hashers to arbitrary
-// plain text. The fingerprint hashers implement io.Writer so they can be
-// attached with io.TeeReader/io.MultiWriter in a single pass.
+// distance over the normalized plain-text reading order. Normalization applies
+// NFKC, Unicode full case folding, punctuation/symbol word boundaries and
+// removal of invisible format characters. FingerprintText and FingerprintReader
+// apply the same normalization and hashers to arbitrary plain text. The
+// fingerprint hashers implement io.Writer so they can be attached with
+// io.TeeReader/io.MultiWriter in a single pass.
 //
 // ScanReadingOrder is the single-pass pipeline behind FingerprintContent and
 // FindBookISBNs. Callers attach processors that implement the capabilities

@@ -168,6 +168,13 @@
 
 ### Fixed
 
+- MinHash and SimHash normalization no longer lets formatting differences
+  change the fingerprint. Punctuation, symbols and control characters now act
+  as word boundaries, invisible format characters (soft hyphen, BOM,
+  zero-width space and other `Cf` runes) are dropped, and words are compared
+  with Unicode full case folding instead of simple lowercasing. This keeps the
+  same prose from being split across formats when scanning minified or
+  differently encoded markup.
 - EPUB/OPF/FB3 containers stored as UTF-16 (BOM-carrying
   `encoding="UTF-16"` files, as written by Windows tools) failed with
   "invalid UTF-8" on the first XML parse: `encoding/xml` cannot scan
