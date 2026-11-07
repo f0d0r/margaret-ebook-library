@@ -616,10 +616,20 @@ fp = handle.Result()
 `FingerprintText` and `FingerprintReader` use the same normalization as
 `FingerprintContent`: NFKC, Unicode full case folding, punctuation and symbol
 boundaries, removal of invisible format characters (soft hyphen, BOM,
-zero-width characters), whitespace collapse and word shingles. Input is treated
-as plain text (no HTML conversion). Empty input yields an all-max MinHash
-signature and a zero SimHash; input shorter than the shingle size is
-fingerprinted as a single shingle.
+zero-width characters), line-end hyphen joining, whitespace collapse and word
+shingles. Input is treated as plain text (no HTML conversion). Empty input
+yields an all-max MinHash signature and a zero SimHash; input shorter than the
+shingle size is fingerprinted as a single shingle.
+
+Line-end hyphen joining removes an ASCII hyphen that directly follows a word and
+is followed by optional spaces, a single line break and a lowercase or caseless
+letter. This makes `balatoncsilla-\r\ngon` and `balatoncsillagon` produce the
+same tokens, which matters for TXT/PDF pairs of the same edition. Mid-line
+hyphens stay word boundaries (`co-operate` → `co`, `operate`), and uppercase,
+digit, punctuation, blank-line, long-gap (>1024 whitespace runes) and
+short-prefix continuations do not join. Real hyphenated compounds split at a
+line end (e.g. `autó-\nbusz`) are a known limitation; the non-ASCII hyphens
+U+2010, U+2011, U+2013 and U+00AC are not handled.
 
 `MinHasher` and `SimHasher` also implement `io.Writer` directly:
 

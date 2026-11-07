@@ -161,11 +161,12 @@ func FingerprintContent(ctx context.Context, b book.Book, opts ...FingerprintOpt
 // and SimHash (shingle size 5) are computed; only explicitly requested hashers
 // are populated in the result.
 //
-// Input is treated as plain text: normalization is NFKC plus lowercasing,
-// whitespace collapse and word shingles; no HTML conversion is performed. Empty
-// input yields an all-max MinHash signature and a zero SimHash (HasSimHash is
-// still true when SimHash is requested). Input with fewer words than the shingle
-// size is fingerprinted as a single shingle.
+// Input is treated as plain text: normalization is NFKC, Unicode full case
+// folding, punctuation/symbol boundaries, invisible format character removal,
+// line-end hyphen joining, whitespace collapse and word shingles; no HTML
+// conversion is performed. Empty input yields an all-max MinHash signature and
+// a zero SimHash (HasSimHash is still true when SimHash is requested). Input
+// with fewer words than the shingle size is fingerprinted as a single shingle.
 func FingerprintReader(r io.Reader, opts ...FingerprintOption) (FingerprintResult, error) {
 	if r == nil {
 		return FingerprintResult{}, fmt.Errorf("reader is nil")

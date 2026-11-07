@@ -177,6 +177,16 @@
   with Unicode full case folding instead of simple lowercasing. This keeps the
   same prose from being split across formats when scanning minified or
   differently encoded markup.
+- MinHash and SimHash now join line-end hyphenation: an ASCII hyphen directly
+  after a word, followed by optional spaces and a single line break, is removed
+  when the next line starts with a lowercase or caseless letter, so
+  `balatoncsilla-\r\ngon` and `balatoncsillagon` produce the same tokens. This
+  fixes same-edition TXT/PDF pairs that previously fell below the similarity
+  threshold. Mid-line hyphens stay word boundaries, and uppercase, digit,
+  punctuation, blank-line, long-gap (>1024 whitespace runes) and short-prefix
+  continuations do not join. Real hyphenated compounds split at a line end
+  (e.g. `autó-\nbusz`) are a known limitation, as are the non-ASCII hyphens
+  U+2010, U+2011, U+2013 and U+00AC.
 - EPUB/OPF/FB3 containers stored as UTF-16 (BOM-carrying
   `encoding="UTF-16"` files, as written by Windows tools) failed with
   "invalid UTF-8" on the first XML parse: `encoding/xml` cannot scan

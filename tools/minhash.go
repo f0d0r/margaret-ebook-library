@@ -75,8 +75,8 @@ func (m *MinHasher) onShingle(s string) {
 }
 
 // Write implements io.Writer. It processes text in a streaming fashion,
-// normalizing (NFKC, case folding, punctuation/invisible/whitespace handling)
-// and shingling with k words.
+// normalizing (NFKC, case folding, punctuation/invisible/whitespace handling,
+// line-end hyphen joining) and shingling with k words.
 func (m *MinHasher) Write(p []byte) (int, error) {
 	if m.finalized {
 		return 0, errors.New("minhasher already finalized: do not write after Signature()")

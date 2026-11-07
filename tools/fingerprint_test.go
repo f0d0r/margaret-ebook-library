@@ -193,6 +193,45 @@ func TestFingerprintText_Normalization_PunctuationAndInvisible(t *testing.T) {
 	}
 }
 
+func TestFingerprintText_LineEndHyphenation(t *testing.T) {
+	words := strings.Fields(strings.Repeat(
+		"balatoncsillagon vagyunk dunakanyarban tengerparton kiszeru elvandoroltunk ", 20))
+	joined := strings.Join(words, " ")
+
+	hyphenated := make([]string, len(words))
+	for i, w := range words {
+		hyphenated[i] = hyphenateWord(w)
+	}
+
+	opts := []FingerprintOption{
+		WithMinHash(MinHashConfig{NumHashes: 64, ShingleSize: 5}),
+		WithSimHashShingleSize(5),
+	}
+	a, err := FingerprintText(joined, opts...)
+	if err != nil {
+		t.Fatalf("FingerprintText(joined) failed: %v", err)
+	}
+	b, err := FingerprintText(strings.Join(hyphenated, " "), opts...)
+	if err != nil {
+		t.Fatalf("FingerprintText(hyphenated) failed: %v", err)
+	}
+	if j := Jaccard(a.MinHash, b.MinHash); j <= 0.75 {
+		t.Fatalf("line-end hyphenation Jaccard = %.4f, want > 0.75", j)
+	}
+	if a.SimHash != b.SimHash {
+		t.Fatalf("line-end hyphenation SimHash mismatch: %#x vs %#x", a.SimHash, b.SimHash)
+	}
+}
+
+func hyphenateWord(w string) string {
+	r := []rune(w)
+	if len(r) < 4 {
+		return w
+	}
+	mid := len(r) / 2
+	return string(r[:mid]) + "-\r\n" + string(r[mid:])
+}
+
 func TestFingerprintText_Normalization_KeepsDifferentTextApart(t *testing.T) {
 	opts := []FingerprintOption{
 		WithMinHash(MinHashConfig{NumHashes: 64, ShingleSize: 2}),

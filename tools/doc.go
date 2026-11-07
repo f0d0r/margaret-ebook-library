@@ -5,9 +5,15 @@
 // FingerprintContent and OpenReadingOrderWithFingerprint derive streaming
 // MinHash signatures with Jaccard similarity and SimHash with Hamming
 // distance over the normalized plain-text reading order. Normalization applies
-// NFKC, Unicode full case folding, punctuation/symbol word boundaries and
-// removal of invisible format characters. FingerprintText and FingerprintReader
-// apply the same normalization and hashers to arbitrary plain text. The
+// NFKC, Unicode full case folding, punctuation/symbol word boundaries, removal
+// of invisible format characters and line-end hyphen joining. An ASCII hyphen
+// at the end of a line is removed when the next line starts with a lowercase or
+// caseless letter, so "balatoncsilla-\ngon" and "balatoncsillagon" yield the
+// same tokens. Mid-line hyphens, uppercase/digit/punctuation continuations and
+// blank-line boundaries keep their delimiter behaviour; other hyphen-like
+// characters (U+2010, U+2011, U+2013, U+00AC) are not joined. FingerprintText
+// and FingerprintReader apply the same normalization and hashers to arbitrary
+// plain text. The
 // fingerprint hashers implement io.Writer so they can be attached with
 // io.TeeReader/io.MultiWriter in a single pass.
 //
