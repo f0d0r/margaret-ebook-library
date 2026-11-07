@@ -8,7 +8,7 @@
 // NFKC, Unicode full case folding, punctuation/symbol word boundaries, removal
 // of invisible format characters and line-end hyphen joining. An ASCII hyphen
 // at the end of a line is removed when the next line starts with a lowercase or
-// caseless letter, so "balatoncsilla-\ngon" and "balatoncsillagon" yield the
+// caseless letter, so "encyclo-\npedia" and "encyclopedia" yield the
 // same tokens. Mid-line hyphens, uppercase/digit/punctuation continuations and
 // blank-line boundaries keep their delimiter behaviour; other hyphen-like
 // characters (U+2010, U+2011, U+2013, U+00AC) are not joined. FingerprintText
