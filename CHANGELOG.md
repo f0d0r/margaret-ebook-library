@@ -2,8 +2,21 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-12
+
 ### Added
 
+- KEPUB reading: `.kepub.epub` archives are detected by content and read
+  as EPUB — the Kobo `book-columns`/`book-inner` wrappers and `koboSpan`
+  markup are rendering-only, so there is no separate file type or API
+  surface.
+- DRM detection for EPUB/KEPUB and MOBI/PalmDOC: Adobe ADEPT and Kobo kdrm
+  encryption, DRM records and encrypted text are rejected with `ErrDRM`.
+  Font obfuscation and empty/leftover `rights.xml` files are not treated
+  as DRM.
+- Fingerprint helpers for arbitrary input in `tools`: `FingerprintText`,
+  `FingerprintReader` and `OpenReadingOrderWithFingerprint`, sharing the
+  same normalization as `FingerprintContent`.
 - Series extraction from EPUB/KEPUB, LIT, PalmDOC, FB2 and FB3 metadata:
   `Metadata.Series` and `Metadata.SeriesIndex`. EPUB 3
   `belongs-to-collection` with a `collection-type=series` refinement and
@@ -167,6 +180,9 @@
   classifies recovered panics as `ErrCorrupt`.
 - A zero-value `Config` now keeps the documented defaults (limits and KF8
   fallback) instead of silently disabling the fallback.
+- The module now requires Go 1.26; `golang.org/x/net` and
+  `golang.org/x/text` were bumped to v0.62.0 and v0.43.0, keeping
+  `govulncheck` clean.
 
 ### Fixed
 
@@ -241,6 +257,7 @@
 - Conservative safety limits (max resource/record sizes, max EXTH records)
   with functional-option overrides.
 
-[Unreleased]: https://github.com/f0d0r/margaret-ebook-library/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/f0d0r/margaret-ebook-library/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/f0d0r/margaret-ebook-library/releases/tag/v0.2.0
 [0.1.1]: https://github.com/f0d0r/margaret-ebook-library/releases/tag/v0.1.1
 [0.1.0]: https://github.com/f0d0r/margaret-ebook-library/releases/tag/v0.1.0
